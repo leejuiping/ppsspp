@@ -4,14 +4,14 @@
 #include "WinUser.h"
 
 static const unsigned short key_ctrl_map[] = {
-	VK_SPACE, CTRL_START,
-	'V',      CTRL_SELECT,
+	VK_RETURN, CTRL_START,
+	VK_SPACE,  CTRL_SELECT,
 	'A',      CTRL_SQUARE,
-	'S',      CTRL_TRIANGLE,
-	'X',      CTRL_CIRCLE,
-	'Z',      CTRL_CROSS,
+	'W',      CTRL_TRIANGLE,
+	'D',      CTRL_CIRCLE,
+	'S',      CTRL_CROSS,
 	'Q',      CTRL_LTRIGGER,
-	'W',      CTRL_RTRIGGER,
+	'E',      CTRL_RTRIGGER,
 	VK_UP,    CTRL_UP,
 	VK_DOWN,  CTRL_DOWN,
 	VK_LEFT,  CTRL_LEFT,

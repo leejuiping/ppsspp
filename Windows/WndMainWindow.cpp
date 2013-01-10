@@ -703,14 +703,14 @@ namespace MainWindow
 	}
 
 	const char *controllist[] = {
-		"Start\tSpace",
-		"Select\tV",
+		"Start\tEnter",
+		"Select\tSpace",
 		"Square\tA",
-		"Triangle\tS",
-		"Circle\tX",
-		"Cross\tZ",
+		"Triangle\tW",
+		"Circle\tD",
+		"Cross\tS",
 		"Left Trigger\tQ",
-		"Right Trigger\tW",
+		"Right Trigger\tE",
 		"Up\tArrow Up",
 		"Down\tArrow Down",
 		"Left\tArrow Left",

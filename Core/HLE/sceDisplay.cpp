@@ -366,9 +366,13 @@ void sceDisplayWaitVblankStart() {
 }
 
 void sceDisplayWaitVblank() {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblank()");
-	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
-	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false);
+	if (!isVblank) {
+		DEBUG_LOG(HLE,"sceDisplayWaitVblank()");
+		vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
+		__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false);
+	} else {
+		DEBUG_LOG(HLE,"sceDisplayWaitVblank() - not waiting since in vBlank");
+	}
 }
 
 void sceDisplayWaitVblankStartMulti() {
@@ -378,9 +382,13 @@ void sceDisplayWaitVblankStartMulti() {
 }
 
 void sceDisplayWaitVblankCB() {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankCB()");
-	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
-	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true);
+	if (!isVblank) {
+		DEBUG_LOG(HLE,"sceDisplayWaitVblankCB()");
+		vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
+		__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true);
+	} else {
+		DEBUG_LOG(HLE,"sceDisplayWaitVblank() - not waiting since in vBlank");
+	}
 }
 
 void sceDisplayWaitVblankStartCB() {
@@ -414,7 +422,7 @@ void sceDisplayGetCurrentHcount() {
 
 void sceDisplayGetAccumulatedHcount() {
 	// Just do an estimate
-	u32 accumHCount = CoreTiming::GetTicks() / (222000000 / 60 / 272);
+	u32 accumHCount = CoreTiming::GetTicks() / (CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / 272);
 	DEBUG_LOG(HLE,"%i=sceDisplayGetAccumulatedHcount()", accumHCount);
 	RETURN(accumHCount);
 }

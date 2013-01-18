@@ -355,7 +355,7 @@ public:
 		{
 			stackBlock = userMemory.Alloc(stackSize, true, (std::string("stack/") + nt.name).c_str());
 		}
-		if (stackBlock == (u32)-1 || stackBlock == 0)
+		if (stackBlock == (u32)-1)
 		{
 			stackBlock = 0;
 			ERROR_LOG(HLE, "Failed to allocate stack for thread");
@@ -1534,9 +1534,6 @@ void sceKernelExitDeleteThread()
 		t->nt.status = THREADSTATUS_DORMANT;
 		t->nt.exitStatus = PARAM(0);
 		__KernelFireThreadEnd(t);
-		// TODO: Why not?
-		//userMemory.Free(currentThread->stackBlock);
-		t->stackBlock = 0;
 
 		__KernelRemoveFromThreadQueue(t);
 		currentThread = 0;
@@ -1612,12 +1609,22 @@ int sceKernelTerminateDeleteThread(int threadno)
 		//TODO: remove from threadqueue!
 		INFO_LOG(HLE, "sceKernelTerminateDeleteThread(%i)", threadno);
 
-		//TODO: should we really reschedule here?
-		__KernelTriggerWait(WAITTYPE_THREADEND, threadno, SCE_KERNEL_ERROR_THREAD_TERMINATED, false);
-		hleReSchedule("termdeletethread");
+		u32 error;
+		Thread *t = kernelObjects.Get<Thread>(threadno, error);
+		if (t)
+		{
+			__KernelRemoveFromThreadQueue(t);
+			__KernelFireThreadEnd(t);
 
-		// TODO: Why not delete?
-		return 0; //kernelObjects.Destroy<Thread>(threadno));
+			//TODO: should we really reschedule here?
+			__KernelTriggerWait(WAITTYPE_THREADEND, threadno, SCE_KERNEL_ERROR_THREAD_TERMINATED, false);
+			hleReSchedule("termdeletethread");
+
+			return kernelObjects.Destroy<Thread>(threadno);
+		}
+
+		// TODO: Error when doesn't exist?
+		return 0;
 	}
 	else
 	{
@@ -1784,6 +1791,11 @@ u32 __KernelGetThreadPrio(SceUID id)
 	if (thread)
 		return thread->nt.currentPriority;
 	return 0;
+}
+
+bool __KernelThreadSortPriority(SceUID thread1, SceUID thread2)
+{
+	return __KernelGetThreadPrio(thread1) < __KernelGetThreadPrio(thread2);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2084,7 +2096,7 @@ ActionAfterMipsCall *Thread::getRunningCallbackAction()
 	if (this->GetUID() == currentThread && g_inCbCount > 0)
 	{
 		MipsCall *call = mipsCalls.get(this->currentCallbackId);
-		ActionAfterMipsCall *action;
+		ActionAfterMipsCall *action = 0;
 		if (call)
 			action = dynamic_cast<ActionAfterMipsCall *>(call->doAfter);
 

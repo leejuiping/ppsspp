@@ -38,6 +38,7 @@
 #include "FileSystems/MetaFileSystem.h"
 #include "Loaders.h"
 #include "ELF/ParamSFO.h"
+#include "../Common/LogManager.h"
 
 MetaFileSystem pspFileSystem;
 ParamSFOData g_paramSFO;
@@ -59,6 +60,13 @@ bool PSP_Init(const CoreParameter &coreParam, std::string *error_string)
 		host->InitSound(mixer);
 	}
 
+	if (coreParameter.disableG3Dlog)
+	{
+		LogManager::GetInstance()->SetEnable(LogTypes::G3D, false);
+	}
+
+	CoreTiming::Init();
+
 	// Init all the HLE modules
 	HLEInit();
 
@@ -67,8 +75,7 @@ bool PSP_Init(const CoreParameter &coreParam, std::string *error_string)
 	if (!LoadFile(coreParameter.fileToStart.c_str(), error_string))
 	{
 		pspFileSystem.Shutdown();
-		CoreTiming::ClearPendingEvents();
-		CoreTiming::UnregisterAllEvents();
+		CoreTiming::Shutdown();
 		__KernelShutdown();
 		HLEShutdown();
 		host->ShutdownSound();
@@ -96,8 +103,7 @@ void PSP_Shutdown()
 
 	TextureCache_Clear(true);
 
-	CoreTiming::ClearPendingEvents();
-	CoreTiming::UnregisterAllEvents();
+	CoreTiming::Shutdown();
 
 	if (coreParameter.enableSound)
 	{

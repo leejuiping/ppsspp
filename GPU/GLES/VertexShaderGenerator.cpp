@@ -51,9 +51,7 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim)
 	bool hasColor = (gstate.vertType & GE_VTYPE_COL_MASK) != 0;
 	bool hasNormal = (gstate.vertType & GE_VTYPE_NRM_MASK) != 0;
 	bool hasBones = (gstate.vertType & GE_VTYPE_WEIGHT_MASK) != 0;
-
-	int shadeLight0 = gstate.getUVGenMode() == 2 ? gstate.getUVLS0() : -1;
-	int shadeLight1 = gstate.getUVGenMode() == 2 ? gstate.getUVLS1() : -1;
+	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
 
 	memset(id->d, 0, sizeof(id->d));
 	id->d[0] = gstate.lmode & 1;
@@ -61,6 +59,7 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim)
 	id->d[0] |= ((int)gstate.isFogEnabled()) << 2;
 	id->d[0] |= doTexture << 3;
 	id->d[0] |= (hasColor & 1) << 4;
+	id->d[0] |= ((int)enableFog) << 5;
 	if (CanUseHardwareTransform(prim)) {
 		id->d[0] |= 1 << 8;
 		id->d[0] |= (hasNormal & 1) << 9;
@@ -342,7 +341,11 @@ void GenerateVertexShader(int prim, char *buffer) {
 
 		if (gstate.lightingEnable & 1) {
 			// Sum up ambient, emissive here.
-			WRITE(p, "  v_color0 = clamp(lightSum0 + u_ambient * vec4(%s, 1.0) + vec4(u_matemissive, 0.0), 0.0, 1.0);\n", ambient);
+			if (hasColor) {
+				WRITE(p, "  v_color0 = clamp(lightSum0 + u_ambient * vec4(%s, a_color0.a) + vec4(u_matemissive, 0.0), 0.0, 1.0);\n", ambient);
+			} else {
+				WRITE(p, "  v_color0 = clamp(lightSum0 + u_ambient * vec4(%s, u_matambientalpha.a) + vec4(u_matemissive, 0.0), 0.0, 1.0);\n", ambient);
+			}
 			if (lmode) {
 				WRITE(p, "  v_color1 = clamp(lightSum1, 0.0, 1.0);\n");
 			} else {

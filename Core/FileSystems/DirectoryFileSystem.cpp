@@ -37,7 +37,7 @@ static bool FixFilenameCase(const std::string &path, std::string &filename)
 	if (File::Exists(path + filename))
 		return true;
 
-	size_t filenameSize = filename.size();
+	size_t filenameSize = filename.size();  // size in bytes, not characters
 	for (size_t i = 0; i < filenameSize; i++)
 	{
 		filename[i] = tolower(filename[i]);
@@ -57,7 +57,6 @@ static bool FixFilenameCase(const std::string &path, std::string &filename)
 
 	while (!readdir_r(dirp, (dirent*) &diren, &result) && result)
 	{
-		// Hm, is this check UTF-8 compatible? (size vs strlen)
 		if (strlen(result->d_name) != filenameSize)
 			continue;
 
@@ -550,9 +549,19 @@ std::vector<PSPFileInfo> DirectoryFileSystem::GetDirListing(std::string path) {
 			break;
 	}
 #else
-	DIR *dp;
 	dirent *dirp;
-	if((dp  = opendir(GetLocalPath(path).c_str())) == NULL) {
+	std::string localPath = GetLocalPath(path);
+	DIR *dp = opendir(localPath.c_str());
+
+#if HOST_IS_CASE_SENSITIVE
+	if(dp == NULL && FixPathCase(path, FPC_FILE_MUST_EXIST)) {
+		// May have failed due to case sensitivity, try again
+		localPath = GetLocalPath(path);
+		dp = opendir(localPath.c_str());
+	}
+#endif
+
+	if (dp == NULL) {
 		ERROR_LOG(HLE,"Error opening directory %s\n",path.c_str());
 		return myVector;
 	}

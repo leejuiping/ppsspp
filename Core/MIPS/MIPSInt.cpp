@@ -135,7 +135,22 @@ namespace MIPSInt
 {
 	void Int_Cache(u32 op)
 	{
-		// DEBUG_LOG(CPU,"cache instruction %08x",op);
+		int imm = (s16)(op & 0xFFFF);
+		int rs = _RS;
+		int addr = R(rs) + imm;
+		int func = (op >> 16) & 0x1F;
+
+		// It appears that a cache line is 0x40 (64) bytes.
+		switch (func) {
+		case 25:  // Hit Invalidate - zaps the line if present in cache. Should not writeback???? scary.
+			// No need to do anything.
+			break;
+		case 27:  // D-cube. Hit Writeback Invalidate.
+			break;
+		default:
+			DEBUG_LOG(CPU,"cache instruction affecting %08x : function %i", addr, func);
+		}
+
 		PC += 4;
 	}
 
@@ -206,10 +221,10 @@ namespace MIPSInt
 		case 1: if ((s32)R(rs) >= 0) DelayBranchTo(addr); else PC += 4; break;//bgez
 		case 2: if ((s32)R(rs) <  0) DelayBranchTo(addr); else SkipLikely(); break;//bltzl
 		case 3: if ((s32)R(rs) >= 0) DelayBranchTo(addr); else SkipLikely(); break;//bgezl
-		case 16: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) <  0) DelayBranchTo(addr); else PC += 4; break;//bltz
-		case 17: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) >= 0) DelayBranchTo(addr); else PC += 4; break;//bgez
-		case 18: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) <	0) DelayBranchTo(addr); else SkipLikely(); break;//bltzl
-		case 19: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) >= 0) DelayBranchTo(addr); else SkipLikely(); break;//bgezl
+		case 16: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) <  0) DelayBranchTo(addr); else PC += 4; break;//bltzal
+		case 17: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) >= 0) DelayBranchTo(addr); else PC += 4; break;//bgezal
+		case 18: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) <	0) DelayBranchTo(addr); else SkipLikely(); break;//bltzall
+		case 19: R(MIPS_REG_RA) = PC + 8; if ((s32)R(rs) >= 0) DelayBranchTo(addr); else SkipLikely(); break;//bgezall
 		default:
 			_dbg_assert_msg_(CPU,0,"Trying to interpret instruction that can't be interpreted");
 			break;

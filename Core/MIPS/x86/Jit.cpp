@@ -106,8 +106,8 @@ Jit::Jit(MIPSState *mips) : blocks(mips), mips_(mips)
 
 void Jit::FlushAll()
 {
-	gpr.Flush(FLUSH_ALL);
-	fpr.Flush(FLUSH_ALL);
+	gpr.Flush();
+	fpr.Flush();
 }
 
 void Jit::WriteDowncount(int offset)
@@ -128,7 +128,7 @@ void Jit::ClearCacheAt(u32 em_address)
 	ClearCache();
 }
 
-void Jit::CompileDelaySlot(bool saveFlags)
+void Jit::CompileDelaySlot(int flags)
 {
 	const u32 addr = js.compilerPC + 4;
 
@@ -136,7 +136,7 @@ void Jit::CompileDelaySlot(bool saveFlags)
 	// Need to offset the downcount which was already incremented for the branch + delay slot.
 	CheckJitBreakpoint(addr, -2);
 
-	if (saveFlags)
+	if (flags & DELAYSLOT_SAFE)
 		SAVE_FLAGS; // preserve flag around the delay slot!
 
 	js.inDelaySlot = true;
@@ -144,8 +144,9 @@ void Jit::CompileDelaySlot(bool saveFlags)
 	MIPSCompileOp(op);
 	js.inDelaySlot = false;
 
-	FlushAll();
-	if (saveFlags)
+	if (flags & DELAYSLOT_FLUSH)
+		FlushAll();
+	if (flags & DELAYSLOT_SAFE)
 		LOAD_FLAGS; // restore flag!
 }
 
@@ -183,6 +184,7 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 	js.curBlock = b;
 	js.compiling = true;
 	js.inDelaySlot = false;
+	js.PrefixStart();
 
 	// We add a check before the block, used when entering from a linked block.
 	b->checkedEntry = GetCodePtr();

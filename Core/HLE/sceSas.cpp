@@ -131,11 +131,12 @@ u32 sceSasSetVoice(u32 core, int voiceNum, u32 vagAddr, int size, int loop)
 
 	//Real VAG header is 0x30 bytes behind the vagAddr
 	SasVoice &v = sas->voices[voiceNum];
+	u32 prevVagAddr = v.vagAddr;
 	v.type = VOICETYPE_VAG;
 	v.vagAddr = vagAddr;
 	v.vagSize = size;
 	v.loop = loop ? false : true;
-	v.ChangedParams(true);
+	v.ChangedParams(vagAddr == prevVagAddr);
 	return 0;
 }
 
@@ -222,7 +223,7 @@ u32 sceSasSetPitch(u32 core, int voiceNum, int pitch)
 
 	SasVoice &v = sas->voices[voiceNum];
 	v.pitch = pitch;
-	v.ChangedParams(true);
+	v.ChangedParams(false);
 	return 0;
 }
 

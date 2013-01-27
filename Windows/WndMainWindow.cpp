@@ -1,7 +1,7 @@
 // NOTE: Apologies for the quality of this code, this is really from pre-opensource Dolphin - that is, 2003.
 
 
-#define programname "PPSSPP v0.5"
+#define programname "PPSSPP v0.6"
 
 
 #include <windows.h>
@@ -107,8 +107,9 @@ namespace MainWindow
 	}
 
 	void GetWindowRectAtZoom(int zoom, RECT &rcInner, RECT &rcOuter) {
-		rcInner.left=20;
-		rcInner.top=100;
+		// GetWindowRect(hwndMain, &rcInner);
+		rcInner.left = 20;
+		rcInner.top = 120;
 
 		rcInner.right=480*zoom + rcInner.left;//+client edge
 		rcInner.bottom=272*zoom + rcInner.top; //+client edge
@@ -117,16 +118,32 @@ namespace MainWindow
 		AdjustWindowRect(&rcOuter, WS_OVERLAPPEDWINDOW, TRUE);
 	}
 
+	void ResizeDisplay() {
+		RECT rc;
+		GetClientRect(hwndMain, &rc);
+		MoveWindow(hwndDisplay, 0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, TRUE);
+		PSP_CoreParameter().pixelWidth = rc.right - rc.left;
+		PSP_CoreParameter().pixelHeight = rc.bottom - rc.top;
+
+		// round up to a zoom factor for the render size.
+		int zoom = (rc.right - rc.left + 479) / 480;
+		if (g_Config.SSAntiAliasing) zoom *= 2;
+		PSP_CoreParameter().renderWidth = 480 * zoom;
+		PSP_CoreParameter().renderHeight = 272 * zoom;
+		PSP_CoreParameter().outputWidth = 480 * zoom;
+		PSP_CoreParameter().outputHeight = 272 * zoom;
+
+		if (gpu)
+			gpu->Resized();
+	}
+
 	void SetZoom(float zoom) {
 		if (zoom < 5)
 			g_Config.iWindowZoom = (int) zoom;
 		RECT rc, rcOuter;
 		GetWindowRectAtZoom((int) zoom, rc, rcOuter);
 		MoveWindow(hwndMain, rcOuter.left, rcOuter.top, rcOuter.right - rcOuter.left, rcOuter.bottom - rcOuter.top, TRUE);
-		MoveWindow(hwndDisplay, 0, 0, rc.right - rc.left, rc.bottom - rc.top, TRUE);
-		PSP_CoreParameter().pixelWidth = (int) (480 * zoom);
-		PSP_CoreParameter().pixelHeight = (int) (272 * zoom);
-		GL_Resized();
+		ResizeDisplay();
 	}
 
 	BOOL Show(HINSTANCE hInstance, int nCmdShow)
@@ -252,6 +269,11 @@ namespace MainWindow
 			break;
 
 		case WM_MOVE:
+			ResizeDisplay();
+			break;
+
+		case WM_SIZE:
+			ResizeDisplay();
 			break;
 
 		case WM_COMMAND:
@@ -472,12 +494,8 @@ namespace MainWindow
 			case ID_OPTIONS_FULLSCREEN:
 				if(g_bFullScreen) {
 					_ViewNormal(hWnd); 
-					SetZoom(1); //restore window to original size
 				}
 				else {
-					int cx = ::GetSystemMetrics(SM_CXSCREEN);
-					float screenfactor = cx / 480.0f;
-					SetZoom(screenfactor);
 					_ViewFullScreen(hWnd);
 				}
 				UpdateMenus();
@@ -508,7 +526,7 @@ namespace MainWindow
 				UpdateMenus();
 				break;
 			case ID_OPTIONS_SIMPLE2XSSAA:
-				g_Config.SSAntiAlaising = !g_Config.SSAntiAlaising;
+				g_Config.SSAntiAliasing = !g_Config.SSAntiAliasing;
 				UpdateMenus();
 				break;
 			case ID_OPTIONS_DISABLEG3DLOG:
@@ -612,8 +630,6 @@ namespace MainWindow
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			break;
-		case WM_SIZE:
-			break;
 		case WM_NCHITTEST:
 			if (skinMode)
 				return HTCAPTION;
@@ -662,7 +678,7 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_HARDWARETRANSFORM, g_Config.bHardwareTransform);
 		CHECKITEM(ID_OPTIONS_FASTMEMORY, g_Config.bFastMemory);
 		CHECKITEM(ID_OPTIONS_LINEARFILTERING, g_Config.bLinearFiltering);
-		CHECKITEM(ID_OPTIONS_SIMPLE2XSSAA, g_Config.SSAntiAlaising);
+		CHECKITEM(ID_OPTIONS_SIMPLE2XSSAA, g_Config.SSAntiAliasing);
 		CHECKITEM(ID_EMULATION_RUNONLOAD, g_Config.bAutoRun);
 		CHECKITEM(ID_OPTIONS_USEVBO, g_Config.bUseVBO);
 		CHECKITEM(ID_OPTIONS_DISABLEG3DLOG, g_Config.bDisableG3DLog);
@@ -799,6 +815,7 @@ namespace MainWindow
 
 		// reset full screen indicator
 		g_bFullScreen = FALSE;
+		ResizeDisplay();
 	}
 
 	void _ViewFullScreen(HWND hWnd)
@@ -824,6 +841,7 @@ namespace MainWindow
 
 		// set full screen indicator
 		g_bFullScreen = TRUE;
+		ResizeDisplay();
 	}
 
 	void SetPlaying(const char *text)

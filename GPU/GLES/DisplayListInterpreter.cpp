@@ -169,10 +169,9 @@ GLES_GPU::GLES_GPU(int renderWidth, int renderHeight)
 		prevDisplayFramebuf_(0),
 		prevPrevDisplayFramebuf_(0),
 		renderWidth_(renderWidth),
-		renderHeight_(renderHeight)
+		renderHeight_(renderHeight),
+		resized_(false)
 {
-	renderWidthFactor_ = (float)renderWidth / 480.0f;
-	renderHeightFactor_ = (float)renderHeight / 272.0f;
 	shaderManager_ = new ShaderManager();
 	transformDraw_.SetShaderManager(shaderManager_);
 	TextureCache_Init();
@@ -272,16 +271,9 @@ void GLES_GPU::CopyDisplayToOutput() {
 
 	EndDebugDraw();
 
-	VirtualFramebuffer *vfb = GetDisplayFBO();
-	prevPrevDisplayFramebuf_ = prevDisplayFramebuf_;
-	prevDisplayFramebuf_ = displayFramebuf_;
-	displayFramebuf_ = vfb;
 	fbo_unbind();
 
-	glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
-
-	currentRenderVfb_ = 0;
-
+	VirtualFramebuffer *vfb = GetDisplayFBO();
 	if (!vfb) {
 		DEBUG_LOG(HLE, "Found no FBO! displayFBPtr = %08x", displayFramebufPtr_);
 		// No framebuffer to display! Clear to black.
@@ -289,6 +281,14 @@ void GLES_GPU::CopyDisplayToOutput() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		return;
 	}
+
+	prevPrevDisplayFramebuf_ = prevDisplayFramebuf_;
+	prevDisplayFramebuf_ = displayFramebuf_;
+	displayFramebuf_ = vfb;
+
+	glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
+
+	currentRenderVfb_ = 0;
 
 	DEBUG_LOG(HLE, "Displaying FBO %08x", vfb->fb_address);
 	glstate.blend.disable();
@@ -305,6 +305,12 @@ void GLES_GPU::CopyDisplayToOutput() {
 	shaderManager_->DirtyUniform(DIRTY_ALL);
 	gstate_c.textureChanged = true;
 
+	if (resized_) {
+		DestroyAllFBOs();
+		glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
+		resized_ = false;
+	}
+
 	BeginDebugDraw();
 }
 
@@ -318,7 +324,9 @@ void GLES_GPU::DecimateFBOs() {
 			continue;
 		}
 		if ((*iter)->last_frame_used + FBO_OLD_AGE < gpuStats.numFrames) {
-			fbo_destroy((*iter)->fbo);
+			INFO_LOG(HLE, "Destroying FBO %i (%i x %i x %i)", v->fb_address, v->width, v->height, v->format);
+			fbo_destroy(v->fbo);
+			delete v;
 			vfbs_.erase(iter++);
 		}
 		else
@@ -332,7 +340,8 @@ static bool MaskedEqual(u32 addr1, u32 addr2) {
 
 GLES_GPU::VirtualFramebuffer *GLES_GPU::GetDisplayFBO() {
 	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		if (MaskedEqual((*iter)->fb_address, displayFramebufPtr_) && (*iter)->format == displayFormat_) {
+		VirtualFramebuffer *v = *iter;
+		if (MaskedEqual(v->fb_address, displayFramebufPtr_) && v->format == displayFormat_) {
 			// Could check w too but whatever
 			return *iter;
 		}
@@ -376,7 +385,7 @@ void GLES_GPU::SetRenderFrameBuffer() {
 	VirtualFramebuffer *vfb = 0;
 	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
 		VirtualFramebuffer *v = *iter;
-		if (v->fb_address == fb_address && v->width == drawing_width && v->height == drawing_height && v->format == fmt) {
+		if (MaskedEqual(v->fb_address, fb_address) && v->width == drawing_width && v->height == drawing_height && v->format == fmt) {
 			// Let's not be so picky for now. Let's say this is the one.
 			vfb = v;
 			// Update fb stride in case it changed
@@ -389,7 +398,7 @@ void GLES_GPU::SetRenderFrameBuffer() {
 	if (!vfb) {
 		transformDraw_.Flush();
 		gstate_c.textureChanged = true;
-		vfb = new VirtualFramebuffer;
+		vfb = new VirtualFramebuffer();
 		vfb->fb_address = fb_address;
 		vfb->fb_stride = fb_stride;
 		vfb->z_address = z_address;
@@ -398,8 +407,8 @@ void GLES_GPU::SetRenderFrameBuffer() {
 		vfb->height = drawing_height;
 		vfb->format = fmt;
 
-		//vfb->colorDepth = FBO_8888;
-		switch (gstate.framebufpixformat & 0x3) {
+		vfb->colorDepth = FBO_8888;
+		switch (fmt) {
 		case GE_FORMAT_4444: vfb->colorDepth = FBO_4444;
 		case GE_FORMAT_5551: vfb->colorDepth = FBO_5551;
 		case GE_FORMAT_565: vfb->colorDepth = FBO_565;
@@ -408,17 +417,18 @@ void GLES_GPU::SetRenderFrameBuffer() {
 //#ifdef ANDROID
 //	vfb->colorDepth = FBO_8888;
 //#endif
-
-		vfb->fbo = fbo_create(vfb->width * renderWidthFactor_, vfb->height * renderHeightFactor_, 1, true, vfb->colorDepth);
+		float renderWidthFactor = (float)PSP_CoreParameter().renderWidth / 480.0f;
+		float renderHeightFactor = (float)PSP_CoreParameter().renderHeight / 272.0f;
+		vfb->fbo = fbo_create(vfb->width * renderWidthFactor, vfb->height * renderHeightFactor, 1, true, vfb->colorDepth);
 
 		vfb->last_frame_used = gpuStats.numFrames;
 		vfbs_.push_back(vfb);
 		fbo_bind_as_render_target(vfb->fbo);
 		glEnable(GL_DITHER);
-		glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
+		glstate.viewport.set(0, 0, PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight);
 		currentRenderVfb_ = vfb;
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		INFO_LOG(HLE, "Creating FBO for %08x : %i x %i", vfb->fb_address, vfb->width, vfb->height);
+		INFO_LOG(HLE, "Creating FBO for %08x : %i x %i x %i", vfb->fb_address, vfb->width, vfb->height, vfb->format);
 		return;
 	}
 
@@ -436,7 +446,7 @@ void GLES_GPU::SetRenderFrameBuffer() {
 		// the first time the buffer is bound on this frame.
 		// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 #endif
-		glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
+		glstate.viewport.set(0, 0, PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight);
 		currentRenderVfb_ = vfb;
 		vfb->last_frame_used = gpuStats.numFrames;
 	}
@@ -1240,15 +1250,25 @@ void GLES_GPU::Flush() {
 	transformDraw_.Flush();
 }
 
+void GLES_GPU::DestroyAllFBOs() {
+	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
+		VirtualFramebuffer *v = *iter;
+		fbo_destroy(v->fbo);
+		delete v;
+	}
+	vfbs_.clear();
+}
+
+void GLES_GPU::Resized() {
+	resized_ = true;
+}
+
 void GLES_GPU::DoState(PointerWrap &p) {
 	GPUCommon::DoState(p);
 
 	TextureCache_Clear(true);
+
 	gstate_c.textureChanged = true;
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		fbo_destroy((*iter)->fbo);
-		delete (*iter);
-	}
-	vfbs_.clear();
+	DestroyAllFBOs();
 	shaderManager_->ClearCache(true);
 }

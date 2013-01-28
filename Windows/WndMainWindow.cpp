@@ -121,9 +121,13 @@ namespace MainWindow
 	void ResizeDisplay() {
 		RECT rc;
 		GetClientRect(hwndMain, &rc);
-		MoveWindow(hwndDisplay, 0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, TRUE);
+
+		if ((rc.right - rc.left) == PSP_CoreParameter().pixelWidth &&
+			(rc.bottom - rc.top) == PSP_CoreParameter().pixelHeight)
+			return;
 		PSP_CoreParameter().pixelWidth = rc.right - rc.left;
 		PSP_CoreParameter().pixelHeight = rc.bottom - rc.top;
+		MoveWindow(hwndDisplay, 0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, TRUE);
 
 		// round up to a zoom factor for the render size.
 		int zoom = (rc.right - rc.left + 479) / 480;
@@ -494,8 +498,7 @@ namespace MainWindow
 			case ID_OPTIONS_FULLSCREEN:
 				if(g_bFullScreen) {
 					_ViewNormal(hWnd); 
-				}
-				else {
+				} else {
 					_ViewFullScreen(hWnd);
 				}
 				UpdateMenus();
@@ -640,6 +643,7 @@ namespace MainWindow
 			disasmWindow[0] = new CDisasm(MainWindow::GetHInstance(), MainWindow::GetHWND(), currentDebugMIPS);
 			DialogManager::AddDlg(disasmWindow[0]);
 			disasmWindow[0]->Show(g_Config.bShowDebuggerOnLoad);
+			if (g_Config.bFullScreen)  _ViewFullScreen(hWnd);
 			memoryWindow[0] = new CMemoryDlg(MainWindow::GetHInstance(), MainWindow::GetHWND(), currentDebugMIPS);
 			DialogManager::AddDlg(memoryWindow[0]);
 			if (disasmWindow[0])

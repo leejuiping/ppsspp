@@ -23,7 +23,7 @@ arm {
 	HEADERS += ../Core/MIPS/ARM/ArmAsm.h \
 		../Core/MIPS/ARM/ArmJit.h \
 		../Core/MIPS/ARM/ArmJitCache.h \
-		../Core/MIPS/ARM/ArmRegCache.h
+		../Core/MIPS/ARM/ArmRegCache.h \
 		../Core/MIPS/ARM/ArmRegCacheFPU.h
 }
 x86 {
@@ -69,6 +69,7 @@ SOURCES +=	../Core/CPU.cpp \ # Core
 	../Core/HLE/sceAtrac.cpp \
 	../Core/HLE/sceAudio.cpp \
 	../Core/HLE/sceCtrl.cpp \
+	../Core/HLE/sceChnnlsv.cpp \
 	../Core/HLE/sceDisplay.cpp \
 	../Core/HLE/sceDmac.cpp \
 	../Core/HLE/sceGe.cpp \
@@ -181,6 +182,7 @@ HEADERS +=	../Core/CPU.h \
 	../Core/HLE/sceAtrac.h \
 	../Core/HLE/sceAudio.h \
 	../Core/HLE/sceCtrl.h \
+	../Core/HLE/sceChnnlsv.h \
 	../Core/HLE/sceDisplay.h \
 	../Core/HLE/sceDmac.h \
 	../Core/HLE/sceGe.h \

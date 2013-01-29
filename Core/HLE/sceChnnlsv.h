@@ -15,28 +15,30 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "MediaEngine.h"
-#include "../MemMap.h"
+#pragma once
 
-static const int modeBpp[4] = { 2, 2, 2, 4 };
+typedef struct _pspChnnlsvContext1 {
+	/** Cipher mode */
+	int	mode;
 
+	/** Context data */
+	u8	result[0x10];
+	u8    key[0x10];
+	int	keyLength;
+} pspChnnlsvContext1;
 
-void MediaEngine::writeVideoImage(u32 bufferPtr, int frameWidth, int videoPixelMode)
-{
-	if (videoPixelMode > (sizeof(modeBpp) / sizeof(modeBpp[0])) || videoPixelMode < 0)
-	{
-		ERROR_LOG(ME, "Unexpected videoPixelMode %d, using 0 instead.", videoPixelMode);
-		videoPixelMode = 0;
-	}
+typedef struct _pspChnnlsvContext2 {
+	/** Context data */
+	int mode;
+	int unkn;
+	u8    unknown[0x92];
+} pspChnnlsvContext2;
 
-	int bpp = modeBpp[videoPixelMode];
+int sceSdSetIndex_(pspChnnlsvContext1& ctx, int value);
+int sceSdRemoveValue_(pspChnnlsvContext1& ctx, u8* data, int length);
+int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8* cryptkey);
+int sceSdSetMember_(pspChnnlsvContext2& ctx, u8* data, int alignedLen);
+int sceChnnlsv_21BE78B4_(pspChnnlsvContext2& ctx);
+int sceSdGetLastIndex_(pspChnnlsvContext1& ctx, u8* in_hash, u8* in_key);
 
-	// fake image. To be improved.
-	if (Memory::IsValidAddress(bufferPtr))
-		Memory::Memset(bufferPtr, 0xDD, frameWidth * videoHeight_ * bpp);
-}
-
-void MediaEngine::feedPacketData(u32 addr, int size)
-{
-	// This media engine is totally incompetent and will just ignore all data sent to it.
-}
+void Register_sceChnnlsv();

@@ -95,8 +95,12 @@ namespace MIPSComp
 			{
 				gpr.MapDirtyIn(rt, rs);
 				Operand2 op2;
-				if (TryMakeOperand2(simm, op2)) {
-					CMP(gpr.R(rs), op2);
+				bool negated;
+				if (TryMakeOperand2_AllowNegation(simm, op2, &negated)) {
+					if (!negated)
+						CMP(gpr.R(rs), op2);
+					else
+						CMN(gpr.R(rs), op2);
 				} else {
 					ARMABI_MOVI2R(R0, simm);
 					CMP(gpr.R(rs), R0);
@@ -108,13 +112,17 @@ namespace MIPSComp
 				SetCC(CC_AL);
 			}
 			break;
-		/*
+
 		case 11: // R(rt) = R(rs) < uimm; break; //sltiu
 			{
 				gpr.MapDirtyIn(rt, rs);
 				Operand2 op2;
-				if (TryMakeOperand2(uimm, op2)) {
-					CMP(gpr.R(rs), op2);
+				bool negated;
+				if (TryMakeOperand2_AllowNegation(uimm, op2, &negated)) {
+					if (!negated)
+						CMP(gpr.R(rs), op2);
+					else
+						CMN(gpr.R(rs), op2);
 				} else {
 					ARMABI_MOVI2R(R0, uimm);
 					CMP(gpr.R(rs), R0);
@@ -126,7 +134,7 @@ namespace MIPSComp
 				SetCC(CC_AL);
 			}
 			break;
-			*/
+
 		case 15: // R(rt) = uimm << 16;	 //lui
 			gpr.SetImm(rt, uimm << 16);
 			break;
@@ -301,7 +309,45 @@ namespace MIPSComp
 
 	void Jit::Comp_MulDivType(u32 op)
 	{
-		DISABLE;
+		// DISABLE;
+		int rt = _RT;
+		int rs = _RS;
+		int rd = _RD;
+
+		switch (op & 63) 
+		{
+		case 16: // R(rd) = HI; //mfhi
+			gpr.MapDirtyIn(rd, MIPSREG_HI);
+			MOV(gpr.R(rd), gpr.R(MIPSREG_HI));
+			break; 
+
+		case 17: // HI = R(rs); //mthi
+			gpr.MapDirtyIn(MIPSREG_HI, rs);
+			MOV(gpr.R(MIPSREG_HI), gpr.R(rs));
+			break; 
+
+		case 18: // R(rd) = LO; break; //mflo
+			gpr.MapDirtyIn(rd, MIPSREG_LO);
+			MOV(gpr.R(rd), gpr.R(MIPSREG_LO));
+			break;
+
+		case 19: // LO = R(rs); break; //mtlo
+			gpr.MapDirtyIn(MIPSREG_LO, rs);
+			MOV(gpr.R(MIPSREG_LO), gpr.R(rs));
+			break; 
+
+		case 24: //mult (the most popular one). lo,hi  = signed mul (rs * rt)
+			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt);
+			SMULL(gpr.R(MIPSREG_LO), gpr.R(MIPSREG_HI), gpr.R(rs), gpr.R(rt));
+			break;
+
+		case 25: //multu (2nd) lo,hi  = unsigned mul (rs * rt)
+			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt);
+			UMULL(gpr.R(MIPSREG_LO), gpr.R(MIPSREG_HI), gpr.R(rs), gpr.R(rt));
+
+		default:
+			DISABLE;
+		}
 	}
 
 }

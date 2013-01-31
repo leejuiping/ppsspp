@@ -15,11 +15,11 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "../../Core/MemMap.h"
-#include "../../Core/Host.h"
-#include "../../Core/Config.h"
-#include "../../Core/System.h"
-#include "../../native/gfx_es2/gl_state.h"
+#include "Core/MemMap.h"
+#include "Core/Host.h"
+#include "Core/Config.h"
+#include "Core/System.h"
+#include "gfx_es2/gl_state.h"
 
 #include "../GPUState.h"
 #include "../ge_constants.h"
@@ -37,12 +37,7 @@
 extern u32 curTextureWidth;
 extern u32 curTextureHeight;
 
-// Aggressively delete unused FBO:s to save gpu memory.
-enum {
-	FBO_OLD_AGE = 4
-};
-
-const int flushOnChangedBeforeCommandList[] = {
+static const int flushOnChangedBeforeCommandList[] = {
 	GE_CMD_VERTEXTYPE,
 	GE_CMD_BLENDMODE,
 	GE_CMD_BLENDFIXEDA,
@@ -121,7 +116,7 @@ const int flushOnChangedBeforeCommandList[] = {
 	GE_CMD_MASKALPHA,
 };
 
-const int flushBeforeCommandList[] = {
+static const int flushBeforeCommandList[] = {
 	GE_CMD_BEZIER,
 	GE_CMD_SPLINE,
 	GE_CMD_SIGNAL,
@@ -165,14 +160,12 @@ const int flushBeforeCommandList[] = {
 
 GLES_GPU::GLES_GPU()
 :		interruptsEnabled_(true),
-		displayFramebufPtr_(0),
-		prevDisplayFramebuf_(0),
-		prevPrevDisplayFramebuf_(0),
 		resized_(false)
 {
 	shaderManager_ = new ShaderManager();
 	transformDraw_.SetShaderManager(shaderManager_);
-	TextureCache_Init();
+	transformDraw_.SetTextureCache(&textureCache_);
+
 	// Sanity check gstate
 	if ((int *)&gstate.transferstart - (int *)&gstate != 0xEA) {
 		ERROR_LOG(G3D, "gstate has drifted out of sync!");
@@ -190,12 +183,7 @@ GLES_GPU::GLES_GPU()
 }
 
 GLES_GPU::~GLES_GPU() {
-	TextureCache_Shutdown();
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		fbo_destroy((*iter)->fbo);
-		delete (*iter);
-	}
-	vfbs_.clear();
+	framebufferManager_.DestroyAllFBOs();
 	shaderManager_->ClearCache(true);
 	delete shaderManager_;
 	delete [] flushBeforeCommand_;
@@ -205,7 +193,7 @@ void GLES_GPU::DeviceLost() {
 	// Simply drop all caches and textures.
 	// FBO:s appear to survive? Or no?
 	shaderManager_->ClearCache(false);
-	TextureCache_Clear(false);
+	textureCache_.Clear(false);
 }
 
 void GLES_GPU::InitClear() {
@@ -221,9 +209,21 @@ void GLES_GPU::DumpNextFrame() {
 	dumpNextFrame_ = true;
 }
 
+void GLES_GPU::BeginDebugDraw() {
+	if (g_Config.bDrawWireframe) {
+#ifndef USING_GLES2
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+#endif
+	}
+}
+void GLES_GPU::EndDebugDraw() {
+#ifndef USING_GLES2
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+#endif
+}
+
 void GLES_GPU::BeginFrame() {
-	TextureCache_StartFrame();
-	DecimateFBOs();
+	textureCache_.StartFrame();
 	transformDraw_.DecimateTrackedVertexArrays();
 
 	if (dumpNextFrame_) {
@@ -238,28 +238,11 @@ void GLES_GPU::BeginFrame() {
 	// Not sure if this is really needed.
 	shaderManager_->DirtyUniform(DIRTY_ALL);
 
-	// NOTE - this is all wrong. At the beginning of the frame is a TERRIBLE time to draw the fb.
-	if (g_Config.bDisplayFramebuffer && displayFramebufPtr_) {
-		INFO_LOG(HLE, "Drawing the framebuffer");
-		const u8 *pspframebuf = Memory::GetPointer((0x44000000) | (displayFramebufPtr_ & 0x1FFFFF));	// TODO - check
-		glstate.cullFace.disable();
-		glstate.depthTest.disable();
-		glstate.blend.disable();
-		framebufferManager.DrawPixels(pspframebuf, displayFormat_, displayStride_);
-		// TODO: restore state?
-	}
-	currentRenderVfb_ = 0;
+	framebufferManager_.BeginFrame();
 }
 
 void GLES_GPU::SetDisplayFramebuffer(u32 framebuf, u32 stride, int format) {
-	if (framebuf & 0x04000000) {
-		//DEBUG_LOG(G3D, "Switch display framebuffer %08x", framebuf);
-		displayFramebufPtr_ = framebuf;
-		displayStride_ = stride;
-		displayFormat_ = format;
-	} else {
-		ERROR_LOG(HLE, "Bogus framebuffer address: %08x", framebuf);
-	}
+	framebufferManager_.SetDisplayFramebuffer(framebuf, stride, format);
 }
 
 void GLES_GPU::CopyDisplayToOutput() {
@@ -269,198 +252,13 @@ void GLES_GPU::CopyDisplayToOutput() {
 
 	EndDebugDraw();
 
-	fbo_unbind();
-
-	VirtualFramebuffer *vfb = GetDisplayFBO();
-	if (!vfb) {
-		DEBUG_LOG(HLE, "Found no FBO! displayFBPtr = %08x", displayFramebufPtr_);
-		// No framebuffer to display! Clear to black.
-		glClearColor(0,0,0,1);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		return;
-	}
-
-	prevPrevDisplayFramebuf_ = prevDisplayFramebuf_;
-	prevDisplayFramebuf_ = displayFramebuf_;
-	displayFramebuf_ = vfb;
-
-	glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
-
-	currentRenderVfb_ = 0;
-
-	DEBUG_LOG(HLE, "Displaying FBO %08x", vfb->fb_address);
-	glstate.blend.disable();
-	glstate.cullFace.disable();
-	glstate.depthTest.disable();
-	glstate.scissorTest.disable();
-
-	fbo_bind_color_as_texture(vfb->fbo, 0);
-
-	// These are in the output display coordinates
-	framebufferManager.DrawActiveTexture(480, 272, true);
+	framebufferManager_.CopyDisplayToOutput();
 
 	shaderManager_->DirtyShader();
 	shaderManager_->DirtyUniform(DIRTY_ALL);
 	gstate_c.textureChanged = true;
 
-	if (resized_) {
-		DestroyAllFBOs();
-		glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
-		resized_ = false;
-	}
-
 	BeginDebugDraw();
-}
-
-void GLES_GPU::DecimateFBOs() {
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end();) {
-		VirtualFramebuffer *v = *iter;
-		if (v == displayFramebuf_ ||
-				v == prevDisplayFramebuf_ ||
-				v == prevPrevDisplayFramebuf_) {
-			++iter;
-			continue;
-		}
-		if ((*iter)->last_frame_used + FBO_OLD_AGE < gpuStats.numFrames) {
-			INFO_LOG(HLE, "Destroying FBO %i (%i x %i x %i)", v->fb_address, v->width, v->height, v->format);
-			fbo_destroy(v->fbo);
-			delete v;
-			vfbs_.erase(iter++);
-		}
-		else
-			++iter;
-	}
-}
-
-static bool MaskedEqual(u32 addr1, u32 addr2) {
-	return (addr1 & 0x3FFFFFF) == (addr2 & 0x3FFFFFF);
-}
-
-GLES_GPU::VirtualFramebuffer *GLES_GPU::GetDisplayFBO() {
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		VirtualFramebuffer *v = *iter;
-		if (MaskedEqual(v->fb_address, displayFramebufPtr_) && v->format == displayFormat_) {
-			// Could check w too but whatever
-			return *iter;
-		}
-	}
-	DEBUG_LOG(HLE, "Finding no FBO matching address %08x", displayFramebufPtr_);
-#if 0  // defined(_DEBUG)
-	std::string debug = "FBOs: ";
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		char temp[256];
-		sprintf(temp, "%08x %i %i", (*iter)->fb_address, (*iter)->width, (*iter)->height);
-		debug += std::string(temp);
-	}
-	ERROR_LOG(HLE, "FBOs: %s", debug.c_str());
-#endif
-	return 0;
-}
-
-void GLES_GPU::SetRenderFrameBuffer() {
-	if (!g_Config.bBufferedRendering)
-		return;
-	// Get parameters
-	u32 fb_address = (gstate.fbptr & 0xFFE000) | ((gstate.fbwidth & 0xFF0000) << 8);
-	int fb_stride = gstate.fbwidth & 0x3C0;
-
-	u32 z_address = (gstate.zbptr & 0xFFE000) | ((gstate.zbwidth & 0xFF0000) << 8);
-	int z_stride = gstate.zbwidth & 0x3C0;
-
-	// Yeah this is not completely right. but it'll do for now.
-	int drawing_width = ((gstate.region2) & 0x3FF) + 1;
-	int drawing_height = ((gstate.region2 >> 10) & 0x3FF) + 1;
-
-	// HACK for first frame where some games don't init things right
-	if (drawing_width == 1 && drawing_height == 1) {
-		drawing_width = 480;
-		drawing_height = 272;
-	}
-
-	int fmt = gstate.framebufpixformat & 3;
-
-	// Find a matching framebuffer
-	VirtualFramebuffer *vfb = 0;
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		VirtualFramebuffer *v = *iter;
-		if (MaskedEqual(v->fb_address, fb_address) && v->width == drawing_width && v->height == drawing_height && v->format == fmt) {
-			// Let's not be so picky for now. Let's say this is the one.
-			vfb = v;
-			// Update fb stride in case it changed
-			vfb->fb_stride = fb_stride;
-			break;
-		}
-	}
-
-	// None found? Create one.
-	if (!vfb) {
-		transformDraw_.Flush();
-		gstate_c.textureChanged = true;
-		vfb = new VirtualFramebuffer();
-		vfb->fb_address = fb_address;
-		vfb->fb_stride = fb_stride;
-		vfb->z_address = z_address;
-		vfb->z_stride = z_stride;
-		vfb->width = drawing_width;
-		vfb->height = drawing_height;
-		vfb->format = fmt;
-
-		vfb->colorDepth = FBO_8888;
-		switch (fmt) {
-		case GE_FORMAT_4444: vfb->colorDepth = FBO_4444;
-		case GE_FORMAT_5551: vfb->colorDepth = FBO_5551;
-		case GE_FORMAT_565: vfb->colorDepth = FBO_565;
-		case GE_FORMAT_8888: vfb->colorDepth = FBO_8888;
-		}
-//#ifdef ANDROID
-//	vfb->colorDepth = FBO_8888;
-//#endif
-		float renderWidthFactor = (float)PSP_CoreParameter().renderWidth / 480.0f;
-		float renderHeightFactor = (float)PSP_CoreParameter().renderHeight / 272.0f;
-		vfb->fbo = fbo_create(vfb->width * renderWidthFactor, vfb->height * renderHeightFactor, 1, true, vfb->colorDepth);
-
-		vfb->last_frame_used = gpuStats.numFrames;
-		vfbs_.push_back(vfb);
-		fbo_bind_as_render_target(vfb->fbo);
-		glEnable(GL_DITHER);
-		glstate.viewport.set(0, 0, PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight);
-		currentRenderVfb_ = vfb;
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		INFO_LOG(HLE, "Creating FBO for %08x : %i x %i x %i", vfb->fb_address, vfb->width, vfb->height, vfb->format);
-		return;
-	}
-
-	if (vfb != currentRenderVfb_) {
-		transformDraw_.Flush();
-		// Use it as a render target.
-		DEBUG_LOG(HLE, "Switching render target to FBO for %08x", vfb->fb_address);
-		gstate_c.textureChanged = true;
-		fbo_bind_as_render_target(vfb->fbo);
-
-#ifdef USING_GLES2
-		// Tiled renderers benefit IMMENSELY from clearing an FBO before rendering
-		// to it. Let's hope this doesn't break too many things...
-		// It did, will have to find a better solution like clearing only if this is
-		// the first time the buffer is bound on this frame.
-		// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-#endif
-		glstate.viewport.set(0, 0, PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight);
-		currentRenderVfb_ = vfb;
-		vfb->last_frame_used = gpuStats.numFrames;
-	}
-}
-
-void GLES_GPU::BeginDebugDraw() {
-	if (g_Config.bDrawWireframe) {
-#ifndef USING_GLES2
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-#endif
-	}
-}
-void GLES_GPU::EndDebugDraw() {
-#ifndef USING_GLES2
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-#endif
 }
 
 // Render queue
@@ -531,7 +329,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 
 	case GE_CMD_PRIM:
 		{
-			SetRenderFrameBuffer();
+			framebufferManager_.SetRenderFrameBuffer();
 
 			u32 count = data & 0xFFFF;
 			u32 type = data >> 16;
@@ -1192,8 +990,8 @@ void GLES_GPU::UpdateStats() {
 	gpuStats.numVertexShaders = shaderManager_->NumVertexShaders();
 	gpuStats.numFragmentShaders = shaderManager_->NumFragmentShaders();
 	gpuStats.numShaders = shaderManager_->NumPrograms();
-	gpuStats.numTextures = TextureCache_NumLoadedTextures();
-	gpuStats.numFBOs = (int)vfbs_.size();
+	gpuStats.numTextures = textureCache_.NumLoadedTextures();
+	gpuStats.numFBOs = framebufferManager_.NumVFBs();
 }
 
 void GLES_GPU::DoBlockTransfer() {
@@ -1234,34 +1032,25 @@ void GLES_GPU::DoBlockTransfer() {
 
 	// TODO: Notify all overlapping FBOs that they need to reload.
 
-	TextureCache_Invalidate(dstBasePtr + dstY * dstStride + dstX, height * dstStride + width * bpp, true);
+	textureCache_.Invalidate(dstBasePtr + dstY * dstStride + dstX, height * dstStride + width * bpp, true);
 }
 
 void GLES_GPU::InvalidateCache(u32 addr, int size) {
 	if (size > 0)
-		TextureCache_Invalidate(addr, size, true);
+		textureCache_.Invalidate(addr, size, true);
 	else
-		TextureCache_InvalidateAll(true);
+		textureCache_.InvalidateAll(true);
 }
 
 void GLES_GPU::InvalidateCacheHint(u32 addr, int size) {
 	if (size > 0)
-		TextureCache_Invalidate(addr, size, false);
+		textureCache_.Invalidate(addr, size, false);
 	else
-		TextureCache_InvalidateAll(false);
+		textureCache_.InvalidateAll(false);
 }
 
 void GLES_GPU::Flush() {
 	transformDraw_.Flush();
-}
-
-void GLES_GPU::DestroyAllFBOs() {
-	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
-		VirtualFramebuffer *v = *iter;
-		fbo_destroy(v->fbo);
-		delete v;
-	}
-	vfbs_.clear();
 }
 
 void GLES_GPU::Resized() {
@@ -1271,9 +1060,9 @@ void GLES_GPU::Resized() {
 void GLES_GPU::DoState(PointerWrap &p) {
 	GPUCommon::DoState(p);
 
-	TextureCache_Clear(true);
+	textureCache_.Clear(true);
 
 	gstate_c.textureChanged = true;
-	DestroyAllFBOs();
+	framebufferManager_.DestroyAllFBOs();
 	shaderManager_->ClearCache(true);
 }

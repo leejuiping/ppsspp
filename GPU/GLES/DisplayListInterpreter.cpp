@@ -513,6 +513,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			// Throughmode changed, let's make the proj matrix dirty.
 			shaderManager_->DirtyUniform(DIRTY_PROJMATRIX);
 		}
+		shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
 		// This sets through-mode or not, as well.
 		break;
 
@@ -960,7 +961,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		{
 			int num = gstate.texmtxnum & 0xF;
 			float newVal = getFloat24(data);
-			if (newVal != gstate.tgenMatrix[num] && num < 12) {
+			if (num < 12 && newVal != gstate.tgenMatrix[num]) {
 				Flush();
 				gstate.tgenMatrix[num] = newVal;
 				shaderManager_->DirtyUniform(DIRTY_TEXMATRIX);
@@ -978,7 +979,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		{
 			int num = gstate.boneMatrixNumber & 0x7F;
 			float newVal = getFloat24(data);
-			if (newVal != gstate.boneMatrix[num] && num < 96) {
+			if (num < 96 && newVal != gstate.boneMatrix[num]) {
 				Flush();
 				gstate.boneMatrix[num] = newVal;
 				shaderManager_->DirtyUniform(DIRTY_BONEMATRIX0 << (num / 12));

@@ -276,10 +276,10 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 			halfVec.Normalize();
 
 			dot = halfVec * norm;
-			if (dot >= 0)
+			if (dot > 0)
 			{
 				Color4 lightSpec(gstate_c.lightColor[2][l], 0.0f);
-				lightSum1 += (lightSpec * *specular * (powf(dot, specCoef_)*lightScale));
+				lightSum1 += (lightSpec * *specular * (powf(dot, specCoef_) * lightScale));
 			}
 		}
 		dots[l] = dot;
@@ -319,6 +319,7 @@ static const GlTypeInfo GLComp[] = {
 	{GL_UNSIGNED_SHORT, 2, GL_TRUE},// 	DEC_U16_2,
 	{GL_UNSIGNED_SHORT, 3, GL_TRUE},// 	DEC_U16_3,
 	{GL_UNSIGNED_SHORT, 4, GL_TRUE},// 	DEC_U16_4,
+	{GL_UNSIGNED_BYTE,  2, GL_FALSE},// 	DEC_U8A_2,
 	{GL_UNSIGNED_SHORT, 2, GL_FALSE},// 	DEC_U16A_2,
 };
 
@@ -862,7 +863,7 @@ void TransformDrawEngine::ClearTrackedVertexArrays() {
 void TransformDrawEngine::DecimateTrackedVertexArrays() {
 	int threshold = gpuStats.numFrames - VAI_KILL_AGE;
 	for (auto iter = vai_.begin(); iter != vai_.end(); ) {
-		if (iter->second->lastFrame < threshold ) {
+		if (iter->second->lastFrame < threshold) {
 			delete iter->second;
 			vai_.erase(iter++);
 		}
@@ -936,9 +937,9 @@ void TransformDrawEngine::Flush() {
 						// exponential backoff up to 16 frames
 						vai->drawsUntilNextFullHash = std::min(16, vai->numDraws);
 						// TODO: tweak
-						if (vai->numDraws > 1000) {
-							vai->status = VertexArrayInfo::VAI_RELIABLE;
-						}
+						//if (vai->numDraws > 1000) {
+						//	vai->status = VertexArrayInfo::VAI_RELIABLE;
+						//}
 						if (newHash != vai->hash) {
 							vai->status = VertexArrayInfo::VAI_UNRELIABLE;
 							if (vai->vbo) {

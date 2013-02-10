@@ -279,7 +279,7 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 	if (lastFrameTime == 0.0)
 		lastFrameTime = time_now_d();
 	if (!GetAsyncKeyState(VK_TAB) && !PSP_CoreParameter().headLess) {
-		while (time_now_d() < lastFrameTime + 1.0 / 60.0) {
+		while (time_now_d() < lastFrameTime + 1.0 / framerate) {
 
 			Common::SleepCurrentThread(1);
 			time_update();

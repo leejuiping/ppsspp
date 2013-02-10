@@ -17,7 +17,6 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#undef DeleteFile
 #endif
 
 #include "../Config.h"
@@ -147,9 +146,10 @@ public:
 		p.Do(callbackID);
 		p.Do(callbackArg);
 		p.Do(asyncResult);
-		p.Do(closePending);
 		p.Do(pendingAsyncResult);
 		p.Do(sectorBlockMode);
+		p.Do(closePending);
+		p.Do(info);
 		p.Do(openMode);
 		p.DoMarker("File");
 	}
@@ -552,7 +552,7 @@ u32 sceIoRemove(const char *filename) {
 	if(!pspFileSystem.GetFileInfo(filename).exists)
 		return ERROR_ERRNO_FILE_NOT_FOUND;
 
-	pspFileSystem.DeleteFile(filename);
+	pspFileSystem.RemoveFile(filename);
 	return 0;
 }
 

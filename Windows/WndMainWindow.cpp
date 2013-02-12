@@ -114,16 +114,18 @@ namespace MainWindow
 		AdjustWindowRect(&rcOuter, WS_OVERLAPPEDWINDOW, TRUE);
 	}
 
-	void ResizeDisplay() {
+	void ResizeDisplay(bool noWindowMovement = false) {
 		RECT rc;
 		GetClientRect(hwndMain, &rc);
+		if (!noWindowMovement) {
 
-		if ((rc.right - rc.left) == PSP_CoreParameter().pixelWidth &&
-			(rc.bottom - rc.top) == PSP_CoreParameter().pixelHeight)
-			return;
-		PSP_CoreParameter().pixelWidth = rc.right - rc.left;
-		PSP_CoreParameter().pixelHeight = rc.bottom - rc.top;
-		MoveWindow(hwndDisplay, 0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, TRUE);
+			if ((rc.right - rc.left) == PSP_CoreParameter().pixelWidth &&
+				(rc.bottom - rc.top) == PSP_CoreParameter().pixelHeight)
+				return;
+			PSP_CoreParameter().pixelWidth = rc.right - rc.left;
+			PSP_CoreParameter().pixelHeight = rc.bottom - rc.top;
+			MoveWindow(hwndDisplay, 0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, TRUE);
+		}
 
 		// round up to a zoom factor for the render size.
 		int zoom = (rc.right - rc.left + 479) / 480;
@@ -530,6 +532,10 @@ namespace MainWindow
 				g_Config.bVertexCache = !g_Config.bVertexCache;
 				UpdateMenus();
 				break;
+			case ID_OPTIONS_SHOWFPS:
+				g_Config.bShowFPSCounter = !g_Config.bShowFPSCounter;
+				UpdateMenus();
+				break;
 			case ID_OPTIONS_DISPLAYRAWFRAMEBUFFER:
 				g_Config.bDisplayFramebuffer = !g_Config.bDisplayFramebuffer;
 				UpdateMenus();
@@ -549,6 +555,7 @@ namespace MainWindow
 			case ID_OPTIONS_SIMPLE2XSSAA:
 				g_Config.SSAntiAliasing = !g_Config.SSAntiAliasing;
 				UpdateMenus();
+				ResizeDisplay(true);
 				break;
 			case ID_OPTIONS_DISABLEG3DLOG:
 				g_Config.bDisableG3DLog = !g_Config.bDisableG3DLog;
@@ -706,6 +713,7 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_DISABLEG3DLOG, g_Config.bDisableG3DLog);
 		CHECKITEM(ID_OPTIONS_VERTEXCACHE, g_Config.bVertexCache);
 		CHECKITEM(ID_OPTIONS_SET30FPS, g_Config.bSet30FPS);
+		CHECKITEM(ID_OPTIONS_SHOWFPS, g_Config.bShowFPSCounter);
 
 		UINT enable = !Core_IsStepping() ? MF_GRAYED : MF_ENABLED;
 		EnableMenuItem(menu,ID_EMULATION_RUN, g_State.bEmuThreadStarted ? enable : MF_GRAYED);
@@ -726,7 +734,6 @@ namespace MainWindow
 		EnableMenuItem(menu,ID_EMULATION_STOP,!enable);
 		EnableMenuItem(menu,ID_OPTIONS_SETTINGS,enable);
 		EnableMenuItem(menu,ID_PLUGINS_CHOOSEPLUGINS,enable);
-		EnableMenuItem(menu,ID_OPTIONS_SIMPLE2XSSAA,enable);
 
 		const int zoomitems[4] = {
 			ID_OPTIONS_SCREEN1X,
@@ -777,6 +784,7 @@ namespace MainWindow
 		"Analog Down\tK",
 		"Analog Left\tJ",
 		"Analog Right\tL",
+		"Rapid Fire\tShift",
 	};
 	// Message handler for about box.
 	LRESULT CALLBACK Controls(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)

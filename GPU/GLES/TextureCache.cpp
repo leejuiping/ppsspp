@@ -26,6 +26,7 @@
 
 // If a texture hasn't been seen for 200 frames, get rid of it.
 #define TEXTURE_KILL_AGE 200
+float maxAnisotropyLevel ;
 
 TextureCache::TextureCache() {
 	// TODO: Switch to aligned allocations for alignment. AllocateMemoryPages would do the trick.
@@ -35,6 +36,7 @@ TextureCache::TextureCache() {
 	tmpTexBufRearrange = new u32[1024 * 512];   // 2MB
 	clutBuf32 = new u32[4096];  // 4K
 	clutBuf16 = new u16[4096];  // 4K
+	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisotropyLevel);
 }
 
 TextureCache::~TextureCache() {
@@ -94,7 +96,9 @@ void TextureCache::Invalidate(u32 addr, int size, bool force) {
 			}
 			if (force) {
 				gpuStats.numTextureInvalidations++;
-				iter->second.status = TexCacheEntry::STATUS_UNRELIABLE;
+				// Start it over from 0.
+				iter->second.numFrames = 0;
+				iter->second.framesUntilNextFullHash = 0;
 			} else {
 				iter->second.invalidHint++;
 			}
@@ -771,6 +775,9 @@ void TextureCache::SetTexture() {
 				match = false;
 				gpuStats.numTextureInvalidations++;
 				entry->status = TexCacheEntry::STATUS_UNRELIABLE;
+				entry->numFrames = 0;
+			} else if (entry->status == TexCacheEntry::STATUS_UNRELIABLE && entry->numFrames > TexCacheEntry::FRAMES_REGAIN_TRUST) {
+				entry->status = TexCacheEntry::STATUS_HASHING;
 			}
 		}
 
@@ -842,8 +849,8 @@ void TextureCache::SetTexture() {
 	// For now, I choose to use autogen mips on GLES2 and the game's own on other platforms.
 	// As is usual, GLES3 will solve this problem nicely but wide distribution of that is
 	// years away.
-	LoadTextureLevel(entry, 0);
-	if (entry.maxLevel > 0)
+	LoadTextureLevel(*entry, 0);
+	if (entry->maxLevel > 0)
 		glGenerateMipmap(GL_TEXTURE_2D);
 #else
 	for (int i = 0; i <= entry->maxLevel; i++) {
@@ -852,7 +859,9 @@ void TextureCache::SetTexture() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, entry->maxLevel);
 #endif
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, (float)entry->maxLevel);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 4.0);
+	float anisotropyLevel = (float) g_Config.iAnisotropyLevel > maxAnisotropyLevel ? maxAnisotropyLevel : (float) g_Config.iAnisotropyLevel;
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropyLevel);
+	// NOTICE_LOG(G3D,"AnisotropyLevel = %0.1f , MaxAnisotropyLevel = %0.1f ", anisotropyLevel, maxAnisotropyLevel );
 
 	UpdateSamplingParams(*entry, true);
 

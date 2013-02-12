@@ -61,7 +61,8 @@ struct FrameBufferState {
 
 struct WaitVBlankInfo
 {
-	WaitVBlankInfo(u32 tid) : threadID(tid), vcountUnblock(0) {}
+	WaitVBlankInfo(u32 tid) : threadID(tid), vcountUnblock(1) {}
+	WaitVBlankInfo(u32 tid, int vcount) : threadID(tid), vcountUnblock(vcount) {}
 	u32 threadID;
 	int vcountUnblock; // what was this for again?
 
@@ -85,6 +86,7 @@ static int hCountTotal; //unused
 static int vCount;
 static int isVblank;
 static bool hasSetMode;
+// Don't include this in the state, time increases regardless of state.
 static double lastFrameTime;
 
 std::vector<WaitVBlankInfo> vblankWaitingThreads;
@@ -136,7 +138,6 @@ void __DisplayDoState(PointerWrap &p) {
 	p.Do(vCount);
 	p.Do(isVblank);
 	p.Do(hasSetMode);
-	p.Do(lastFrameTime);
 	WaitVBlankInfo wvi(0);
 	p.Do(vblankWaitingThreads, wvi);
 
@@ -179,6 +180,28 @@ void __DisplayFireVblank() {
 	}
 }
 
+float calculateFPS()
+{
+	static double highestFps = 0.0;
+	static int lastFpsFrame = 0;
+	static double lastFpsTime = 0.0;
+	static double fps = 0.0;
+        
+	time_update();
+	double now = time_now_d();
+
+	if (now >= lastFpsTime + 1.0)
+	{
+		fps = (gpuStats.numFrames - lastFpsFrame) / (now - lastFpsTime);
+		if (fps > highestFps)
+			highestFps = fps;
+
+		lastFpsFrame = gpuStats.numFrames;	
+		lastFpsTime = now;
+	}
+	return fps;
+}
+
 void hleEnterVblank(u64 userdata, int cyclesLate) {
 	int vbCount = userdata;
 
@@ -191,9 +214,11 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 
 	// Wake up threads waiting for VBlank
 	for (size_t i = 0; i < vblankWaitingThreads.size(); i++) {
-		__KernelResumeThreadFromWait(vblankWaitingThreads[i].threadID, 0);
+		if (--vblankWaitingThreads[i].vcountUnblock == 0) {
+			__KernelResumeThreadFromWait(vblankWaitingThreads[i].threadID, 0);
+			vblankWaitingThreads.erase(vblankWaitingThreads.begin() + i--);
+		}
 	}
-	vblankWaitingThreads.clear();
 
 	// Trigger VBlank interrupt handlers.
 	__TriggerInterrupt(PSP_INTR_IMMEDIATE | PSP_INTR_ONLY_IF_ENABLED | PSP_INTR_ALWAYS_RESCHED, PSP_VBLANK_INTR, PSP_INTR_SUB_ALL);
@@ -215,6 +240,7 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 	if (g_Config.bShowDebugStats && gpuStats.numDrawCalls) {
 		gpu->UpdateStats();
 		char stats[2048];
+		
 		sprintf(stats,
 			"Frames: %i\n"
 			"DL processing time: %0.2f ms\n"
@@ -266,6 +292,25 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 
 		gpuStats.resetFrame();
 		kernelStats.ResetFrame();
+	}
+
+	if (g_Config.bShowFPSCounter) {
+		char stats[50];
+
+		sprintf(stats, "%0.1f", calculateFPS());
+
+		#ifdef USING_GLES2
+			float zoom = 0.7f; /// g_Config.iWindowZoom;
+			float soff = 0.7f;
+		#else
+			float zoom = 0.5f; /// g_Config.iWindowZoom;
+			float soff = 0.5f;
+		#endif
+		PPGeBegin();
+		PPGeDrawText(stats, 476 + soff, 4 + soff, PPGE_ALIGN_RIGHT, zoom, 0xCC000000);
+		PPGeDrawText(stats, 476 + -soff, 4 -soff, PPGE_ALIGN_RIGHT, zoom, 0xCC000000);
+		PPGeDrawText(stats, 476, 4, PPGE_ALIGN_RIGHT, zoom, 0xFF30FF30);
+		PPGeEnd();
 	}
 
 	// Yeah, this has to be the right moment to end the frame. Give the graphics backend opportunity
@@ -419,9 +464,9 @@ u32 sceDisplayWaitVblank() {
 	}
 }
 
-u32 sceDisplayWaitVblankStartMulti() {
+u32 sceDisplayWaitVblankStartMulti(int vblanks) {
 	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartMulti()");
-	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
+	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread(), vblanks));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank start multi waited");
 	return 0;
 }
@@ -445,9 +490,9 @@ u32 sceDisplayWaitVblankStartCB() {
 	return 0;
 }
 
-u32 sceDisplayWaitVblankStartMultiCB() {
+u32 sceDisplayWaitVblankStartMultiCB(int vblanks) {
 	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartMultiCB()");
-	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
+	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread(), vblanks));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank start multi waited");
 	return 0;
 }
@@ -488,20 +533,23 @@ const HLEFunction sceDisplay[] = {
 	{0xEEDA2E54,WrapU_UUUI<sceDisplayGetFramebuf>,"sceDisplayGetFrameBuf"},
 	{0x36CDFADE,WrapU_V<sceDisplayWaitVblank>, "sceDisplayWaitVblank"},
 	{0x984C27E7,WrapU_V<sceDisplayWaitVblankStart>, "sceDisplayWaitVblankStart"},
-	{0x40f1469c,WrapU_V<sceDisplayWaitVblankStartMulti>, "sceDisplayWaitVblankStartMulti"},
+	{0x40f1469c,WrapU_I<sceDisplayWaitVblankStartMulti>, "sceDisplayWaitVblankStartMulti"},
 	{0x8EB9EC49,WrapU_V<sceDisplayWaitVblankCB>, "sceDisplayWaitVblankCB"},
 	{0x46F186C3,WrapU_V<sceDisplayWaitVblankStartCB>, "sceDisplayWaitVblankStartCB"},
-	{0x77ed8b3a,WrapU_V<sceDisplayWaitVblankStartMultiCB>,"sceDisplayWaitVblankStartMultiCB"},
+	{0x77ed8b3a,WrapU_I<sceDisplayWaitVblankStartMultiCB>,"sceDisplayWaitVblankStartMultiCB"},
 	{0xdba6c4c4,WrapF_V<sceDisplayGetFramePerSec>,"sceDisplayGetFramePerSec"},
 	{0x773dd3a3,sceDisplayGetCurrentHcount,"sceDisplayGetCurrentHcount"},
 	{0x210eab3a,sceDisplayGetAccumulatedHcount,"sceDisplayGetAccumulatedHcount"},
+	{0xA83EF139,0,"sceDisplayAdjustAccumulatedHcount"},
 	{0x9C6EAAD7,WrapU_V<sceDisplayGetVcount>,"sceDisplayGetVcount"},
 	{0xDEA197D4,0,"sceDisplayGetMode"},
 	{0x7ED59BC4,0,"sceDisplaySetHoldMode"},
 	{0xA544C486,0,"sceDisplaySetResumeMode"},
+	{0xBF79F646,0,"sceDisplayGetResumeMode"},
 	{0xB4F378FA,0,"sceDisplayIsForeground"},
 	{0x31C4BAA8,0,"sceDisplayGetBrightness"},
 	{0x4D4E10EC,sceDisplayIsVblank,"sceDisplayIsVblank"},
+	{0x21038913,0,"sceDisplayIsVsync"},
 };
 
 void Register_sceDisplay() {

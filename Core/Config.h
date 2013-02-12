@@ -62,7 +62,6 @@ public:
 	bool bDisableG3DLog;
 	bool bVertexCache;
 	bool bFullScreen;
-	bool bSet30FPS;
 	int iAnisotropyLevel;
 
 	// Sound

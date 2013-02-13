@@ -167,6 +167,12 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 		LogManager::GetInstance()->ChangeFileLog(fileToLog);
 
 	LogManager::GetInstance()->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
+
+#if defined(USING_GLES2)
+	// Start Desktop UI
+	MainWindow* mainWindow = new MainWindow();
+	mainWindow->show();
+#endif
 }
 
 void MainWindow::SetNextState(CoreState state)
@@ -820,7 +826,7 @@ void MainWindow::loadLanguage(const QString& language)
 		QLocale locale = QLocale(currentLanguage);
 		QLocale::setDefault(locale);
 		QString languageName = QLocale::languageToString(locale.language());
-		switchTranslator(translator, QString("languages/ppsspp_%1.qm").arg(language));
+		switchTranslator(translator, QString(":/languages/ppsspp_%1.qm").arg(language));
 	}
 }
 
@@ -833,10 +839,7 @@ void MainWindow::createLanguageMenu()
 
 	QString defaultLocale = QLocale::system().name();
 	defaultLocale.truncate(defaultLocale.lastIndexOf('_'));
-	languagePath = QApplication::applicationDirPath();
-	languagePath.append("/languages");
-	QDir langDir(languagePath);
-	QStringList fileNames = langDir.entryList(QStringList("ppsspp_*.qm"));
+	QStringList fileNames = QDir(":/languages").entryList(QStringList("ppsspp_*.qm"));
 
 	if (fileNames.size() == 0)
 	{

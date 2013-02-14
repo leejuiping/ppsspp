@@ -168,7 +168,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 
 	LogManager::GetInstance()->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
 
-#if defined(USING_GLES2)
+#if !defined(USING_GLES2)
 	// Start Desktop UI
 	MainWindow* mainWindow = new MainWindow();
 	mainWindow->show();
@@ -856,7 +856,11 @@ void MainWindow::createLanguageMenu()
 		locale.truncate(locale.lastIndexOf('.'));
 		locale.remove(0, locale.indexOf('_') + 1);
 
+#if QT_VERSION >= 0x040800
 		QString language = QLocale(locale).nativeLanguageName();
+#else
+		QString language = QLocale::languageToString(QLocale(locale).language());
+#endif
 		QAction *action = new QAction(language, this);
 		action->setCheckable(true);
 		action->setData(locale);

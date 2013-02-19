@@ -68,6 +68,7 @@ void CConfig::Load(const char *iniFileName)
 	graphics->Get("LinearFiltering", &bLinearFiltering, false);
 	graphics->Get("SSAA", &SSAntiAliasing, 0);
 	graphics->Get("VBO", &bUseVBO, false);
+	graphics->Get("FrameSkip", &iFrameSkip, 0);
 #ifdef USING_GLES2
 	graphics->Get("AnisotropyLevel", &iAnisotropyLevel, 0);
 #else
@@ -77,6 +78,7 @@ void CConfig::Load(const char *iniFileName)
 	graphics->Get("VertexCache", &bVertexCache, true);
 	graphics->Get("FullScreen", &bFullScreen, false);	
 	graphics->Get("StretchToDisplay", &bStretchToDisplay, false);
+	graphics->Get("TrueColor", &bTrueColor, true);
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
@@ -131,11 +133,13 @@ void CConfig::Save()
 		graphics->Set("LinearFiltering", bLinearFiltering);
 		graphics->Set("SSAA", SSAntiAliasing);
 		graphics->Set("VBO", bUseVBO);
+		graphics->Set("FrameSkip", iFrameSkip);
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("DisableG3DLog", bDisableG3DLog);
 		graphics->Set("VertexCache", bVertexCache);
 		graphics->Set("FullScreen", bFullScreen);
 		graphics->Set("StretchToDisplay", bStretchToDisplay);
+		graphics->Set("TrueColor", bTrueColor);
 
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);

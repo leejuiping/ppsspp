@@ -48,9 +48,11 @@ static const u8 flushOnChangedBeforeCommandList[] = {
 	GE_CMD_TEXSCALEU,
 	GE_CMD_TEXSCALEV,
 	GE_CMD_CULLFACEENABLE,
+	GE_CMD_CULL,
 	GE_CMD_TEXTUREMAPENABLE,
 	GE_CMD_LIGHTINGENABLE,
 	GE_CMD_FOGENABLE,
+	GE_CMD_DITHERENABLE,
 	GE_CMD_ALPHABLENDENABLE,
 	GE_CMD_ALPHATESTENABLE,
 	GE_CMD_ALPHATEST,
@@ -97,9 +99,7 @@ static const u8 flushOnChangedBeforeCommandList[] = {
 	GE_CMD_VIEWPORTX2,GE_CMD_VIEWPORTY2,
 	GE_CMD_VIEWPORTZ1,GE_CMD_VIEWPORTZ2,
 	GE_CMD_LIGHTENABLE0,GE_CMD_LIGHTENABLE1,GE_CMD_LIGHTENABLE2,GE_CMD_LIGHTENABLE3,
-	GE_CMD_CULL,
 	GE_CMD_PATCHDIVISION,
-	GE_CMD_MATERIALUPDATE,
 	GE_CMD_CLEARMODE,
 	GE_CMD_TEXMAPMODE,
 	GE_CMD_TEXSHADELS,
@@ -119,6 +119,7 @@ static const u8 flushOnChangedBeforeCommandList[] = {
 	GE_CMD_MASKALPHA,
 	GE_CMD_TEXBUFWIDTH0,
 	GE_CMD_CLUTADDR,
+	GE_CMD_CLUTADDRUPPER,
 	GE_CMD_LOADCLUT,
 	GE_CMD_CLUTFORMAT,
 	GE_CMD_TEXADDR0,GE_CMD_TEXADDR1,GE_CMD_TEXADDR2,GE_CMD_TEXADDR3,
@@ -523,6 +524,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		break;
 
 	case GE_CMD_CULLFACEENABLE:
+	case GE_CMD_CULL:
 		break;
 
 	case GE_CMD_TEXTUREMAPENABLE:
@@ -785,9 +787,6 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 	case GE_CMD_LIGHTENABLE3:
 		break;
 
-	case GE_CMD_CULL:
-		break;
-
 	case GE_CMD_SHADEMODE:
 		break;
 
@@ -817,7 +816,12 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 
 	case GE_CMD_ALPHATESTENABLE:
 	case GE_CMD_COLORTESTENABLE:
-		// This is done in the shader.
+		// They are done in the fragment shader.
+		break;
+
+	case GE_CMD_COLORTEST:
+	case GE_CMD_COLORTESTMASK:
+		shaderManager_->DirtyUniform(DIRTY_COLORMASK);
 		break;
 
 	case GE_CMD_COLORREF:
@@ -964,8 +968,8 @@ void GLES_GPU::UpdateStats() {
 	gpuStats.numVertexShaders = shaderManager_->NumVertexShaders();
 	gpuStats.numFragmentShaders = shaderManager_->NumFragmentShaders();
 	gpuStats.numShaders = shaderManager_->NumPrograms();
-	gpuStats.numTextures = textureCache_.NumLoadedTextures();
-	gpuStats.numFBOs = framebufferManager_.NumVFBs();
+	gpuStats.numTextures = (int)textureCache_.NumLoadedTextures();
+	gpuStats.numFBOs = (int)framebufferManager_.NumVFBs();
 }
 
 void GLES_GPU::DoBlockTransfer() {

@@ -684,6 +684,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/FileSystems/ISOFileSystem.h
 	Core/FileSystems/MetaFileSystem.cpp
 	Core/FileSystems/MetaFileSystem.h
+	Core/Font/PGF.cpp
+	Core/Font/PGF.h
 	Core/HLE/FunctionWrappers.h
 	Core/HLE/HLE.cpp
 	Core/HLE/HLE.h
@@ -818,7 +820,6 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Util/BlockAllocator.h
 	Core/Util/PPGeDraw.cpp
 	Core/Util/PPGeDraw.h
-	Core/Util/Pool.h
 	Core/Util/ppge_atlas.cpp
 	Core/Util/ppge_atlas.h
 	$<TARGET_OBJECTS:GPU>

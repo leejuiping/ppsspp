@@ -675,11 +675,14 @@ ARMReg ARMXEmitter::SubBase(ARMReg Reg)
 	}
 	return Reg;
 }
+
 // NEON Specific
 void ARMXEmitter::VADD(IntegerSize Size, ARMReg Vd, ARMReg Vn, ARMReg Vm)
 {
-	_assert_msg_(DYNA_REC, Vd >= Q0, "Pass invalid register to VADD(integer)");
+	_assert_msg_(DYNA_REC, Vd >= D0, "Pass invalid register to VADD(integer)");
 	_assert_msg_(DYNA_REC, cpu_info.bNEON, "Can't use VADD(integer) when CPU doesn't support it");
+
+	bool register_quad = Vd >= Q0;
 
 	// Gets encoded as a double register
 	Vd = SubBase(Vd);
@@ -687,7 +690,7 @@ void ARMXEmitter::VADD(IntegerSize Size, ARMReg Vd, ARMReg Vn, ARMReg Vm)
 	Vm = SubBase(Vm);
 
 	Write32((0xF2 << 24) | ((Vd & 0x10) << 18) | (Size << 20) | ((Vn & 0xF) << 16) \
-		| ((Vd & 0xF) << 12) | (0x8 << 8) | ((Vn & 0x10) << 3) | (1 << 6) \
+		| ((Vd & 0xF) << 12) | (0x8 << 8) | ((Vn & 0x10) << 3) | (register_quad << 6) \
 		| ((Vm & 0x10) << 2) | (Vm & 0xF)); 
 
 }
@@ -704,16 +707,22 @@ void ARMXEmitter::VSUB(IntegerSize Size, ARMReg Vd, ARMReg Vn, ARMReg Vm)
 	Write32((0xF3 << 24) | ((Vd & 0x10) << 18) | (Size << 20) | ((Vn & 0xF) << 16) \
 		| ((Vd & 0xF) << 12) | (0x8 << 8) | ((Vn & 0x10) << 3) | (1 << 6) \
 		| ((Vm & 0x10) << 2) | (Vm & 0xF)); 
-
 }
 
 // VFP Specific
 
-void ARMXEmitter::VLDR(ARMReg Dest, ARMReg Base, Operand2 op)
+void ARMXEmitter::VLDR(ARMReg Dest, ARMReg Base, u16 offset)
 {
 	_assert_msg_(DYNA_REC, Dest >= S0 && Dest <= D31, "Passed Invalid dest register to VLDR"); 
 	_assert_msg_(DYNA_REC, Base <= R15, "Passed invalid Base register to VLDR");
-	_assert_msg_(DYNA_REC, !(op.Imm12() & 4), "Offset needs to be word aligned");
+	_assert_msg_(DYNA_REC, (offset & 0xC03) == 0, "VLDR: Offset needs to be word aligned and small enough");
+
+	if (offset & 0xC03) {
+		ERROR_LOG(DYNA_REC, "VLDR: Bad offset %08x", offset);
+	}
+
+	// ERROR_LOG(DYNA_REC, "VLDR: s%i, r%i + %i", Dest - S0, Base, offset);
+
 	bool single_reg = Dest < D0;
 
 	Dest = SubBase(Dest);
@@ -721,20 +730,26 @@ void ARMXEmitter::VLDR(ARMReg Dest, ARMReg Base, Operand2 op)
 	if (single_reg)
 	{
 		Write32(NO_COND | (0x1B << 23) | ((Dest & 0x1) << 22) | (1 << 20) | (Base << 16) \
-			| ((Dest & 0x1E) << 11) | (10 << 8) | (op.Imm12() >> 2));	
+			| ((Dest & 0x1E) << 11) | (10 << 8) | (offset >> 2));	
 
 	}
 	else
 	{
 		Write32(NO_COND | (0x1B << 23) | ((Dest & 0x10) << 18) | (1 << 20) | (Base << 16) \
-			| ((Dest & 0xF) << 12) | (11 << 8) | (op.Imm12() >> 2));	
+			| ((Dest & 0xF) << 12) | (11 << 8) | (offset >> 2));	
 	}
 }
-void ARMXEmitter::VSTR(ARMReg Src, ARMReg Base, Operand2 op)
+void ARMXEmitter::VSTR(ARMReg Src, ARMReg Base, u16 offset)
 {
 	_assert_msg_(DYNA_REC, Src >= S0 && Src <= D31, "Passed invalid src register to VSTR");
 	_assert_msg_(DYNA_REC, Base <= R15, "Passed invalid base register to VSTR");
-	_assert_msg_(DYNA_REC, !(op.Imm12() & 4), "Offset needs to be word aligned");
+	_assert_msg_(DYNA_REC, (offset & 0xC03) == 0, "VSTR: Offset needs to be word aligned");
+
+	if (offset & 0xC03) {
+		ERROR_LOG(DYNA_REC, "VSTR: Bad offset %08x", offset);
+	}
+	// ERROR_LOG(DYNA_REC, "VSTR: s%i, r%i + %i", Src - S0, Base, offset);
+
 	bool single_reg = Src < D0;
 
 	Src = SubBase(Src);
@@ -742,16 +757,16 @@ void ARMXEmitter::VSTR(ARMReg Src, ARMReg Base, Operand2 op)
 	if (single_reg)
 	{
 		Write32(NO_COND | (0x1B << 23) | ((Src & 0x1) << 22) | (Base << 16) \
-			| ((Src & 0x1E) << 11) | (10 << 8) | (op.Imm12() >> 2));	
+			| ((Src & 0x1E) << 11) | (10 << 8) | (offset >> 2));	
 
 	}
 	else
 	{
 		Write32(NO_COND | (0x1B << 23) | ((Src & 0x10) << 18) | (Base << 16) \
-			| ((Src & 0xF) << 12) | (11 << 8) | (op.Imm12() >> 2));	
+			| ((Src & 0xF) << 12) | (11 << 8) | (offset >> 2));	
 	}
 }
-void ARMXEmitter::VCMP(ARMReg Vd, ARMReg Vm)
+void ARMXEmitter::VCMP(ARMReg Vd, ARMReg Vm, bool E)
 {
 	_assert_msg_(DYNA_REC, Vd < Q0, "Passed invalid Vd to VCMP");
 	bool single_reg = Vd < D0;
@@ -762,15 +777,15 @@ void ARMXEmitter::VCMP(ARMReg Vd, ARMReg Vm)
 	if (single_reg)
 	{
 		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x1) << 22) | (0x34 << 16) | ((Vd & 0x1E) << 11) \
-			| (0x2B << 6) | ((Vm & 0x1) << 5) | (Vm >> 1));
+			| (E << 7) | (0x29 << 6) | ((Vm & 0x1) << 5) | (Vm >> 1));
 	}
 	else
 	{
 		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x10) << 18) | (0x34 << 16) | ((Vd & 0xF) << 12) \
-			| (0x2F << 6) | ((Vm & 0x10) << 1) | (Vm & 0xF));
+			| (E << 7) | (0x2C << 6) | ((Vm & 0x10) << 1) | (Vm & 0xF));
 	}
 }
-void ARMXEmitter::VCMP(ARMReg Vd)
+void ARMXEmitter::VCMP(ARMReg Vd, bool E)
 {
 	_assert_msg_(DYNA_REC, Vd < Q0, "Passed invalid Vd to VCMP");
 	bool single_reg = Vd < D0;
@@ -780,12 +795,12 @@ void ARMXEmitter::VCMP(ARMReg Vd)
 	if (single_reg)
 	{
 		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x1) << 22) | (0x35 << 16) | ((Vd & 0x1E) << 11) \
-			| (0x2B << 6));
+			| (E << 7) | (0x29 << 6));
 	}
 	else
 	{
 		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x10) << 18) | (0x35 << 16) | ((Vd & 0xF) << 12) \
-			| (0x2F << 6)); 
+			| (E << 7) | (0x2C << 6)); 
 	}
 }
 void ARMXEmitter::VDIV(ARMReg Vd, ARMReg Vn, ARMReg Vm)
@@ -801,7 +816,7 @@ void ARMXEmitter::VDIV(ARMReg Vd, ARMReg Vn, ARMReg Vm)
 
 	if (single_reg)
 	{
-		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x1) << 22) | ((Vn & 0x1E) << 16) \
+		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x1) << 22) | ((Vn & 0x1E) << 15) \
 			| ((Vd & 0x1E) << 11) | (0xA << 8) | ((Vn & 0x1) << 7) | ((Vm & 0x1) << 5) \
 			| (Vm >> 1));
 	}
@@ -832,6 +847,7 @@ void ARMXEmitter::VSQRT(ARMReg Vd, ARMReg Vm)
 			| ((Vd & 0xF) << 12) | (0x2F << 6) | ((Vm & 0x10) << 2) | (Vm & 0xF));
 	}
 }
+
 // VFP and ASIMD
 void ARMXEmitter::VADD(ARMReg Vd, ARMReg Vn, ARMReg Vm)
 {
@@ -848,7 +864,7 @@ void ARMXEmitter::VADD(ARMReg Vd, ARMReg Vn, ARMReg Vm)
 	if (single_reg)
 	{
 		Write32(NO_COND | (0x1C << 23) | ((Vd & 0x1) << 22) | (0x3 << 20) \
-			| ((Vn & 0x1E) << 15) | ((Vd & 0x1E) << 12) | (0x5 << 9) \
+			| ((Vn & 0x1E) << 15) | ((Vd & 0x1E) << 11) | (0x5 << 9) \
 			| ((Vn & 0x1) << 7) | ((Vm & 0x1) << 5) | (Vm >> 1));
 	}
 	else
@@ -883,7 +899,7 @@ void ARMXEmitter::VSUB(ARMReg Vd, ARMReg Vn, ARMReg Vm)
 	if (single_reg)
 	{
 		Write32(NO_COND | (0x1C << 23) | ((Vd & 0x1) << 22) | (0x3 << 20) \
-			| ((Vn & 0x1E) << 15) | ((Vd & 0x1E) << 12) | (0x5 << 9) \
+			| ((Vn & 0x1E) << 15) | ((Vd & 0x1E) << 11) | (0x5 << 9) \
 			| ((Vn & 0x1) << 7) | (1 << 6) | ((Vm & 0x1) << 5) | (Vm >> 1));
 	}
 	else
@@ -902,6 +918,88 @@ void ARMXEmitter::VSUB(ARMReg Vd, ARMReg Vn, ARMReg Vm)
 				| (1 << 6) | ((Vm & 0x10) << 2) | (Vm & 0xF));
 		}
 	}
+}
+// VFP and ASIMD
+void ARMXEmitter::VMUL(ARMReg Vd, ARMReg Vn, ARMReg Vm)
+{
+	_assert_msg_(DYNA_REC, Vd >= S0, "Passed invalid dest register to VADD");
+	_assert_msg_(DYNA_REC, Vn >= S0, "Passed invalid Vn to VADD");
+	_assert_msg_(DYNA_REC, Vm >= S0, "Passed invalid Vm to VADD");
+	bool single_reg = Vd < D0;
+	bool double_reg = Vd < Q0;
+
+	Vd = SubBase(Vd);
+	Vn = SubBase(Vn);
+	Vm = SubBase(Vm);
+
+	if (single_reg)
+	{
+		Write32(NO_COND | (0x1C << 23) | ((Vd & 0x1) << 22) | (0x2 << 20) \
+			| ((Vn & 0x1E) << 15) | ((Vd & 0x1E) << 11) | (0x5 << 9) \
+			| ((Vn & 0x1) << 7) | ((Vm & 0x1) << 5) | (Vm >> 1));
+	}
+	else
+	{
+		if (double_reg)
+		{
+			Write32(NO_COND | (0x1C << 23) | ((Vd & 0x10) << 18) | (0x2 << 20) \
+				| ((Vn & 0xF) << 16) | ((Vd & 0xF) << 12) | (0xB << 8) \
+				| ((Vn & 0x10) << 3) | ((Vm & 0x10) << 2) | (Vm & 0xF));
+		}
+		else
+		{
+			_assert_msg_(DYNA_REC, cpu_info.bNEON, "Trying to use VMUL with Quad Reg without support!");
+		}
+	}
+}
+
+void ARMXEmitter::VABS(ARMReg Vd, ARMReg Vm)
+{
+	bool single_reg = Vd < D0;
+
+	Vd = SubBase(Vd);
+	Vm = SubBase(Vm);
+
+	if (single_reg)
+	{
+		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x1) << 22) | (0x30 << 16) \
+			| ((Vd & 0x1E) << 11) | (0x2B << 6) | ((Vm & 0x1) << 5) | (Vm >> 1));
+	}
+	else
+	{
+		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x10) << 18) | (0x30 << 16) \
+			| ((Vd & 0xF) << 12) | (0x2F << 6) | ((Vm & 0x10) << 2) | (Vm & 0xF));
+	}
+}
+
+void ARMXEmitter::VNEG(ARMReg Vd, ARMReg Vm)
+{
+	bool single_reg = Vd < D0;
+
+	Vd = SubBase(Vd);
+	Vm = SubBase(Vm);
+
+	if (single_reg)
+	{
+		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x1) << 22) | (0x31 << 16) \
+			| ((Vd & 0x1E) << 11) | (0x29 << 6) | ((Vm & 0x1) << 5) | (Vm >> 1));
+	}
+	else
+	{
+		Write32(NO_COND | (0x1D << 23) | ((Vd & 0x10) << 18) | (0x31 << 16) \
+			| ((Vd & 0xF) << 12) | (0x2D << 6) | ((Vm & 0x10) << 2) | (Vm & 0xF));
+	}
+}
+
+void ARMXEmitter::VMOV(ARMReg Dest, ARMReg Src, bool high)
+{
+	_assert_msg_(DYNA_REC, Src < S0, "This VMOV doesn't support SRC other than ARM Reg");
+	_assert_msg_(DYNA_REC, Dest >= D0, "This VMOV doesn't support DEST other than VFP");
+
+	Dest = SubBase(Dest);
+
+	Write32(NO_COND | (0xE << 24) | (high << 21) | ((Dest & 0xF) << 16) | (Src << 12) \
+		| (11 << 8) | ((Dest & 0x10) << 3) | (1 << 4));
 }
 
 void ARMXEmitter::VMOV(ARMReg Dest, ARMReg Src)
@@ -985,6 +1083,17 @@ void ARMXEmitter::VMOV(ARMReg Dest, ARMReg Src)
 				| (0x2D << 6) | ((Src & 0x10) << 1) | (Src & 0xF));
 		}
 	}
+}
+
+void ARMXEmitter::VCVT(ARMReg Sd, ARMReg Sm, bool to_integer, bool is_signed, bool round_to_zero)
+{
+	bool op  = to_integer ? round_to_zero : is_signed;
+	bool op2 = to_integer ? is_signed : 0;
+	Sd = SubBase(Sd);
+	Sm = SubBase(Sm);
+
+	Write32(NO_COND | (0x1D << 23) | ((Sd & 0x1) << 22) | (0x7 << 19) | (to_integer << 18) | (op2 << 16) \
+		| ((Sd & 0x1E) << 11) | (op << 7) | (0x29 << 6) | ((Sm & 0x1) << 5) | (Sm >> 1));
 }
 
 }

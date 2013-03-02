@@ -375,6 +375,7 @@ void FramebufferManager::SetRenderFrameBuffer() {
 		fbo_bind_as_render_target(vfb->fbo);
 
 		textureCache_->NotifyFramebuffer(vfb->fb_address, vfb);
+
 #ifdef USING_GLES2
 		// Some tiled mobile GPUs benefit IMMENSELY from clearing an FBO before rendering
 		// to it. This broke stuff before, so now it only clears on the first use of an

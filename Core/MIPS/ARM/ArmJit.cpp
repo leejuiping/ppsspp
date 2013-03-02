@@ -55,24 +55,53 @@ void DisassembleArm(const u8 *data, int size) {
 namespace MIPSComp
 {
 
-Jit::Jit(MIPSState *mips) : blocks(mips), gpr(mips), mips_(mips)
+Jit::Jit(MIPSState *mips) : blocks(mips), gpr(mips), fpr(mips),	 mips_(mips)
 { 
 	blocks.Init();
 	gpr.SetEmitter(this);
-	//fpr.SetEmitter(this);
+	fpr.SetEmitter(this);
 	AllocCodeSpace(1024 * 1024 * 16);  // 32MB is the absolute max because that's what an ARM branch instruction can reach, backwards and forwards.
 	GenerateFixedCode();
+
+	js.startDefaultPrefix = true;
 }
 
 void Jit::DoState(PointerWrap &p)
 {
+	p.Do(js.startDefaultPrefix);
 	p.DoMarker("Jit");
+	FlushPrefixV();
 }
 
 void Jit::FlushAll()
 {
 	gpr.FlushAll();
-	//fpr.Flush(FLUSH_ALL);
+	fpr.FlushAll();
+	FlushPrefixV();
+}
+
+void Jit::FlushPrefixV()
+{
+	if ((js.prefixSFlag & ArmJitState::PREFIX_DIRTY) != 0)
+	{
+		MOVI2R(R0, js.prefixS);
+		STR(CTXREG, R0, offsetof(MIPSState, vfpuCtrl[VFPU_CTRL_SPREFIX]));
+		js.prefixSFlag = (ArmJitState::PrefixState) (js.prefixSFlag & ~ArmJitState::PREFIX_DIRTY);
+	}
+
+	if ((js.prefixTFlag & ArmJitState::PREFIX_DIRTY) != 0)
+	{
+		MOVI2R(R0, js.prefixT);
+		STR(CTXREG, R0, offsetof(MIPSState, vfpuCtrl[VFPU_CTRL_TPREFIX]));
+		js.prefixTFlag = (ArmJitState::PrefixState) (js.prefixTFlag & ~ArmJitState::PREFIX_DIRTY);
+	}
+
+	if ((js.prefixDFlag & ArmJitState::PREFIX_DIRTY) != 0)
+	{
+		MOVI2R(R0, js.prefixD);
+		STR(CTXREG, R0, offsetof(MIPSState, vfpuCtrl[VFPU_CTRL_DPREFIX]));
+		js.prefixDFlag = (ArmJitState::PrefixState) (js.prefixDFlag & ~ArmJitState::PREFIX_DIRTY);
+	}
 }
 
 void Jit::ClearCache()
@@ -123,6 +152,17 @@ void Jit::Compile(u32 em_address)
 	int block_num = blocks.AllocateBlock(em_address);
 	ArmJitBlock *b = blocks.GetBlock(block_num);
 	blocks.FinalizeBlock(block_num, jo.enableBlocklink, DoJit(em_address, b));
+
+	// Drat.  The VFPU hit an uneaten prefix at the end of a block.
+	if (js.startDefaultPrefix && js.MayHavePrefix())
+	{
+		js.startDefaultPrefix = false;
+		// Our assumptions are all wrong so it's clean-slate time.
+		ClearCache();
+
+		// Let's try that one more time.  We won't get back here because we toggled the value.
+		Compile(em_address);
+	}
 }
 
 void Jit::RunLoopUntil(u64 globalticks)
@@ -130,6 +170,8 @@ void Jit::RunLoopUntil(u64 globalticks)
 	// TODO: copy globalticks somewhere
 	((void (*)())enterCode)();
 }
+static int dontLogBlocks = 20;
+int logBlocks = 40;
 
 const u8 *Jit::DoJit(u32 em_address, ArmJitBlock *b)
 {
@@ -139,14 +181,14 @@ const u8 *Jit::DoJit(u32 em_address, ArmJitBlock *b)
 	js.curBlock = b;
 	js.compiling = true;
 	js.inDelaySlot = false;
+	js.PrefixStart();
 
 	// We add a check before the block, used when entering from a linked block.
 	b->checkedEntry = GetCodePtr();
 	// Downcount flag check. The last block decremented downcounter, and the flag should still be available.
 	SetCC(CC_LT);
 	MOVI2R(R0, js.blockStart);
-	MovToPC(R0);
-	B((const void *)outerLoop);
+	B((const void *)outerLoopPCInR0);
 	SetCC(CC_AL);
 
 	b->normalEntry = GetCodePtr();
@@ -154,11 +196,10 @@ const u8 *Jit::DoJit(u32 em_address, ArmJitBlock *b)
 	MIPSAnalyst::AnalysisResults analysis; // = MIPSAnalyst::Analyze(em_address);
 
 	gpr.Start(analysis);
+	fpr.Start(analysis);
 
 	int numInstructions = 0;
 	int cycles = 0;
-	static int dontLogBlocks = 20;
-	static int logBlocks = 40;
 	if (logBlocks > 0) logBlocks--;
 	if (dontLogBlocks > 0) dontLogBlocks--;
 
@@ -169,24 +210,21 @@ const u8 *Jit::DoJit(u32 em_address, ArmJitBlock *b)
 	while (js.compiling)
 	{
 		gpr.SetCompilerPC(js.compilerPC);  // Let it know for log messages
+		fpr.SetCompilerPC(js.compilerPC);
 		u32 inst = Memory::Read_Instruction(js.compilerPC);
-#ifdef LOGASM
-		if (logBlocks > 0 && dontLogBlocks == 0) {
-			MIPSDisAsm(inst, js.compilerPC, temp, true);
-			INFO_LOG(DYNA_REC, "M: %08x   %s", js.compilerPC, temp);
-		}
-#endif
 		js.downcountAmount += MIPSGetInstructionCycleEstimate(inst);
 
 		MIPSCompileOp(inst);
-		// FlushAll(); ///HACKK
+	
 		js.compilerPC += 4;
 		numInstructions++;
 	}
 #ifdef LOGASM
 	if (logBlocks > 0 && dontLogBlocks == 0) {
-		MIPSDisAsm(Memory::Read_Instruction(js.compilerPC), js.compilerPC, temp, true);
-		INFO_LOG(DYNA_REC, "M: %08x   %s", js.compilerPC, temp);
+		for (u32 cpc = em_address; cpc != js.compilerPC + 4; cpc += 4) {
+			MIPSDisAsm(Memory::Read_Instruction(cpc), cpc, temp, true);
+			INFO_LOG(DYNA_REC, "M: %08x   %s", cpc, temp);
+		}
 	}
 #endif
 
@@ -224,6 +262,10 @@ void Jit::Comp_Generic(u32 op)
 		MOVI2R(R0, op);
 		QuickCallFunction(R1, (void *)func);
 	}
+
+	// Might have eaten prefixes, hard to tell...
+	if ((MIPSGetInfo(op) & IS_VFPU) != 0)
+		js.PrefixStart();
 }
 
 void Jit::MovFromPC(ARMReg r) {
@@ -272,8 +314,7 @@ void Jit::WriteExit(u32 destination, int exit_num)
 		b->linkStatus[exit_num] = true;
 	} else {
 		MOVI2R(R0, destination);
-		MovToPC(R0);
-		B((const void *)dispatcher);	
+		B((const void *)dispatcherPCInR0);	
 	}
 }
 

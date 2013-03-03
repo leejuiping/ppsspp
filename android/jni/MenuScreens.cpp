@@ -168,7 +168,7 @@ void MenuScreen::render() {
 
 	ui_draw2d.DrawTextShadow(UBUNTU48, "PPSSPP", dp_xres + xoff - w/2, 80, 0xFFFFFFFF, ALIGN_HCENTER | ALIGN_BOTTOM);
 	ui_draw2d.SetFontScale(0.7f, 0.7f);
-	ui_draw2d.DrawTextShadow(UBUNTU24, PPSSPP_VERSION_STR, dp_xres + xoff, 80, 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_BOTTOM);
+	ui_draw2d.DrawTextShadow(UBUNTU24, PPSSPP_GIT_VERSION, dp_xres + xoff, 80, 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_BOTTOM);
 	ui_draw2d.SetFontScale(1.0f, 1.0f);
 	VLinear vlinear(dp_xres + xoff, 95, 20);
 
@@ -196,7 +196,7 @@ void MenuScreen::render() {
 	}
 
 	if (UIButton(GEN_ID, vlinear, w, "Settings", ALIGN_RIGHT)) {
-		screenManager()->switchScreen(new SettingsScreen());
+		screenManager()->push(new SettingsScreen(), 0);
 		UIReset();
 	}
 
@@ -273,13 +273,18 @@ void InGameMenuScreen::render() {
 	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Continue", ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Settings", ALIGN_RIGHT)) {
+		screenManager()->push(new SettingsScreen(), 0);
+	}
 	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Return to Menu", ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
-	
+
+	/*
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH*2, "Debug: Dump Next Frame", ALIGN_BOTTOMRIGHT)) {
 		gpu->DumpNextFrame();
 	}
+	*/
 
 	DrawWatermark();
 	UIEnd();
@@ -291,7 +296,7 @@ void InGameMenuScreen::render() {
 void SettingsScreen::update(InputState &input) {
 	if (input.pad_buttons_down & PAD_BUTTON_BACK) {
 		g_Config.Save();
-		screenManager()->switchScreen(new MenuScreen());
+		screenManager()->finishDialog(this, DR_OK);
 	}
 }
 
@@ -331,7 +336,7 @@ void SettingsScreen::render() {
 	// UICheckBox(GEN_ID, x, y += stride, "Draw raw framebuffer (for some homebrew)", ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
 
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {
-		screenManager()->switchScreen(new MenuScreen());
+		screenManager()->finishDialog(this, DR_OK);
 	}
 
 	UIEnd();
@@ -439,9 +444,9 @@ void CreditsScreen::update(InputState &input_state) {
 	frames_++;
 }
 
-static const char *credits[] =
+static char *credits[] =
 {
-	"PPSSPP " PPSSPP_VERSION_STR,
+	"PPSSPP",
 	"",
 	"",
 	"A fast and portable PSP emulator",
@@ -501,6 +506,11 @@ static const char *credits[] =
 };
 
 void CreditsScreen::render() {
+	// TODO: This is kinda ugly, done on every frame...
+	char temp[256];
+	snprintf(temp, 256, "PPSSPP %s", PPSSPP_GIT_VERSION);
+	credits[0] = temp;
+
 	UIShader_Prepare();
 	UIBegin();
 	DrawBackground(1.0f);

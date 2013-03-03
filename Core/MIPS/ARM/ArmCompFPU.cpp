@@ -19,14 +19,14 @@
 #include "ArmJit.h"
 #include "ArmRegCache.h"
 
-#define _RS ((op>>21) & 0x1F)
-#define _RT ((op>>16) & 0x1F)
-#define _RD ((op>>11) & 0x1F)
-#define _FS ((op>>11) & 0x1F)
-#define _FT ((op>>16) & 0x1F)
-#define _FD ((op>>6 ) & 0x1F)
-#define _POS	((op>>6 ) & 0x1F)
-#define _SIZE ((op>>11 ) & 0x1F)
+#define _RS   ((op>>21) & 0x1F)
+#define _RT   ((op>>16) & 0x1F)
+#define _RD   ((op>>11) & 0x1F)
+#define _FS   ((op>>11) & 0x1F)
+#define _FT   ((op>>16) & 0x1F)
+#define _FD   ((op>>6 ) & 0x1F)
+#define _POS  ((op>>6 ) & 0x1F)
+#define _SIZE ((op>>11) & 0x1F)
 
 #define DISABLE Comp_Generic(op); return;
 #define CONDITIONAL_DISABLE ; 
@@ -101,64 +101,66 @@ void Jit::Comp_FPULS(u32 op)
 }
 
 void Jit::Comp_FPUComp(u32 op) {
-	DISABLE;
+	int opc = op & 0xF;
+	if (opc >= 8) opc -= 8; // alias
+	if (opc == 0)//f, sf (signalling false)
+	{
+		MOVI2R(R0, 0);
+		STR(CTXREG, R0, offsetof(MIPSState, fpcond));
+		return;
+	}
+
 	int fs = _FS;
 	int ft = _FT;
-
-	switch (op & 0xf) 	{
-	case 0: //f
-	case 8: //sf
-		/*MOVI2R(R0, (u32)&currentMIPS->fpcond);
-		MOV(R0, Operand2(0));*/
+	fpr.MapInIn(fs, ft);
+	VCMP(fpr.R(fs), fpr.R(ft), false);
+	VMRS_APSR(); // Move FP flags from FPSCR to APSR (regular flags).
+	switch(opc)
+	{
+	case 1:      // un,  ngle (unordered)
+		SetCC(CC_VS);
+		MOVI2R(R0, 1);
+		SetCC(CC_VC);
 		break;
-
-	case 1: //un
-	case 9: //ngle
-		// CompFPComp(fs, ft, CMPUNORDSS);
+	case 2:      // eq,  seq (equal, ordered)
+		SetCC(CC_EQ);
+		MOVI2R(R0, 1);
+		SetCC(CC_NEQ);
 		break;
-
-	case 2: //eq
-	case 10: //seq
-		// CompFPComp(fs, ft, CMPEQSS);
+	case 3:      // ueq, ngl (equal, unordered)
+		SetCC(CC_EQ);
+		MOVI2R(R0, 1);
+		SetCC(CC_NEQ);
+		MOVI2R(R0, 0);
+		SetCC(CC_VC);
 		break;
-
-	case 3: //ueq
-	case 11: //ngl
-		// CompFPComp(fs, ft, CMPEQSS, true);
+	case 4:      // olt, lt (less than, ordered)
+		SetCC(CC_LO);
+		MOVI2R(R0, 1);
+		SetCC(CC_HS);
 		break;
-
-	case 4: //olt
-	case 12: //lt
-		// CompFPComp(fs, ft, CMPLTSS);
-		break;
-
-	case 5: //ult
-	case 13: //nge
-		// CompFPComp(ft, fs, CMPNLESS);
-		break;
-
-	case 6: //ole
-	case 14: //le
-		// This VCMP crashes on ARM11 with an exception.
-		/*
-		fpr.MapInIn(fpr.R(fs), fpr.R(ft));
-		VCMP(fpr.R(fs), fpr.R(ft));
-		MOVI2R(R0, (u32)&currentMIPS->fpcond);
+	case 5:      // ult, nge (less than, unordered)
 		SetCC(CC_LT);
-		// TODO: Should set R0 to 0 or 1
-		VSTR(fpr.R(fs), R0, 0);
-		SetCC(CC_AL);
-		*/
+		MOVI2R(R0, 1);
+		SetCC(CC_GE);
 		break;
-
-	case 7: //ule
-	case 15: //ngt
-		// CompFPComp(ft, fs, CMPNLTSS);
+	case 6:      // ole, le (less equal, ordered)
+		SetCC(CC_LS);
+		MOVI2R(R0, 1);
+		SetCC(CC_HI);
 		break;
-
+	case 7:      // ule, ngt (less equal, unordered)
+		SetCC(CC_LE);
+		MOVI2R(R0, 1);
+		SetCC(CC_GT);
+		break;
 	default:
-		DISABLE;
+		Comp_Generic(op);
+		return;
 	}
+	MOVI2R(R0, 0);
+	SetCC(CC_AL);
+	STR(CTXREG, R0, offsetof(MIPSState, fpcond));
 }
 
 void Jit::Comp_FPU2op(u32 op)
@@ -189,33 +191,33 @@ void Jit::Comp_FPU2op(u32 op)
 		break;
 	case 12: //FsI(fd) = (int)floorf(F(fs)+0.5f); break; //round.w.s
 		fpr.MapDirtyIn(fd, fs);
-		VCVT(fpr.R(fd), fpr.R(fs), true, true, false);
+		VCVT(fpr.R(fd), fpr.R(fs), TO_INT | IS_SIGNED);
 		break;
 	case 13: //FsI(fd) = Rto0(F(fs)));            break; //trunc.w.s
 		fpr.MapDirtyIn(fd, fs);
-		VCVT(fpr.R(fd), fpr.R(fs), true, true, true);
+		VCVT(fpr.R(fd), fpr.R(fs), TO_INT | IS_SIGNED | ROUND_TO_ZERO);
 		break;
 	case 14: //FsI(fd) = (int)ceilf (F(fs));      break; //ceil.w.s
 		fpr.MapDirtyIn(fd, fs);
 		MOVI2R(R0, 0x3F000000); // 0.5f
 		VMOV(S0, R0);
 		VADD(S0,fpr.R(fs),S0);
-		VCVT(fpr.R(fd), S0, true, true, false);
+		VCVT(fpr.R(fd), S0,        TO_INT | IS_SIGNED);
 		break;
 	case 15: //FsI(fd) = (int)floorf(F(fs));      break; //floor.w.s
 		fpr.MapDirtyIn(fd, fs);
 		MOVI2R(R0, 0x3F000000); // 0.5f
 		VMOV(S0, R0);
 		VSUB(S0,fpr.R(fs),S0);
-		VCVT(fpr.R(fd), S0, true, true, false);
+		VCVT(fpr.R(fd), S0,        TO_INT | IS_SIGNED);
 		break;
 	case 32: //F(fd)   = (float)FsI(fs);          break; //cvt.s.w
 		fpr.MapDirtyIn(fd, fs);
-		VCVT(fpr.R(fd), fpr.R(fs), false, true);
+		VCVT(fpr.R(fd), fpr.R(fs), TO_FLOAT | IS_SIGNED);
 		break;
 	case 36: //FsI(fd) = (int)  F(fs);            break; //cvt.w.s
 		fpr.MapDirtyIn(fd, fs);
-		VCVT(fpr.R(fd), fpr.R(fs), true, false, true);
+		VCVT(fpr.R(fd), fpr.R(fs), TO_INT | ROUND_TO_ZERO);
 		break;
 	default:
 		DISABLE;

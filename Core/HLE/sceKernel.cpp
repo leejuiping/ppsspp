@@ -88,6 +88,7 @@ void __KernelInit()
 	__KernelMemoryInit();
 	__KernelThreadingInit();
 	__KernelAlarmInit();
+	__KernelVTimerInit();
 	__KernelEventFlagInit();
 	__KernelMbxInit();
 	__KernelMutexInit();
@@ -164,6 +165,7 @@ void __KernelDoState(PointerWrap &p)
 	__KernelMemoryDoState(p);
 	__KernelThreadingDoState(p);
 	__KernelAlarmDoState(p);
+	__KernelVTimerDoState(p);
 	__KernelEventFlagDoState(p);
 	__KernelMbxDoState(p);
 	__KernelModuleDoState(p);

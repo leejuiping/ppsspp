@@ -25,6 +25,7 @@
 #if defined(__SYMBIAN32__) || defined(PANDORA)
 #include <signal.h>
 #endif
+#include <vector>
 
 #undef _IP
 #undef R0
@@ -333,6 +334,13 @@ struct FixupBranch
 	int type; //0 = B 1 = BL
 };
 
+struct LiteralPool
+{
+    int i;
+    u8* ldr_address;
+    u32 val;
+};
+
 typedef const u8* JumpTarget;
 
 class ARMXEmitter
@@ -342,6 +350,7 @@ private:
 	u8 *code, *startcode;
 	u8 *lastCacheFlushEnd;
 	u32 condition;
+	std::vector<LiteralPool> currentLitPool;
 
 	void WriteStoreOp(u32 op, ARMReg dest, ARMReg src, Operand2 op2);
 	void WriteRegStoreOp(u32 op, ARMReg dest, bool WriteBack, u16 RegList);
@@ -379,6 +388,10 @@ public:
 	void FlushIcacheSection(u8 *start, u8 *end);
 	u8 *GetWritableCodePtr();
 
+	void FlushLitPool();
+	void AddNewLit(u32 val);
+
+	CCFlags GetCC() { return CCFlags(condition >> 28); }
 	void SetCC(CCFlags cond = CC_AL);
 
 	// Special purpose instructions
@@ -469,6 +482,9 @@ public:
 	void SXTB(ARMReg dest, ARMReg op2);
 	void SXTH(ARMReg dest, ARMReg op2, u8 rotation = 0);
 	void SXTAH(ARMReg dest, ARMReg src, ARMReg op2, u8 rotation = 0);
+	void BFI(ARMReg rd, ARMReg rn, u8 lsb, u8 width);
+	void UBFX(ARMReg dest, ARMReg op2, u8 lsb, u8 width);
+
 	// Using just MSR here messes with our defines on the PPC side of stuff (when this code was in dolphin...)
 	// Just need to put an underscore here, bit annoying.
 	void _MSR (bool nzcvq, bool g, Operand2 op2);
@@ -487,6 +503,7 @@ public:
 	void LDRSH(ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRB (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRSB(ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
+	void LDRLIT(ARMReg dest, u32 offset, bool Add);
 
 	void STR  (ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	void STRH (ARMReg dest, ARMReg src, Operand2 op2 = 0);
@@ -532,6 +549,7 @@ public:
 	void VABS(ARMReg Vd, ARMReg Vm);
 	void VNEG(ARMReg Vd, ARMReg Vm);
 	void VMUL(ARMReg Vd, ARMReg Vn, ARMReg Vm);
+	void VMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VMOV(ARMReg Dest, ARMReg Src, bool high);
 	void VMOV(ARMReg Dest, ARMReg Src);
 	void VCVT(ARMReg Sd, ARMReg Sm, int flags);
@@ -539,9 +557,15 @@ public:
 	void VMRS_APSR();
 
 	void QuickCallFunction(ARMReg scratchreg, void *func);
-	// Utility functions
+
+	// Wrapper around MOVT/MOVW with fallbacks.
 	void MOVI2R(ARMReg reg, u32 val, bool optimize = true);
-	void ARMABI_MOVI2M(Operand2 op, Operand2 val);	
+	void MOVI2F(ARMReg dest, float val, ARMReg tempReg);
+
+	void ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
+	void ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
+
+
 };  // class ARMXEmitter
 
 

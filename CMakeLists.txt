@@ -619,6 +619,8 @@ if(ARM)
 		Core/MIPS/ARM/ArmJitCache.h
 		Core/MIPS/ARM/ArmRegCache.cpp
 		Core/MIPS/ARM/ArmRegCache.h
+		Core/MIPS/ARM/ArmRegCacheFPU.cpp
+		Core/MIPS/ARM/ArmRegCacheFPU.h
 		ext/disarm.cpp)
 elseif(X86)
 	set(CoreExtra ${CoreExtra}
@@ -813,6 +815,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/PSPLoaders.h
 	Core/PSPMixer.cpp
 	Core/PSPMixer.h
+	Core/Reporting.cpp
+	Core/Reporting.h
 	Core/SaveState.cpp
 	Core/SaveState.h
 	Core/System.cpp

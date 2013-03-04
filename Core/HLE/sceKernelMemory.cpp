@@ -427,7 +427,7 @@ public:
 				address = alloc->AllocAt(alignment, size, name);
 			}
 			else if (type == PSP_SMEM_LowAligned || type == PSP_SMEM_HighAligned)
-				address = alloc->AllocAligned(size, alignment, type == PSP_SMEM_HighAligned, name);
+				address = alloc->AllocAligned(size, 0x100, alignment, type == PSP_SMEM_HighAligned, name);
 			else
 				address = alloc->Alloc(size, type == PSP_SMEM_High, name);
 			alloc->ListBlocks();
@@ -886,7 +886,7 @@ SceUID sceKernelCreateVpl(const char *name, int partition, u32 attr, u32 vplSize
 	// We ignore the upalign to 256 and do it ourselves by 8.
 	u32 allocSize = vplSize;
 	u32 memBlockPtr = userMemory.Alloc(allocSize, (attr & PSP_VPL_ATTR_HIGHMEM) != 0, "VPL");
-	if (memBlockPtr == -1)
+	if (memBlockPtr == (u32)-1)
 	{
 		ERROR_LOG(HLE, "sceKernelCreateVpl: Failed to allocate %i bytes of pool data", vplSize);
 		return SCE_KERNEL_ERROR_NO_MEMORY;

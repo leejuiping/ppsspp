@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "ArmJit.h"
+#include "Common/CPUDetect.h"
 
 using namespace MIPSAnalyst;
 #define _RS ((op>>21) & 0x1F)
@@ -28,7 +29,12 @@ using namespace MIPSAnalyst;
 #define _POS	((op>>6 ) & 0x1F)
 #define _SIZE ((op>>11 ) & 0x1F)
 
-#define DISABLE Comp_Generic(op); return;
+// All functions should have CONDITIONAL_DISABLE, so we can narrow things down to a file quickly.
+// Currently known non working ones should have DISABLE.
+
+//#define CONDITIONAL_DISABLE { Comp_Generic(op); return; }
+#define CONDITIONAL_DISABLE ;
+#define DISABLE { Comp_Generic(op); return; }
 
 namespace MIPSComp
 {
@@ -55,6 +61,7 @@ namespace MIPSComp
 
 	void Jit::Comp_IType(u32 op)
 	{
+		CONDITIONAL_DISABLE;
 		s32 simm = (s32)(s16)(op & 0xFFFF);  // sign extension
 		u32 uimm = op & 0xFFFF;
 		u32 suimm = (u32)(s32)simm;
@@ -153,6 +160,7 @@ namespace MIPSComp
 
 	void Jit::Comp_RType3(u32 op)
 	{
+		CONDITIONAL_DISABLE;
 		int rt = _RT;
 		int rs = _RS;
 		int rd = _RD;
@@ -282,6 +290,7 @@ namespace MIPSComp
 */
 	void Jit::Comp_ShiftType(u32 op)
 	{
+		CONDITIONAL_DISABLE;
 		int rs = _RS;
 		int fd = _FD;
 		// WARNIGN : ROTR
@@ -297,39 +306,116 @@ namespace MIPSComp
 		
 		default:
 			Comp_Generic(op);
-			//_dbg_assert_msg_(CPU,0,"Trying to interpret instruction that can't be interpreted");
 			break;
 		}
 	}
 
 	void Jit::Comp_Special3(u32 op)
 	{
-		// ext, ins
-		DISABLE;
+		CONDITIONAL_DISABLE;
+		
+		bool useUBFXandBFI = false;
+
+		if (!cpu_info.bArmV7) {
+			// useUBFXandBFI = true;
+		}
+
+		int rs = _RS;
+		int rt = _RT;
+
+		int pos = _POS;
+		int size = _SIZE + 1;
+		u32 mask = 0xFFFFFFFFUL >> (32 - size);
+
+		// Don't change $zr.
+		if (rt == 0)
+			return;
+
+		switch (op & 0x3f)
+		{
+		case 0x0: //ext
+			if (gpr.IsImm(rs))
+			{
+				gpr.SetImm(rt, (gpr.GetImm(rs) >> pos) & mask);
+				return;
+			}
+
+			gpr.MapDirtyIn(rt, rs, false);
+			if (useUBFXandBFI) {
+				UBFX(gpr.R(rt), gpr.R(rs), pos, size);
+			} else {
+				MOV(gpr.R(rt), Operand2(pos, ST_LSR, gpr.R(rs)));
+				ANDI2R(gpr.R(rt), gpr.R(rt), mask, R0);
+			}
+			break;
+
+		case 0x4: //ins
+			{
+				DISABLE;
+				u32 sourcemask = mask >> pos;
+				u32 destmask = ~(sourcemask << pos);
+				if (gpr.IsImm(rs))
+				{
+					u32 inserted = (gpr.GetImm(rs) & sourcemask) << pos;
+					if (gpr.IsImm(rt))
+					{
+						gpr.SetImm(rt, (gpr.GetImm(rt) & destmask) | inserted);
+						return;
+					}
+
+					gpr.MapReg(rt, MAP_DIRTY);
+					ANDI2R(gpr.R(rt), gpr.R(rt), destmask, R0);
+					ORI2R(gpr.R(rt), gpr.R(rt), inserted, R0);
+				}
+				else
+				{
+					if (useUBFXandBFI) {
+						gpr.MapDirtyIn(rt, rs, false);
+						BFI(gpr.R(rt), gpr.R(rs), pos, size);
+					} else {
+						gpr.MapDirtyIn(rt, rs, false);
+						ANDI2R(R0, gpr.R(rs), sourcemask, R1);
+						MOV(R0, Operand2(pos, ST_LSL, R0));
+						ANDI2R(gpr.R(rt), gpr.R(rt), destmask, R1);
+						ORR(gpr.R(rt), gpr.R(rt), R0);
+					}
+				}
+			}
+			break;
+		}
 	}
 
 	void Jit::Comp_Allegrex(u32 op)
 	{
+		CONDITIONAL_DISABLE;
 		int rt = _RT;
 		int rd = _RD;
+		// Don't change $zr.
+		if (rd == 0)
+			return;
+
 		switch ((op >> 6) & 31)
 		{
-		/*
 		case 16: // seb	// R(rd) = (u32)(s32)(s8)(u8)R(rt);
-			gpr.Lock(rd, rt);
-			gpr.BindToRegister(rd, true, true);
-			MOV(32, R(EAX), gpr.R(rt));	// work around the byte-register addressing problem
-			MOVSX(32, 8, gpr.RX(rd), R(EAX));
-			gpr.UnlockAll();
+			if (gpr.IsImm(rt))
+			{
+				gpr.SetImm(rd, (s32)(s8)(u8)gpr.GetImm(rt));
+				return;
+			}
+			gpr.MapDirtyIn(rd, rt);
+			SXTB(gpr.R(rd), gpr.R(rt));
 			break;
 
 		case 24: // seh
-			gpr.Lock(rd, rt);
-			gpr.BindToRegister(rd, true, true);
-			MOVSX(32, 16, gpr.RX(rd), gpr.R(rt));
-			gpr.UnlockAll();
+			if (gpr.IsImm(rt))
+			{
+				gpr.SetImm(rd, (s32)(s16)(u16)gpr.GetImm(rt));
+				return;
+			}
+			gpr.MapDirtyIn(rd, rt);
+			SXTH(gpr.R(rd), gpr.R(rt));
 			break;
-		*/
+		
 		case 20: //bitrev
 			if (gpr.IsImm(rt))
 			{
@@ -345,9 +431,10 @@ namespace MIPSComp
 				v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
 				// swap 2-byte long pairs
 				v = ( v >> 16             ) | ( v               << 16);
-				gpr.SetImm(rd,v);
+				gpr.SetImm(rd, v);
 				break;
 			}
+			// Intentional fall-through.
 		default:
 			Comp_Generic(op);
 			return;
@@ -356,7 +443,7 @@ namespace MIPSComp
 
 	void Jit::Comp_MulDivType(u32 op)
 	{
-		// DISABLE;
+		CONDITIONAL_DISABLE;
 		int rt = _RT;
 		int rs = _RS;
 		int rd = _RD;

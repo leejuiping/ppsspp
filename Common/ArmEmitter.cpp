@@ -83,65 +83,94 @@ bool TryMakeOperand2_AllowNegation(s32 imm, Operand2 &op2, bool *negated)
 	}
 }
 
+void ARMXEmitter::MOVI2F(ARMReg dest, float val, ARMReg tempReg)
+{
+	union {float f; u32 u;} conv;
+	conv.f = val;
+	MOVI2R(tempReg, conv.u);
+	VMOV(dest, tempReg);
+}
+
+void ARMXEmitter::ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
+{
+	Operand2 op2;
+	bool inverse;
+	if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
+		if (!inverse) {
+			AND(rd, rs, op2);
+		} else {
+			BIC(rd, rs, op2);
+		}
+	} else {
+		MOVI2R(scratch, val);
+		AND(rd, rs, scratch);
+	}
+}
+
+void ARMXEmitter::ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
+{
+	Operand2 op2;
+	if (TryMakeOperand2(val, op2)) {
+		ORR(rd, rs, op2);
+	} else {
+		MOVI2R(scratch, val);
+		ORR(rd, rs, scratch);
+	}
+}
+
+void ARMXEmitter::FlushLitPool()
+{
+	for(std::vector<LiteralPool>::iterator it = currentLitPool.begin(); it != currentLitPool.end(); ++it) {
+		LiteralPool item = *it;
+		// Write the constant to Literal Pool
+		s32 offset = (s32)code - (s32)item.ldr_address - 8;
+		Write32(item.val);
+		// Backpatch the LDR
+		*(u32*)item.ldr_address |= (offset >= 0) << 23 | abs(offset);
+	}
+	// TODO: Save a copy of previous pools in case they are still in range.
+	currentLitPool.clear();
+}
+
+void ARMXEmitter::AddNewLit(u32 val)
+{
+	// TODO: Look up current constants,
+	// return that value instead of generating a new one.
+	LiteralPool pool_item;
+	pool_item.i = currentLitPool.size();
+	pool_item.val = val;
+	pool_item.ldr_address = code;
+	currentLitPool.push_back(pool_item);
+}
+
 void ARMXEmitter::MOVI2R(ARMReg reg, u32 val, bool optimize)
 {
 	Operand2 op2;
 	bool inverse;
-	if (!optimize)
+	
+	if (cpu_info.bArmV7 && !optimize)
 	{
-		// Only used in backpatch atm
-		// Only support ARMv7 right now
-		if (cpu_info.bArmV7) {
-			MOVW(reg, val & 0xFFFF);
-			MOVT(reg, val, true);
-		}
-		else
-		{
-			// ARMv6 version won't use backpatch for now
-			// Run again with optimizations
-			MOVI2R(reg, val);
-		}
-	} else if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
-		if (!inverse)
-			MOV(reg, op2);
-		else
-			MVN(reg, op2);
+		// For backpatching on ARMv7
+		MOVW(reg, val & 0xFFFF);
+		MOVT(reg, val, true);
+	}
+	else if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
+		inverse ? MVN(reg, op2) : MOV(reg, op2);
 	} else {
-		if (cpu_info.bArmV7) {
-			// ARMv7 - can use MOVT/MOVW, best choice
+		if (cpu_info.bArmV7)
+		{
+			// Use MOVW+MOVT for ARMv7+
 			MOVW(reg, val & 0xFFFF);
 			if(val & 0xFFFF0000)
 				MOVT(reg, val, true);
 		} else {
-			// ARMv6 - fallback sequence.
-			// TODO: Optimize further. Can for example choose negation etc.
-			// Literal pools is another way to do this but much more complicated
-			// so I can't really be bothered for an outdated CPU architecture like ARMv6.
-			bool first = true;
-			int shift = 16;
-			for (int i = 0; i < 4; i++) {
-				if (val & 0xFF) {
-					if (first) {
-						MOV(reg, Operand2((u8)val, (u8)(shift & 0xF)));
-						first = false;
-					} else {
-						ORR(reg, reg, Operand2((u8)val, (u8)(shift & 0xF)));
-					}
-				}
-				shift -= 4;
-				val >>= 8;
-			}
+			// Use literal pool for ARMv6.
+			AddNewLit(val);
+			LDRLIT(reg, 0, 0); // To be backpatched later
 		}
 	}
 }
-// Moves IMM to memory location
-void ARMXEmitter::ARMABI_MOVI2M(Operand2 op, Operand2 val)
-{
-	// This moves imm to a memory location
-	MOVW(R14, val); MOVT(R14, val, true);
-	MOVW(R12, op); MOVT(R12, op, true);
-	STR(R12, R14); // R10 is what we want to store
-}
+
 void ARMXEmitter::QuickCallFunction(ARMReg reg, void *func) {
 	MOVI2R(reg, (u32)(func));
 	BL(reg);
@@ -508,10 +537,23 @@ void ARMXEmitter::SMLAL(ARMReg destLo, ARMReg destHi, ARMReg rm, ARMReg rn)
 	Write4OpMultiply(0xE, destLo, destHi, rn, rm);
 }
 
+void ARMXEmitter::UBFX(ARMReg dest, ARMReg rn, u8 lsb, u8 width)
+{
+	Write32(condition | (0x7E0 << 16) | ((width - 1) << 16) | (dest << 12) | (lsb << 7) | (5 << 4) | rn);
+}
+
+void ARMXEmitter::BFI(ARMReg rd, ARMReg rn, u8 lsb, u8 width)
+{
+	u32 msb = (lsb + width - 1);
+	if (msb > 31) msb = 31;
+	Write32(condition | (0x7C0 << 16) | (msb << 16) | (rd << 12) | (lsb << 7) | (1 << 4) | rn);
+}
+
 void ARMXEmitter::SXTB (ARMReg dest, ARMReg op2)
 {
 	Write32(condition | (0x6AF << 16) | (dest << 12) | (7 << 4) | op2);
 }
+
 void ARMXEmitter::SXTH (ARMReg dest, ARMReg op2, u8 rotation)
 {
 	SXTAH(dest, (ARMReg)15, op2, rotation);
@@ -626,6 +668,8 @@ void ARMXEmitter::LDRSB(ARMReg dest, ARMReg base, ARMReg offset, bool Index, boo
 {
 	Write32(condition | (0x01 << 20) | (Index << 24) | (Add << 23) | (base << 16) | (dest << 12) | (0xD << 4) | offset);
 }
+void ARMXEmitter::LDRLIT (ARMReg dest, u32 offset, bool Add) { Write32(condition | 0x05 << 24 | Add << 23 | 0x1F << 16 | dest << 12 | offset);}
+
 void ARMXEmitter::WriteRegStoreOp(u32 op, ARMReg dest, bool WriteBack, u16 RegList)
 {
 	Write32(condition | (op << 20) | (WriteBack << 21) | (dest << 16) | RegList);
@@ -958,6 +1002,30 @@ void ARMXEmitter::VMUL(ARMReg Vd, ARMReg Vn, ARMReg Vm)
 	}
 }
 
+void ARMXEmitter::VMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm)
+{
+	_assert_msg_(DYNA_REC, Vd >= S0, "Passed invalid dest register to VMLA");
+	_assert_msg_(DYNA_REC, Vn >= S0, "Passed invalid Vn to VMLA");
+	_assert_msg_(DYNA_REC, Vm >= S0, "Passed invalid Vm to VMLA");
+	bool single_reg = Vd < D0;
+	bool double_reg = Vd < Q0;
+
+	Vd = SubBase(Vd);
+	Vn = SubBase(Vn);
+	Vm = SubBase(Vm);
+
+	if (single_reg)
+	{
+		Write32(NO_COND | (0x1C << 23) | ((Vd & 0x1) << 22) | (0x0 << 20) \
+			| ((Vn & 0x1E) << 15) | ((Vd & 0x1E) << 11) | (0x5 << 9) \
+			| ((Vn & 0x1) << 7) | ((Vm & 0x1) << 5) | (Vm >> 1));
+	}
+	else 
+	{
+		_assert_msg_(DYNA_REC, false, "VMLA: Please implement!");
+	}
+}
+
 void ARMXEmitter::VABS(ARMReg Vd, ARMReg Vm)
 {
 	bool single_reg = Vd < D0;
@@ -1092,8 +1160,8 @@ void ARMXEmitter::VMOV(ARMReg Dest, ARMReg Src)
 
 void ARMXEmitter::VCVT(ARMReg Sd, ARMReg Sm, int flags)
 {
-	bool op  = (flags & TO_INT) ? (flags & ROUND_TO_ZERO) : (flags & IS_SIGNED);
-	bool op2 = (flags & TO_INT) ? (flags & IS_SIGNED) : 0;
+	int op  = ((flags & TO_INT) ? (flags & ROUND_TO_ZERO) : (flags & IS_SIGNED)) ? 1 : 0;
+	int op2 = ((flags & TO_INT) ? (flags & IS_SIGNED) : 0) ? 1 : 0;
 	Sd = SubBase(Sd);
 	Sm = SubBase(Sm);
 

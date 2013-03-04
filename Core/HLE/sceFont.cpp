@@ -158,7 +158,7 @@ private:
 class LoadedFont {
 public:
 	LoadedFont(Font *font, FontLib *fontLib, u32 handle) 
-		: font_(font), fontLib_(fontLib), handle_(handle) {}
+		: fontLib_(fontLib), font_(font), handle_(handle) {}
 
 	Font *GetFont() { return font_; }
 	FontLib *GetFontLib() { return fontLib_; }
@@ -217,13 +217,23 @@ class FontLib {
 public:
 	FontLib(u32 paramPtr) :	fontHRes_(128.0f), fontVRes_(128.0f) {
 		Memory::ReadStruct(paramPtr, &params_);
-
+		fakeAlloc_ = 0x13370;
 		// We use the same strange scheme that JPCSP uses.
 		u32 allocSize = 4 + 4 * params_.numFonts;
 		PostAllocCallback *action = (PostAllocCallback*) __KernelCreateAction(actionPostAllocCallback);
 		action->SetFontLib(this);
-		u32 args[1] = { allocSize };
-		__KernelDirectMipsCall(params_.allocFuncAddr, action, args, 1, false);
+
+		if (false) {
+			// This fails in dissidia. The function at 088ff320 (params_.allocFuncAddr) calls some malloc function, the second one returns 0 which causes
+			// bad stores later. So we just ignore this with if (false) and fake it.
+			u32 args[1] = { allocSize };
+			__KernelDirectMipsCall(params_.allocFuncAddr, action, args, 1, false);
+		} else {
+			AllocDone(fakeAlloc_);
+			fakeAlloc_ += allocSize;
+			fontLibMap[handle()] = this;
+			INFO_LOG(HLE, "Leaving PostAllocCallback::run");
+		}
 	}
 
 	void Close() {
@@ -232,7 +242,7 @@ public:
 
 	void Done() {
 		for (size_t i = 0; i < fonts_.size(); i++) {
-			if (Memory::Read_U32(fonts_[i]) == FONT_IS_OPEN) {
+			if (isfontopen_[i] == FONT_IS_OPEN) {
 				fontMap[fonts_[i]]->Close();
 				delete fontMap[fonts_[i]];
 				fontMap.erase(fonts_[i]);
@@ -242,14 +252,16 @@ public:
 		__KernelDirectMipsCall(params_.freeFuncAddr, 0, args, 1, false);
 		handle_ = 0;
 		fonts_.clear();
+		isfontopen_.clear();
 	}
 
 	void AllocDone(u32 allocatedAddr) {
 		handle_ = allocatedAddr;
 		fonts_.resize(params_.numFonts);
+		isfontopen_.resize(params_.numFonts);
 		for (size_t i = 0; i < fonts_.size(); i++) {
 			u32 addr = allocatedAddr + 4 + i * 4;
-			Memory::Write_U32(FONT_IS_CLOSED, addr);
+			isfontopen_[i] = 0;
 			fonts_[i] = addr;
 		}
 	}
@@ -274,7 +286,7 @@ public:
 	LoadedFont *OpenFont(Font *font) {
 		int freeFontIndex = -1;
 		for (size_t i = 0; i < fonts_.size(); i++) {
-			if (Memory::Read_U32(fonts_[i]) == FONT_IS_CLOSED) {
+			if (isfontopen_[i] == 0) {
 				freeFontIndex = (int)i;
 				break;
 			}
@@ -284,14 +296,14 @@ public:
 			return 0;
 		}
 		LoadedFont *loadedFont = new LoadedFont(font, this, fonts_[freeFontIndex]);
-		Memory::Write_U32(FONT_IS_OPEN, fonts_[freeFontIndex]);
+		isfontopen_[freeFontIndex] = 1;
 		return loadedFont;
 	}
 
 	void CloseFont(LoadedFont *font) {
 		for (size_t i = 0; i < fonts_.size(); i++) {
 			if (fonts_[i] == font->Handle()) {
-				Memory::Write_U32(FONT_IS_CLOSED, font->Handle());
+				isfontopen_[i] = 0;
 
 			}
 		}
@@ -316,6 +328,7 @@ public:
 
 private:
 	std::vector<u32> fonts_;
+	std::vector<u32> isfontopen_;
 
 	FontNewLibParams params_;
 	float fontHRes_;
@@ -323,6 +336,8 @@ private:
 	int fileFontHandle_;
 	int handle_;
 	int altCharCode_;
+
+	u32 fakeAlloc_;
 	DISALLOW_COPY_AND_ASSIGN(FontLib);
 };
 
@@ -476,8 +491,9 @@ u32 sceFontNewLib(u32 paramPtr, u32 errorCodePtr) {
 		
 		FontLib *newLib = new FontLib(paramPtr);
 		// The game should never see this value, the return value is replaced
-		// by the action.
-		return 0xDEADDEAD;
+		// by the action. Except if we disable the alloc, in this case we return
+		// the handle correctly here.
+		return newLib->handle();
 	}
 
 	return 0;
@@ -501,7 +517,7 @@ u32 sceFontOpen(u32 libHandle, u32 index, u32 mode, u32 errorCodePtr) {
 	}
 
 	FontLib *fontLib = GetFontLib(libHandle);
-	if (index < 0 || index >= internalFonts.size()) {
+	if (index >= internalFonts.size()) {
 		Memory::Write_U32(ERROR_FONT_INVALID_PARAMETER, errorCodePtr);
 		return 0;
 	}
@@ -607,6 +623,7 @@ int sceFontFindOptimumFont(u32 libHandlePtr, u32 fontStylePtr, u32 errorCodePtr)
 	for (size_t i = 0; i < internalFonts.size(); i++) {
 		if (internalFonts[i]->MatchesStyle(requestedStyle, true)) {
 			optimumFont = GetOptimumFont(requestedStyle, optimumFont, internalFonts[i]);
+			break;
 		}
 	}
 	if (optimumFont) {

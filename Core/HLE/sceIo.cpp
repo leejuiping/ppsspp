@@ -209,7 +209,7 @@ void __IoInit() {
 	_splitpath_s(path_buffer, drive, dir, file, ext );
 
 	// Mount a couple of filesystems
-	sprintf(memstickpath, "%s%sMemStick\\", drive, dir);
+	sprintf(memstickpath, "%s%smemstick\\", drive, dir);
 	sprintf(flash0path, "%s%sflash0\\", drive, dir);
 
 #else
@@ -270,7 +270,7 @@ u32 sceIoAssign(u32 alias_addr, u32 physical_addr, u32 filesystem_addr, int mode
 			perm = "IOASSIGN_RDONLY";
 			break;
 		default:
-			perm = "unhandled " + mode;
+			perm = "unhandled";
 			break;
 	}
 	DEBUG_LOG(HLE, "sceIoAssign(%s, %s, %s, %s, %08x, %i)", alias.c_str(), physical_dev.c_str(), filesystem_dev.c_str(), perm.c_str(), arg_addr, argSize);

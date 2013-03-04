@@ -469,6 +469,9 @@ public:
 	void SXTB(ARMReg dest, ARMReg op2);
 	void SXTH(ARMReg dest, ARMReg op2, u8 rotation = 0);
 	void SXTAH(ARMReg dest, ARMReg src, ARMReg op2, u8 rotation = 0);
+	void BFI(ARMReg rd, ARMReg rn, u8 lsb, u8 width);
+	void UBFX(ARMReg dest, ARMReg op2, u8 lsb, u8 width);
+
 	// Using just MSR here messes with our defines on the PPC side of stuff (when this code was in dolphin...)
 	// Just need to put an underscore here, bit annoying.
 	void _MSR (bool nzcvq, bool g, Operand2 op2);
@@ -532,6 +535,7 @@ public:
 	void VABS(ARMReg Vd, ARMReg Vm);
 	void VNEG(ARMReg Vd, ARMReg Vm);
 	void VMUL(ARMReg Vd, ARMReg Vn, ARMReg Vm);
+	void VMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VMOV(ARMReg Dest, ARMReg Src, bool high);
 	void VMOV(ARMReg Dest, ARMReg Src);
 	void VCVT(ARMReg Sd, ARMReg Sm, int flags);
@@ -539,9 +543,15 @@ public:
 	void VMRS_APSR();
 
 	void QuickCallFunction(ARMReg scratchreg, void *func);
-	// Utility functions
+
+	// Wrapper around MOVT/MOVW with fallbacks.
 	void MOVI2R(ARMReg reg, u32 val, bool optimize = true);
-	void ARMABI_MOVI2M(Operand2 op, Operand2 val);	
+	void MOVI2F(ARMReg dest, float val, ARMReg tempReg);
+
+	void ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
+	void ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
+
+
 };  // class ARMXEmitter
 
 

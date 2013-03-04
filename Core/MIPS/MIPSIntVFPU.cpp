@@ -926,6 +926,7 @@ namespace MIPSInt
 			break;
 		default:
 			_dbg_assert_msg_(CPU,0,"Trying to interpret instruction that can't be interpreted");
+			oz = V_Single;
 			break;
 		}
 		ApplyPrefixD((float*)d,oz);
@@ -1604,11 +1605,11 @@ namespace MIPSInt
 		// negative NAN seems different? TODO
 		switch ((op >> 23) & 3) {
 		case 2: // vmin
-			for (int i = 0; i < GetNumVectorElements(sz); i++)
+			for (int i = 0; i < numElements; i++)
 				d[i] = isnan(t[i]) ? s[i] : (isnan(s[i]) ? t[i] : std::min(s[i], t[i]));
 			break;
 		case 3: // vmax
-			for (int i = 0; i < GetNumVectorElements(sz); i++)
+			for (int i = 0; i < numElements; i++)
 				d[i] = isnan(t[i]) ? t[i] : (isnan(s[i]) ? s[i] : std::max(s[i], t[i]));
 			break;
 		default:

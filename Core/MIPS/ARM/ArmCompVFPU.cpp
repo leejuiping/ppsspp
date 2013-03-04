@@ -1,3 +1,20 @@
+// Copyright (c) 2012- PPSSPP Project.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 2.0 or later versions.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License 2.0 for more details.
+
+// A copy of the GPL 2.0 should have been included with the program.
+// If not, see http://www.gnu.org/licenses/
+
+// Official git repository and contact information can be found at
+// https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
+
 #include "../../MemMap.h"
 #include "../MIPSAnalyst.h"
 
@@ -14,9 +31,12 @@
 #define _POS  ((op>>6 ) & 0x1F)
 #define _SIZE ((op>>11 ) & 0x1F)
 
-// #define CONDITIONAL_DISABLE Comp_Generic(op); return;
+// All functions should have CONDITIONAL_DISABLE, so we can narrow things down to a file quickly.
+// Currently known non working ones should have DISABLE.
+
+// #define CONDITIONAL_DISABLE { fpr.ReleaseSpillLocks(); Comp_Generic(op); return; }
 #define CONDITIONAL_DISABLE ;
-#define DISABLE {fpr.ReleaseSpillLocks(); Comp_Generic(op); return;}
+#define DISABLE { fpr.ReleaseSpillLocks(); Comp_Generic(op); return; }
 
 namespace MIPSComp
 {
@@ -106,8 +126,8 @@ namespace MIPSComp
 					VMOV(fpr.V(vregs[i]), fpr.V(origV[regnum]));
 				}
 			} else {
-				MOVI2R(R0, (u32)(constantArray[regnum + (abs<<2)]));
-				VMOV(fpr.V(vregs[i]), R0);
+				// TODO: There is VMOV s, imm on ARM, that can generate some of these constants. Not 1/3 or 1/6 though.
+				MOVI2F(fpr.V(vregs[i]), constantArray[regnum + (abs<<2)], R0);
 			}
 
 			// TODO: This can be integrated into the VABS / VMOV above, and also the constants.
@@ -127,8 +147,7 @@ namespace MIPSComp
 			return;
 
 		int n = GetNumVectorElements(sz);
-		for (int i = 0; i < n; i++)
-		{
+		for (int i = 0; i < n; i++) {
 			// Hopefully this is rare, we'll just write it into a reg we drop.
 			if (js.VfpuWriteMask(i))
 				regs[i] = fpr.GetTempV();
@@ -140,26 +159,45 @@ namespace MIPSComp
 		if (!js.prefixD) return;
 
 		int n = GetNumVectorElements(sz);
-		for (int i = 0; i < n; i++)
-		{
+		for (int i = 0; i < n; i++) 	{
 			if (js.VfpuWriteMask(i))
 				continue;
 
 			int sat = (js.prefixD >> (i * 2)) & 3;
-			if (sat == 1)
-			{
+			if (sat == 1) {
 				fpr.MapRegV(vregs[i], MAP_DIRTY);
 				// ARGH this is a pain - no MIN/MAX in non-NEON VFP!
-				// TODO
-
-				//MAXSS(fpr.VX(vregs[i]), M((void *)&zero));
-				//MINSS(fpr.VX(vregs[i]), M((void *)&one));
-			}
-			else if (sat == 3)
-			{
+				// NEON does have min/max though so this should only be a fallback.
+				MOVI2F(S0, 0.0, R0);
+				MOVI2F(S1, 1.0, R0);
+				VCMP(fpr.V(vregs[i]), S1);
+				VMRS_APSR();
+				SetCC(CC_GE);
+				VMOV(fpr.V(vregs[i]), S1);
+				FixupBranch skip = B();
+				SetCC(CC_AL);
+				VCMP(fpr.V(vregs[i]), S0);
+				VMRS_APSR();
+				SetCC(CC_LE);
+				VMOV(fpr.V(vregs[i]), S0);
+				SetCC(CC_AL);
+				SetJumpTarget(skip);
+			} else if (sat == 3) {
 				fpr.MapRegV(vregs[i], MAP_DIRTY);
-				//MAXSS(fpr.VX(vregs[i]), M((void *)&minus_one));
-				//MINSS(fpr.VX(vregs[i]), M((void *)&one));
+				MOVI2F(S0, -1.0, R0);
+				MOVI2F(S1, 1.0, R0);
+				VCMP(fpr.V(vregs[i]), S1);
+				VMRS_APSR();
+				SetCC(CC_GE);
+				VMOV(fpr.V(vregs[i]), S1);
+				FixupBranch skip = B();
+				SetCC(CC_AL);
+				VCMP(fpr.V(vregs[i]), S0);
+				VMRS_APSR();
+				SetCC(CC_LE);
+				VMOV(fpr.V(vregs[i]), S0);
+				SetCC(CC_AL);
+				SetJumpTarget(skip);
 			}
 		}
 	}
@@ -249,7 +287,40 @@ namespace MIPSComp
 
 	void Jit::Comp_VVectorInit(u32 op)
 	{
-		DISABLE;
+		CONDITIONAL_DISABLE;
+
+		// WARNING: No prefix support!
+		if (js.MayHavePrefix()) {
+			Comp_Generic(op);
+			js.EatPrefix();
+			return;
+		}
+
+		switch ((op >> 16) & 0xF)
+		{
+		case 6: // v=zeros; break;  //vzero
+			MOVI2F(S0, 0.0f, R0);
+			break;
+		case 7: // v=ones; break;   //vone
+			MOVI2F(S0, 1.0f, R0);
+			break;
+		default:
+			DISABLE;
+			break;
+		}
+
+		VectorSize sz = GetVecSize(op);
+		int n = GetNumVectorElements(sz);
+
+		u8 dregs[4];
+		GetVectorRegsPrefixD(dregs, sz, _VD);
+		fpr.MapRegsV(dregs, sz, MAP_NOINIT | MAP_DIRTY);
+
+		for (int i = 0; i < n; ++i)
+			VMOV(fpr.V(dregs[i]), S0);
+
+		ApplyPrefixD(dregs, sz);
+		fpr.ReleaseSpillLocks();
 	}
 
 	void Jit::Comp_VDot(u32 op)
@@ -279,11 +350,9 @@ namespace MIPSComp
 		VMUL(S0, fpr.V(sregs[0]), fpr.V(tregs[0]));
 
 		int n = GetNumVectorElements(sz);
-		for (int i = 1; i < n; i++)
-		{
+		for (int i = 1; i < n; i++) {
 			// sum += s[i]*t[i];
-			VMUL(S1, fpr.V(sregs[i]), fpr.V(tregs[i]));
-			VADD(S0, S0, S1);
+			VMLA(S0, fpr.V(sregs[i]), fpr.V(tregs[i]));
 		}
 		fpr.ReleaseSpillLocks();
 
@@ -486,7 +555,6 @@ namespace MIPSComp
 	
 	void Jit::Comp_Mftv(u32 op)
 	{
-		// DISABLE;
 		CONDITIONAL_DISABLE;
 
 		int imm = op & 0xFF;

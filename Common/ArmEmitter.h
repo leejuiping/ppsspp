@@ -444,6 +444,7 @@ public:
 	void LSL (ARMReg dest, ARMReg src, ARMReg op2);
 	void LSLS(ARMReg dest, ARMReg src, Operand2 op2);
 	void LSLS(ARMReg dest, ARMReg src, ARMReg op2);
+	void LSR (ARMReg dest, ARMReg src, Operand2 op2);
 	void SBC (ARMReg dest, ARMReg src, Operand2 op2);
 	void SBCS(ARMReg dest, ARMReg src, Operand2 op2);
 	void RBIT(ARMReg dest, ARMReg src);
@@ -485,6 +486,7 @@ public:
 	void SXTAH(ARMReg dest, ARMReg src, ARMReg op2, u8 rotation = 0);
 	void BFI(ARMReg rd, ARMReg rn, u8 lsb, u8 width);
 	void UBFX(ARMReg dest, ARMReg op2, u8 lsb, u8 width);
+	void CLZ(ARMReg rd, ARMReg rm);
 
 	// Using just MSR here messes with our defines on the PPC side of stuff (when this code was in dolphin...)
 	// Just need to put an underscore here, bit annoying.
@@ -499,6 +501,7 @@ public:
 	void LDRB (ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	void LDRSB(ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	// Offset adds to the base register in LDR
+	void LDR  (ARMReg dest, ARMReg base, Operand2 op2, bool Index, bool Add);
 	void LDR  (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRH (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRSH(ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
@@ -510,6 +513,7 @@ public:
 	void STRH (ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	void STRB (ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	// Offset adds on to the destination register in STR
+	void STR  (ARMReg dest, ARMReg base, Operand2 op2, bool Index, bool Add);
 	void STR  (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void STRH (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void STRB (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
@@ -553,7 +557,7 @@ public:
 	void VMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VMOV(ARMReg Dest, ARMReg Src, bool high);
 	void VMOV(ARMReg Dest, ARMReg Src);
-	void VCVT(ARMReg Sd, ARMReg Sm, int flags);
+	void VCVT(ARMReg Dest, ARMReg Src, int flags);
 
 	void VMRS_APSR();
 

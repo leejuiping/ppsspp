@@ -30,7 +30,7 @@
 const char oskKeys[NUMKEYROWS][KEYSPERROW + 1] =
 {
 	{'1','2','3','4','5','6','7','8','9','0','-','+','\0'}, 
-	{'q','w','e','r','t','t','u','i','o','p','[',']','\0'},
+	{'q','w','e','r','t','y','u','i','o','p','[',']','\0'},
 	{'a','s','d','f','g','h','j','k','l',';','@','~','\0'},
 	{'z','x','c','v','b','n','m',',','.','/','?','\\','\0'},
 };
@@ -113,8 +113,8 @@ void PSPOskDialog::RenderKeyboard()
 		limit = 16;
 
 	const float keyboardLeftSide = (480.0f - (24.0f * KEYSPERROW)) / 2.0f;
-	float previewLeftSide = (480.0f - (16.0f * limit)) / 2.0f;
-	float title = (480.0f - limit) / 2.0f;
+	float previewLeftSide = (480.0f - (12.0f * limit)) / 2.0f;
+	float title = (480.0f - (0.5f * limit)) / 2.0f;
 
 	PPGeDrawText(oskDesc.c_str(), title , 20, PPGE_ALIGN_CENTER, 0.5f, CalcFadedColor(0xFFFFFFFF));
 	for (u32 i = 0; i < limit; ++i)
@@ -130,7 +130,7 @@ void PSPOskDialog::RenderKeyboard()
 		else
 			temp[0] = '_';
 
-		PPGeDrawText(temp, previewLeftSide + (i * 16.0f), 40.0f, 0, 0.5f, color);
+		PPGeDrawText(temp, previewLeftSide + (i * 12.0f), 40.0f, 0, 0.5f, color);
 	}
 	for (int row = 0; row < NUMKEYROWS; ++row)
 	{
@@ -211,7 +211,7 @@ int PSPOskDialog::Update()
 		if (IsButtonPressed(CTRL_CROSS))
 		{
 			if (inputChars.size() < limit)
-					inputChars += (oskKeys[selectedRow][selectedExtra]);
+					inputChars += oskKeys[selectedRow][selectedExtra];
 		}
 		else if (IsButtonPressed(CTRL_SELECT))
 		{

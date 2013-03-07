@@ -89,6 +89,8 @@ void ARMXEmitter::MOVI2F(ARMReg dest, float val, ARMReg tempReg)
 	conv.f = val;
 	MOVI2R(tempReg, conv.u);
 	VMOV(dest, tempReg);
+	// TODO: VMOV an IMM directly if possible
+	// Otherwise, use a literal pool and VLDR directly (+- 1020)
 }
 
 void ARMXEmitter::ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
@@ -121,12 +123,22 @@ void ARMXEmitter::ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 void ARMXEmitter::FlushLitPool()
 {
 	for(std::vector<LiteralPool>::iterator it = currentLitPool.begin(); it != currentLitPool.end(); ++it) {
-		LiteralPool item = *it;
+		// Search for duplicates
+		for(std::vector<LiteralPool>::iterator old_it = currentLitPool.begin(); old_it != it; ++old_it) {
+			if ((*old_it).val == (*it).val)
+				(*it).loc = (*old_it).loc;
+		}
+
 		// Write the constant to Literal Pool
-		s32 offset = (s32)code - (s32)item.ldr_address - 8;
-		Write32(item.val);
+		if (!(*it).loc)
+		{
+			(*it).loc = (s32)code;
+			Write32((*it).val);
+		}
+		s32 offset = (*it).loc - (s32)(*it).ldr_address - 8;
+
 		// Backpatch the LDR
-		*(u32*)item.ldr_address |= (offset >= 0) << 23 | abs(offset);
+		*(u32*)(*it).ldr_address |= (offset >= 0) << 23 | abs(offset);
 	}
 	// TODO: Save a copy of previous pools in case they are still in range.
 	currentLitPool.clear();
@@ -134,10 +146,8 @@ void ARMXEmitter::FlushLitPool()
 
 void ARMXEmitter::AddNewLit(u32 val)
 {
-	// TODO: Look up current constants,
-	// return that value instead of generating a new one.
 	LiteralPool pool_item;
-	pool_item.i = currentLitPool.size();
+	pool_item.loc = 0;
 	pool_item.val = val;
 	pool_item.ldr_address = code;
 	currentLitPool.push_back(pool_item);

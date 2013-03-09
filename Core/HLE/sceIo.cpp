@@ -133,7 +133,7 @@ struct dirent {
 
 class FileNode : public KernelObject {
 public:
-	FileNode() : callbackID(0), callbackArg(0), asyncResult(0), closePending(false), pendingAsyncResult(false), sectorBlockMode(false) {}
+	FileNode() : callbackID(0), callbackArg(0), asyncResult(0), pendingAsyncResult(false), sectorBlockMode(false), closePending(false), npdrm(0), pgdInfo(NULL) {}
 	~FileNode() {
 		pspFileSystem.CloseFile(handle);
 	}
@@ -156,6 +156,9 @@ public:
 		p.Do(closePending);
 		p.Do(info);
 		p.Do(openMode);
+
+		// TODO: Savestate PGD files?
+
 		p.DoMarker("File");
 	}
 
@@ -603,8 +606,6 @@ u32 sceIoOpen(const char* filename, int flags, int mode) {
 		access |= FILEACCESS_APPEND;
 	if (flags & O_CREAT)
 		access |= FILEACCESS_CREATE;
-	if (flags & O_NPDRM)
-
 
 	PSPFileInfo info = pspFileSystem.GetFileInfo(filename);
 	u32 h = pspFileSystem.OpenFile(filename, (FileAccess) access);
@@ -620,7 +621,7 @@ u32 sceIoOpen(const char* filename, int flags, int mode) {
 	f->handle = h;
 	f->fullpath = filename;
 	f->asyncResult = id;
-	f->info = pspFileSystem.GetFileInfo(filename);
+	f->info = info;
 	f->openMode = access;
 
 	f->npdrm = (flags & O_NPDRM)? true: false;
@@ -859,13 +860,14 @@ u32 sceIoDevctl(const char *name, int cmd, u32 argAddr, int argLen, u32 outPtr, 
 		case 2:	// EMULATOR_DEVCTL__SEND_OUTPUT
 			{
 				std::string data(Memory::GetCharPointer(argAddr), argLen);
-				if (PSP_CoreParameter().printfEmuLog)
-				{
+				if (PSP_CoreParameter().printfEmuLog)	{
 					host->SendDebugOutput(data.c_str());
-				}
-				else
-				{
-					DEBUG_LOG(HLE, "%s", data.c_str());
+				}	else {
+					if (PSP_CoreParameter().collectEmuLog) {
+						*PSP_CoreParameter().collectEmuLog += data;
+					} else {
+						DEBUG_LOG(HLE, "%s", data.c_str());
+					}
 				}
 				return 0;
 			}

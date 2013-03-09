@@ -25,6 +25,7 @@
 #if defined(__SYMBIAN32__) || defined(PANDORA)
 #include <signal.h>
 #endif
+#include <vector>
 
 #undef _IP
 #undef R0
@@ -177,7 +178,7 @@ public:
 		Value = base;
 	}
 
-	Operand2(u8 shift, ShiftType type, ARMReg base)// For IMM shifted register
+	Operand2(ARMReg base, ShiftType type, u8 shift)// For IMM shifted register
 	{
 		if(shift == 32) shift = 0;
 		switch (type)
@@ -333,6 +334,13 @@ struct FixupBranch
 	int type; //0 = B 1 = BL
 };
 
+struct LiteralPool
+{
+    s32 loc;
+    u8* ldr_address;
+    u32 val;
+};
+
 typedef const u8* JumpTarget;
 
 class ARMXEmitter
@@ -342,8 +350,9 @@ private:
 	u8 *code, *startcode;
 	u8 *lastCacheFlushEnd;
 	u32 condition;
+	std::vector<LiteralPool> currentLitPool;
 
-	void WriteStoreOp(u32 op, ARMReg dest, ARMReg src, Operand2 op2);
+	void WriteStoreOp(u32 op, ARMReg src, ARMReg dest, Operand2 op2);
 	void WriteRegStoreOp(u32 op, ARMReg dest, bool WriteBack, u16 RegList);
 	void WriteShiftedDataOp(u32 op, bool SetFlags, ARMReg dest, ARMReg src, ARMReg op2);
 	void WriteShiftedDataOp(u32 op, bool SetFlags, ARMReg dest, ARMReg src, Operand2 op2);
@@ -379,6 +388,10 @@ public:
 	void FlushIcacheSection(u8 *start, u8 *end);
 	u8 *GetWritableCodePtr();
 
+	void FlushLitPool();
+	void AddNewLit(u32 val);
+
+	CCFlags GetCC() { return CCFlags(condition >> 28); }
 	void SetCC(CCFlags cond = CC_AL);
 
 	// Special purpose instructions
@@ -431,8 +444,10 @@ public:
 	void LSL (ARMReg dest, ARMReg src, ARMReg op2);
 	void LSLS(ARMReg dest, ARMReg src, Operand2 op2);
 	void LSLS(ARMReg dest, ARMReg src, ARMReg op2);
+	void LSR (ARMReg dest, ARMReg src, Operand2 op2);
 	void SBC (ARMReg dest, ARMReg src, Operand2 op2);
 	void SBCS(ARMReg dest, ARMReg src, Operand2 op2);
+	void RBIT(ARMReg dest, ARMReg src);
 	void REV (ARMReg dest, ARMReg src);
 	void REV16 (ARMReg dest, ARMReg src);
 	void RSC (ARMReg dest, ARMReg src, Operand2 op2);
@@ -471,6 +486,7 @@ public:
 	void SXTAH(ARMReg dest, ARMReg src, ARMReg op2, u8 rotation = 0);
 	void BFI(ARMReg rd, ARMReg rn, u8 lsb, u8 width);
 	void UBFX(ARMReg dest, ARMReg op2, u8 lsb, u8 width);
+	void CLZ(ARMReg rd, ARMReg rm);
 
 	// Using just MSR here messes with our defines on the PPC side of stuff (when this code was in dolphin...)
 	// Just need to put an underscore here, bit annoying.
@@ -485,27 +501,30 @@ public:
 	void LDRB (ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	void LDRSB(ARMReg dest, ARMReg src, Operand2 op2 = 0);
 	// Offset adds to the base register in LDR
+	void LDR  (ARMReg dest, ARMReg base, Operand2 op2, bool Index, bool Add);
 	void LDR  (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRH (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRSH(ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRB (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
 	void LDRSB(ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
+	void LDRLIT(ARMReg dest, u32 offset, bool Add);
 
-	void STR  (ARMReg dest, ARMReg src, Operand2 op2 = 0);
-	void STRH (ARMReg dest, ARMReg src, Operand2 op2 = 0);
-	void STRB (ARMReg dest, ARMReg src, Operand2 op2 = 0);
+	void STR  (ARMReg result, ARMReg base, Operand2 op2 = 0);
+	void STRH (ARMReg result, ARMReg base, Operand2 op2 = 0);
+	void STRB (ARMReg result, ARMReg base, Operand2 op2 = 0);
 	// Offset adds on to the destination register in STR
-	void STR  (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
-	void STRH (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
-	void STRB (ARMReg dest, ARMReg base, ARMReg offset, bool Index, bool Add);
+	void STR  (ARMReg result, ARMReg base, Operand2 op2, bool Index, bool Add);
+	void STR  (ARMReg result, ARMReg base, ARMReg offset, bool Index, bool Add);
+	void STRH (ARMReg result, ARMReg base, ARMReg offset, bool Index, bool Add);
+	void STRB (ARMReg result, ARMReg base, ARMReg offset, bool Index, bool Add);
 
 	void STMFD(ARMReg dest, bool WriteBack, const int Regnum, ...);
 	void LDMFD(ARMReg dest, bool WriteBack, const int Regnum, ...);
 	
 	// Exclusive Access operations
 	void LDREX(ARMReg dest, ARMReg base);
-	// dest contains the result if the instruction managed to store the value
-	void STREX(ARMReg dest, ARMReg base, ARMReg op);
+	// result contains the result if the instruction managed to store the value
+	void STREX(ARMReg result, ARMReg base, ARMReg op);
 	void DMB ();
 	void SVC(Operand2 op);
 
@@ -538,7 +557,7 @@ public:
 	void VMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VMOV(ARMReg Dest, ARMReg Src, bool high);
 	void VMOV(ARMReg Dest, ARMReg Src);
-	void VCVT(ARMReg Sd, ARMReg Sm, int flags);
+	void VCVT(ARMReg Dest, ARMReg Src, int flags);
 
 	void VMRS_APSR();
 

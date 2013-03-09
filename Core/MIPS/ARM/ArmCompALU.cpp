@@ -155,7 +155,28 @@ namespace MIPSComp
 
 	void Jit::Comp_RType2(u32 op)
 	{
-		DISABLE;
+		CONDITIONAL_DISABLE;
+		int rs = _RS;
+		int rd = _RD;
+
+		// Don't change $zr.
+		if (rd == 0)
+			return;
+
+		switch (op & 63)
+		{
+		case 22: //clz
+			gpr.MapDirtyIn(rd, rs);
+			CLZ(gpr.R(rd), gpr.R(rs));
+			break;
+		case 23: //clo
+			gpr.MapDirtyIn(rd, rs);
+			MVN(R0, gpr.R(rs));
+			CLZ(gpr.R(rd), R0);
+			break;
+		default:
+			DISABLE;
+		}
 	}
 
 	void Jit::Comp_RType3(u32 op)
@@ -167,8 +188,52 @@ namespace MIPSComp
 
 		switch (op & 63) 
 		{
-		//case 10: if (!R(rt)) R(rd) = R(rs);       break; //movz
-		//case 11: if (R(rt)) R(rd) = R(rs);        break; //movn
+		case 10: //if (!R(rt)) R(rd) = R(rs);       break; //movz
+			if (rd == rs)
+				break;
+			if (!gpr.IsImm(rt))
+			{
+				gpr.MapDirtyInIn(rd, rt, rs, false);
+				CMP(gpr.R(rt), Operand2(0));
+				SetCC(CC_EQ);
+				MOV(gpr.R(rd), Operand2(gpr.R(rs)));
+				SetCC(CC_AL);
+			}
+			else if (gpr.GetImm(rt) == 0)
+			{
+				// Yes, this actually happens.
+				if (gpr.IsImm(rs))
+					gpr.SetImm(rd, gpr.GetImm(rs));
+				else
+				{
+					gpr.MapDirtyIn(rd, rs);
+					MOV(gpr.R(rd), Operand2(gpr.R(rs)));
+				}
+			}
+			break;
+		case 11:// if (R(rt)) R(rd) = R(rs);		break; //movn
+			if (rd == rs)
+				break;
+			if (!gpr.IsImm(rt))
+			{
+				gpr.MapDirtyInIn(rd, rt, rs, false);
+				CMP(gpr.R(rt), Operand2(0));
+				SetCC(CC_NEQ);
+				MOV(gpr.R(rd), Operand2(gpr.R(rs)));
+				SetCC(CC_AL);
+			}
+			else if (gpr.GetImm(rt) != 0)
+			{
+				// Yes, this actually happens.
+				if (gpr.IsImm(rs))
+					gpr.SetImm(rd, gpr.GetImm(rs));
+				else
+				{
+					gpr.MapDirtyIn(rd, rs);
+					MOV(gpr.R(rd), Operand2(gpr.R(rs)));
+				}
+			}
+			break;
 			
 		// case 32: //R(rd) = R(rs) + R(rt);        break; //add
 		case 33: //R(rd) = R(rs) + R(rt);           break; //addu
@@ -266,43 +331,40 @@ namespace MIPSComp
 		int sa = _SA;
 		
 		gpr.MapDirtyIn(rd, rt);
-		MOV(gpr.R(rd), Operand2(sa, shiftType, gpr.R(rt)));
+		MOV(gpr.R(rd), Operand2(gpr.R(rt), shiftType, sa));
 	}
 
-	// "over-shifts" work the same as on x86 - only bottom 5 bits are used to get the shift value
-	/*
-	void Jit::CompShiftVar(u32 op, void (XEmitter::*shift)(int, OpArg, OpArg))
+	void Jit::CompShiftVar(u32 op, ArmGen::ShiftType shiftType)
 	{
 		int rd = _RD;
 		int rt = _RT;
 		int rs = _RS;
-		gpr.FlushLockX(ECX);
-		gpr.Lock(rd, rt, rs);
-		gpr.BindToRegister(rd, true, true);
-		if (rd != rt)
-			MOV(32, gpr.R(rd), gpr.R(rt));
-		MOV(32, R(ECX), gpr.R(rs));	// Only ECX can be used for variable shifts.
-		AND(32, R(ECX), Imm32(0x1f));
-		(this->*shift)(32, gpr.R(rd), R(ECX));
-		gpr.UnlockAll();
-		gpr.UnlockAllX();
+		if (gpr.IsImm(rs))
+		{
+			gpr.MapDirtyIn(rd, rt);
+			int sa = gpr.GetImm(rs) & 0x1F;
+			MOV(gpr.R(rd), Operand2(gpr.R(rt), shiftType, sa));
+			return;
+		}
+		gpr.MapDirtyInIn(rd, rs, rt);
+		AND(R0, gpr.R(rs), Operand2(0x1F));
+		MOV(gpr.R(rd), Operand2(gpr.R(rt), shiftType, R0));
 	}
-*/
+
 	void Jit::Comp_ShiftType(u32 op)
 	{
 		CONDITIONAL_DISABLE;
 		int rs = _RS;
 		int fd = _FD;
-		// WARNIGN : ROTR
+		// WARNING : ROTR
 		switch (op & 0x3f)
 		{
-		case 0: CompShiftImm(op, ST_LSL); break;
-		case 2: CompShiftImm(op, rs == 1 ? ST_ROR : ST_LSR); break;	// srl
-		case 3: CompShiftImm(op, ST_ASR); break;	// sra
-		
-	 // case 4: CompShiftVar(op, &XEmitter::SHL); break;	// R(rd) = R(rt) << R(rs);				break; //sllv
-	//	case 6: CompShiftVar(op, fd == 1 ? &XEmitter::ROR : &XEmitter::SHR); break;	// R(rd) = R(rt) >> R(rs);				break; //srlv
-	//	case 7: CompShiftVar(op, &XEmitter::SAR); break;	// R(rd) = ((s32)R(rt)) >> R(rs); break; //srav
+		case 0: CompShiftImm(op, ST_LSL); break; //sll
+		case 2: CompShiftImm(op, rs == 1 ? ST_ROR : ST_LSR); break;	//srl
+		case 3: CompShiftImm(op, ST_ASR); break; //sra
+		case 4: CompShiftVar(op, ST_LSL); break; //sllv
+		case 6: CompShiftVar(op, fd == 1 ? ST_ROR : ST_LSR); break; //srlv
+		case 7: CompShiftVar(op, ST_ASR); break; //srav
 		
 		default:
 			Comp_Generic(op);
@@ -344,13 +406,14 @@ namespace MIPSComp
 			if (useUBFXandBFI) {
 				UBFX(gpr.R(rt), gpr.R(rs), pos, size);
 			} else {
-				MOV(gpr.R(rt), Operand2(pos, ST_LSR, gpr.R(rs)));
+				MOV(gpr.R(rt), Operand2(gpr.R(rs), ST_LSR, pos));
 				ANDI2R(gpr.R(rt), gpr.R(rt), mask, R0);
 			}
 			break;
 
 		case 0x4: //ins
 			{
+				DISABLE;
 				u32 sourcemask = mask >> pos;
 				u32 destmask = ~(sourcemask << pos);
 				if (gpr.IsImm(rs))
@@ -374,7 +437,7 @@ namespace MIPSComp
 					} else {
 						gpr.MapDirtyIn(rt, rs, false);
 						ANDI2R(R0, gpr.R(rs), sourcemask, R1);
-						MOV(R0, Operand2(pos, ST_LSL, gpr.R(rs)));
+						MOV(R0, Operand2(R0, ST_LSL, pos));
 						ANDI2R(gpr.R(rt), gpr.R(rt), destmask, R1);
 						ORR(gpr.R(rt), gpr.R(rt), R0);
 					}
@@ -420,20 +483,22 @@ namespace MIPSComp
 			{
 				// http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
 				u32 v = gpr.GetImm(rt);
-				// swap odd and even bits
-				v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
-				// swap consecutive pairs
-				v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
-				// swap nibbles ...
-				v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
-				// swap bytes
-				v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
-				// swap 2-byte long pairs
-				v = ( v >> 16             ) | ( v               << 16);
+				v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) <<  1); //   odd<->even
+				v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) <<  2); //  pair<->pair
+				v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) <<  4); //  nibb<->nibb
+				v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) <<  8); //  byte<->byte
+				v = ( v >> 16             ) | ( v               << 16); // hword<->hword
 				gpr.SetImm(rd, v);
-				break;
+				return;
 			}
-			// Intentional fall-through.
+
+			if (cpu_info.bArmV7) {
+				gpr.MapDirtyIn(rd, rt);
+				RBIT(gpr.R(rd), gpr.R(rt));
+			} else {
+				Comp_Generic(op);
+			}
+			break;
 		default:
 			Comp_Generic(op);
 			return;
@@ -479,6 +544,46 @@ namespace MIPSComp
 			UMULL(gpr.R(MIPSREG_LO), gpr.R(MIPSREG_HI), gpr.R(rs), gpr.R(rt));
 			break;
 
+		case 26: //div
+			DISABLE;
+			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt);
+			if (cpu_info.bIDIVa)
+			{
+				SDIV(gpr.R(MIPSREG_LO), gpr.R(rs), gpr.R(rt));
+				MUL(R0, gpr.R(rt), gpr.R(MIPSREG_LO));
+				SUB(gpr.R(MIPSREG_HI), gpr.R(rs), Operand2(R0));
+			} else {
+				VMOV(S0, gpr.R(rs));
+				VMOV(S1, gpr.R(rt));
+				VCVT(D0, S0, TO_FLOAT | IS_SIGNED);
+				VCVT(D1, S1, TO_FLOAT | IS_SIGNED);
+				VDIV(D0, D0, D1);
+				VCVT(gpr.R(MIPSREG_LO), D0, TO_INT | IS_SIGNED);
+				MUL(R0, gpr.R(rt), gpr.R(MIPSREG_LO));
+				SUB(gpr.R(MIPSREG_HI), gpr.R(rs), Operand2(R0));
+			}
+			break;
+
+		case 27: //divu
+			DISABLE;
+			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt);
+			if (cpu_info.bIDIVa)
+			{
+				UDIV(gpr.R(MIPSREG_LO), gpr.R(rs), gpr.R(rt));
+				MUL(R0, gpr.R(rt), gpr.R(MIPSREG_LO));
+				SUB(gpr.R(MIPSREG_HI), gpr.R(rs), Operand2(R0));
+			} else {
+				VMOV(S0, gpr.R(rs));
+				VMOV(S1, gpr.R(rt));
+				VCVT(D0, S0, TO_FLOAT);
+				VCVT(D1, S1, TO_FLOAT);
+				VDIV(D0, D0, D1);
+				VCVT(gpr.R(MIPSREG_LO), D0, TO_INT);
+				MUL(R0, gpr.R(rt), gpr.R(MIPSREG_LO));
+				SUB(gpr.R(MIPSREG_HI), gpr.R(rs), Operand2(R0));
+			}
+			break;
+
 		case 28: //madd
 			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt, false);
 			SMLAL(gpr.R(MIPSREG_LO), gpr.R(MIPSREG_HI), gpr.R(rs), gpr.R(rt));
@@ -487,6 +592,16 @@ namespace MIPSComp
 		case 29: //maddu
 			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt, false);
 			UMLAL(gpr.R(MIPSREG_LO), gpr.R(MIPSREG_HI), gpr.R(rs), gpr.R(rt));
+			break;
+
+		case 46: // msub
+			DISABLE;
+			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt, false);
+			break;
+
+		case 47: // msubu
+			DISABLE;
+			gpr.MapDirtyDirtyInIn(MIPSREG_LO, MIPSREG_HI, rs, rt, false);
 			break;
 
 		default:

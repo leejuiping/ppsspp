@@ -815,6 +815,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/PSPLoaders.h
 	Core/PSPMixer.cpp
 	Core/PSPMixer.h
+	Core/Reporting.cpp
+	Core/Reporting.h
 	Core/SaveState.cpp
 	Core/SaveState.h
 	Core/System.cpp
@@ -960,6 +962,7 @@ endif()
 set(NativeAppSource
 	android/jni/NativeApp.cpp
 	android/jni/EmuScreen.cpp
+	android/jni/TestRunner.cpp
 	android/jni/MenuScreens.cpp
 	android/jni/GamepadEmu.cpp
 	android/jni/UIShader.cpp

@@ -50,6 +50,7 @@ LOCAL_SRC_FILES := \
   UIShader.cpp \
   GamepadEmu.cpp \
   ArmEmitterTest.cpp \
+  TestRunner.cpp \
   ui_atlas.cpp \
   $(SRC)/native/android/app-android.cpp \
   $(SRC)/ext/disarm.cpp \
@@ -105,6 +106,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/PSPLoaders.cpp \
   $(SRC)/Core/MemMap.cpp \
   $(SRC)/Core/MemMapFunctions.cpp \
+  $(SRC)/Core/Reporting.cpp \
   $(SRC)/Core/SaveState.cpp \
   $(SRC)/Core/System.cpp \
   $(SRC)/Core/PSPMixer.cpp \

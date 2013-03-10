@@ -274,10 +274,11 @@ namespace MIPSComp
 			break;
 
 		case 39: // R(rd) = ~(R(rs) | R(rt));       break; //nor
-			gpr.MapDirtyInIn(rd, rs, rt);
 			if (gpr.IsImm(rt) && gpr.GetImm(rt) == 0) {
+				gpr.MapDirtyIn(rd, rs);
 				MVN(gpr.R(rd), gpr.R(rs));
 			} else {
+				gpr.MapDirtyInIn(rd, rs, rt);
 				ORR(gpr.R(rd), gpr.R(rs), gpr.R(rt));
 				MVN(gpr.R(rd), gpr.R(rd));
 			}
@@ -346,8 +347,8 @@ namespace MIPSComp
 		int rs = _RS;
 		if (gpr.IsImm(rs))
 		{
-			gpr.MapDirtyIn(rd, rt);
 			int sa = gpr.GetImm(rs) & 0x1F;
+			gpr.MapDirtyIn(rd, rt);
 			MOV(gpr.R(rd), Operand2(gpr.R(rt), shiftType, sa));
 			return;
 		}

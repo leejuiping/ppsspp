@@ -99,7 +99,7 @@ public:
 
 	virtual void SetDebugMode(bool mode) { }
 
-	virtual void InitGL() {}
+	virtual bool InitGL(std::string *error_message) {}
 	virtual void BeginFrame() {}
 	virtual void ShutdownGL() {}
 
@@ -267,6 +267,11 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 		logman->AddListener(type, logger);
 #endif
 	}
+#ifdef __SYMBIAN32__
+	g_Config.bHardwareTransform = true;
+	g_Config.bUseVBO = false;
+	g_Config.bVertexCache = false;
+#endif
 	// Special hack for G3D as it's very spammy. Need to make a flag for this.
 	if (!gfxLog)
 		logman->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
@@ -349,6 +354,7 @@ void NativeDeviceLost()
 {
 	screenManager->deviceLost();
 	gl_lost();
+	glstate.Restore();
 	// Should dirty EVERYTHING
 }
 

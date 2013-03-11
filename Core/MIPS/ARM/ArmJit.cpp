@@ -71,7 +71,14 @@ void Jit::DoState(PointerWrap &p)
 {
 	p.Do(js.startDefaultPrefix);
 	p.DoMarker("Jit");
-	FlushPrefixV();
+}
+
+// This is here so the savestate matches between jit and non-jit.
+void Jit::DoDummyState(PointerWrap &p)
+{
+	bool dummy = false;
+	p.Do(dummy);
+	p.DoMarker("Jit");
 }
 
 void Jit::FlushAll()
@@ -290,28 +297,28 @@ void Jit::Comp_Generic(u32 op)
 }
 
 void Jit::MovFromPC(ARMReg r) {
-	LDR(r, R10, offsetof(MIPSState, pc));
+	LDR(r, CTXREG, offsetof(MIPSState, pc));
 }
 
 void Jit::MovToPC(ARMReg r) {
-	STR(r, R10, offsetof(MIPSState, pc));
+	STR(r, CTXREG, offsetof(MIPSState, pc));
 }
 
 void Jit::WriteDownCount(int offset)
 {
 	int theDowncount = js.downcountAmount + offset;
-	LDR(R1, R10, offsetof(MIPSState, downcount));
+	LDR(R1, CTXREG, offsetof(MIPSState, downcount));
 	Operand2 op2;
 	if (TryMakeOperand2(theDowncount, op2)) // We can enlarge this if we used rotations
 	{
 		SUBS(R1, R1, op2);
-		STR(R1, R10, offsetof(MIPSState, downcount));
+		STR(R1, CTXREG, offsetof(MIPSState, downcount));
 	} else {
 		// Should be fine to use R2 here, flushed the regcache anyway.
 		// If js.downcountAmount can be expressed as an Imm8, we don't need this anyway.
 		MOVI2R(R2, theDowncount);
 		SUBS(R1, R1, R2);
-		STR(R1, R10, offsetof(MIPSState, downcount));
+		STR(R1, CTXREG, offsetof(MIPSState, downcount));
 	}
 }
 

@@ -456,7 +456,7 @@ u32 sceMpegCreate(u32 mpegAddr, u32 dataPtr, u32 size, u32 ringbufferAddr, u32 f
 	ctx->videoFrameCount = 0;
 	ctx->audioFrameCount = 0;
 	// TODO: What's the actual default?
-	ctx->videoPixelMode = 0;
+	ctx->videoPixelMode = TPSM_PIXEL_STORAGE_MODE_32BIT_ABGR8888;
 	ctx->avcRegistered = false;
 	ctx->atracRegistered = false;
 	ctx->pcmRegistered = false;
@@ -522,7 +522,7 @@ int sceMpegAvcDecodeMode(u32 mpeg, u32 modeAddr)
 
 int sceMpegQueryStreamOffset(u32 mpeg, u32 bufferAddr, u32 offsetAddr)
 {
-	if (g_Config.bUseMediaEngine == false){
+	if (!g_Config.bUseMediaEngine){
 		WARN_LOG(HLE, "Media Engine disabled");
 		return -1;
 	}
@@ -539,14 +539,18 @@ int sceMpegQueryStreamOffset(u32 mpeg, u32 bufferAddr, u32 offsetAddr)
 
 	if (ctx->mpegMagic != PSMF_MAGIC) {
 		ERROR_LOG(HLE, "sceMpegQueryStreamOffset: Bad PSMF magic");
+		Memory::Write_U32(0, offsetAddr);
 		return ERROR_MPEG_INVALID_VALUE;
 	} else if (ctx->mpegVersion < 0) {
 		ERROR_LOG(HLE, "sceMpegQueryStreamOffset: Bad version");
+		Memory::Write_U32(0, offsetAddr);
 		return ERROR_MPEG_BAD_VERSION;
 	} else if ((ctx->mpegOffset & 2047) != 0 || ctx->mpegOffset == 0) {
 		ERROR_LOG(HLE, "sceMpegQueryStreamOffset: Bad offset");
+		Memory::Write_U32(0, offsetAddr);
 		return ERROR_MPEG_INVALID_VALUE;
 	}
+
 	Memory::Write_U32(ctx->mpegOffset, offsetAddr);
 	return 0;
 }
@@ -555,22 +559,22 @@ u32 sceMpegQueryStreamSize(u32 bufferAddr, u32 sizeAddr)
 {
 	DEBUG_LOG(HLE, "sceMpegQueryStreamSize(%08x, %08x)", bufferAddr, sizeAddr);
 
-	MpegContext temp;
-	temp.mediaengine = new MediaEngine();
+	MpegContext ctx;
+	ctx.mediaengine = new MediaEngine();
 
-	AnalyzeMpeg(bufferAddr, &temp);
+	AnalyzeMpeg(bufferAddr, &ctx);
 
-	if (temp.mpegMagic != PSMF_MAGIC) {
+	if (ctx.mpegMagic != PSMF_MAGIC) {
 		ERROR_LOG(HLE, "sceMpegQueryStreamOffset: Bad PSMF magic");
+		Memory::Write_U32(0, sizeAddr);
 		return ERROR_MPEG_INVALID_VALUE;
-	} else if (temp.mpegVersion < 0) {
-		ERROR_LOG(HLE, "sceMpegQueryStreamOffset: Bad version");
-		return ERROR_MPEG_BAD_VERSION;
-	} else if ((temp.mpegOffset & 2047) != 0 || temp.mpegOffset == 0) {
+	} else if ((ctx.mpegOffset & 2047) != 0 ) {
 		ERROR_LOG(HLE, "sceMpegQueryStreamOffset: Bad offset");
+		Memory::Write_U32(0, sizeAddr);
 		return ERROR_MPEG_INVALID_VALUE;
 	}
-	Memory::Write_U32(temp.mpegStreamSize, sizeAddr);
+
+	Memory::Write_U32(ctx.mpegStreamSize, sizeAddr);
 	return 0;
 }
 
@@ -1354,6 +1358,13 @@ u32 sceMpegAvcResourceInit(u32 mpeg)
 	return 0;
 }
 
+
+int sceMpegAvcConvertToYuv420(u32 mpeg, u32 bufferOutput, u32 unknown1, int unknown2)
+ {
+ ERROR_LOG(HLE, "UNIMPL sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)", mpeg, bufferOutput, unknown1, unknown2);
+ return 0;
+ }
+
 /* MP3 */
 int sceMp3Decode(u32 mp3, u32 outPcmPtr)
 {
@@ -1728,6 +1739,7 @@ const HLEFunction sceMpeg[] =
 	{0x8160a2fe,WrapU_U<sceMpegAvcResourceFinish>,"sceMpegAvcResourceFinish"},
 	{0xaf26bb01,WrapU_U<sceMpegAvcResourceGetAvcEsBuf>,"sceMpegAvcResourceGetAvcEsBuf"},
 	{0xfcbdb5ad,WrapU_U<sceMpegAvcResourceInit>,"sceMpegAvcResourceInit"},
+	{0xF5E7EA31,WrapI_UUUI<sceMpegAvcConvertToYuv420>,"sceMpegAvcConvertToYuv420"},
 };
 
 const HLEFunction sceMp3[] =

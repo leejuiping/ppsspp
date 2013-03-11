@@ -363,6 +363,7 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 	DEBUG_LOG(HLE, "Enter VBlank %i", vbCount);
 
 	isVblank = 1;
+	vCount++; // // vCount increases at each VBLANK.
 
 	// Fire the vblank listeners before we wake threads.
 	__DisplayFireVblank();
@@ -450,7 +451,6 @@ void hleAfterFlip(u64 userdata, int cyclesLate)
 void hleLeaveVblank(u64 userdata, int cyclesLate) {
 	isVblank = 0;
 	DEBUG_LOG(HLE,"Leave VBlank %i", (int)userdata - 1);
-	vCount++;
 	frameStartTicks = CoreTiming::GetTicks();
 	CoreTiming::ScheduleEvent(msToCycles(frameMs - vblankMs) - cyclesLate, enterVblankEvent, userdata);
 }
@@ -529,7 +529,7 @@ u32 sceDisplayGetFramebuf(u32 topaddrPtr, u32 linesizePtr, u32 pixelFormatPtr, i
 }
 
 u32 sceDisplayWaitVblankStart() {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStart()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStart()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank start waited");
 	return 0;
@@ -537,18 +537,19 @@ u32 sceDisplayWaitVblankStart() {
 
 u32 sceDisplayWaitVblank() {
 	if (!isVblank) {
-		DEBUG_LOG(HLE,"sceDisplayWaitVblank()");
+		VERBOSE_LOG(HLE,"sceDisplayWaitVblank()");
 		vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 		__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank waited");
 		return 0;
 	} else {
 		DEBUG_LOG(HLE,"sceDisplayWaitVblank() - not waiting since in vBlank");
+		hleEatMicro(5);
 		return 1;
 	}
 }
 
 u32 sceDisplayWaitVblankStartMulti(int vblanks) {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartMulti()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStartMulti()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread(), vblanks));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank start multi waited");
 	return 0;
@@ -556,46 +557,42 @@ u32 sceDisplayWaitVblankStartMulti(int vblanks) {
 
 u32 sceDisplayWaitVblankCB() {
 	if (!isVblank) {
-		DEBUG_LOG(HLE,"sceDisplayWaitVblankCB()");
+		VERBOSE_LOG(HLE,"sceDisplayWaitVblankCB()");
 		vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 		__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank waited");
 		return 0;
 	} else {
 		DEBUG_LOG(HLE,"sceDisplayWaitVblank() - not waiting since in vBlank");
+		hleEatMicro(5);
 		return 1;
 	}
 }
 
 u32 sceDisplayWaitVblankStartCB() {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartCB()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStartCB()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank start waited");
 	return 0;
 }
 
 u32 sceDisplayWaitVblankStartMultiCB(int vblanks) {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartMultiCB()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStartMultiCB()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread(), vblanks));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank start multi waited");
 	return 0;
 }
 
 u32 sceDisplayGetVcount() {
-	// Too spammy
-	// DEBUG_LOG(HLE,"%i=sceDisplayGetVcount()", vCount);
+	VERBOSE_LOG(HLE,"%i=sceDisplayGetVcount()", vCount);
 
-	// Puyo Puyo Fever polls this as a substitute for waiting for vblank.
-	// As a result, the game never gets to reschedule so it doesn't mix audio and things break.
-	// Need to find a better hack as this breaks games like Project Diva.
-	// hleReSchedule("sceDisplayGetVcount hack");  // Puyo puyo hack?
-
-	CoreTiming::Idle(1000000);
+	hleEatMicro(2);
 	return vCount;
 }
 
 u32 sceDisplayGetCurrentHcount() {
-	DEBUG_LOG(HLE,"sceDisplayGetCurrentHcount()");
-	return (CoreTiming::GetTicks() - frameStartTicks) / ((u64)CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / 272);
+	u32 currentHCount = (CoreTiming::GetTicks() - frameStartTicks) / ((u64)CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / 272);
+	DEBUG_LOG(HLE,"%i=sceDisplayGetCurrentHcount()", currentHCount);
+	return currentHCount;
 }
 
 u32 sceDisplayAdjustAccumulatedHcount() {

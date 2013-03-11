@@ -210,7 +210,7 @@ void Jit::Comp_SV(u32 op) {
 			JitSafeMem safe(this, rs, imm);
 			safe.SetFar();
 			OpArg src;
-			if (safe.PrepareRead(src))
+			if (safe.PrepareRead(src, 4))
 			{
 				MOVSS(fpr.VX(vt), safe.NextFastAddress(0));
 			}
@@ -236,7 +236,7 @@ void Jit::Comp_SV(u32 op) {
 			JitSafeMem safe(this, rs, imm);
 			safe.SetFar();
 			OpArg dest;
-			if (safe.PrepareWrite(dest))
+			if (safe.PrepareWrite(dest, 4))
 			{
 				MOVSS(safe.NextFastAddress(0), fpr.VX(vt));
 			}
@@ -278,7 +278,7 @@ void Jit::Comp_SVQ(u32 op)
 			JitSafeMem safe(this, rs, imm);
 			safe.SetFar();
 			OpArg src;
-			if (safe.PrepareRead(src))
+			if (safe.PrepareRead(src, 16))
 			{
 				// Just copy 4 words the easiest way while not wasting registers.
 				for (int i = 0; i < 4; i++)
@@ -312,7 +312,7 @@ void Jit::Comp_SVQ(u32 op)
 			JitSafeMem safe(this, rs, imm);
 			safe.SetFar();
 			OpArg dest;
-			if (safe.PrepareWrite(dest))
+			if (safe.PrepareWrite(dest, 16))
 			{
 				for (int i = 0; i < 4; i++)
 					MOVSS(safe.NextFastAddress(i * 4), fpr.VX(vregs[i]));
@@ -363,21 +363,7 @@ void Jit::Comp_VVectorInit(u32 op) {
 	GetVectorRegsPrefixD(dregs, sz, _VD);
 	fpr.MapRegsV(dregs, sz, MAP_NOINIT | MAP_DIRTY);
 	for (int i = 0; i < n; ++i)
-	{
-		switch ((op >> 16) & 0xF)
-		{
-		case 6: // v=zeros; break;  //vzero
-			MOVSS(fpr.VX(dregs[i]), R(XMM0));
-			break;
-		case 7: // v=ones; break;   //vone
-			MOVSS(fpr.VX(dregs[i]), R(XMM0));
-			break;
-		default:
-			DISABLE;
-			break;
-		}
-	}
-
+		MOVSS(fpr.VX(dregs[i]), R(XMM0));
 	ApplyPrefixD(dregs, sz);
 
 	fpr.ReleaseSpillLocks();

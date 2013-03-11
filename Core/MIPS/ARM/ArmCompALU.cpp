@@ -39,8 +39,10 @@ using namespace MIPSAnalyst;
 namespace MIPSComp
 {
 	static u32 EvalOr(u32 a, u32 b) { return a | b; }
-	static u32 EvalXor(u32 a, u32 b) { return a ^ b; }
+	static u32 EvalEor(u32 a, u32 b) { return a ^ b; }
 	static u32 EvalAnd(u32 a, u32 b) { return a & b; }
+	static u32 EvalAdd(u32 a, u32 b) { return a + b; }
+	static u32 EvalSub(u32 a, u32 b) { return a - b; }
 
 	void Jit::CompImmLogic(int rs, int rt, u32 uimm, void (ARMXEmitter::*arith)(ARMReg dst, ARMReg src, Operand2 op2), u32 (*eval)(u32 a, u32 b))
 	{
@@ -69,6 +71,10 @@ namespace MIPSComp
 		int rt = _RT;
 		int rs = _RS;
 
+		// noop, won't write to ZERO.
+		if (rt == 0)
+			return;
+
 		switch (op >> 26) 
 		{
 		case 8:	// same as addiu?
@@ -76,8 +82,6 @@ namespace MIPSComp
 			{
 				if (gpr.IsImm(rs)) {
 					gpr.SetImm(rt, gpr.GetImm(rs) + simm);
-				} else if (rs == 0) {  // add to zero register = immediate
-					gpr.SetImm(rt, (u32)simm);
 				} else {
 					gpr.MapDirtyIn(rt, rs);
 					Operand2 op2;
@@ -97,7 +101,7 @@ namespace MIPSComp
 
 		case 12: CompImmLogic(rs, rt, uimm, &ARMXEmitter::AND, &EvalAnd); break;
 		case 13: CompImmLogic(rs, rt, uimm, &ARMXEmitter::ORR, &EvalOr); break;
-		case 14: CompImmLogic(rs, rt, uimm, &ARMXEmitter::EOR, &EvalXor); break;
+		case 14: CompImmLogic(rs, rt, uimm, &ARMXEmitter::EOR, &EvalEor); break;
 
 		case 10: // R(rt) = (s32)R(rs) < simm; break; //slti
 			{
@@ -179,12 +183,43 @@ namespace MIPSComp
 		}
 	}
 
+	void Jit::CompType3(int rd, int rs, int rt, void (ARMXEmitter::*arith)(ARMReg dst, ARMReg rm, Operand2 rn), u32 (*eval)(u32 a, u32 b), bool isSub)
+	{
+		if (gpr.IsImm(rs) && gpr.IsImm(rt)) {
+			gpr.SetImm(rd, (*eval)(gpr.GetImm(rs), gpr.GetImm(rt)));
+		} else if (gpr.IsImm(rt)) {
+			u32 rtImm = gpr.GetImm(rt);
+			gpr.MapDirtyIn(rd, rs);
+			Operand2 op2;
+			if (TryMakeOperand2(rtImm, op2)) {
+				(this->*arith)(gpr.R(rd), gpr.R(rs), op2);
+			} else {
+				MOVI2R(R0, rtImm);
+				(this->*arith)(gpr.R(rd), gpr.R(rs), R0);
+			}
+		} else if (gpr.IsImm(rs)) {
+			u32 rsImm = gpr.GetImm(rs);
+			gpr.MapDirtyIn(rd, rt);
+			// TODO: Special case when rsImm can be represented as an Operand2
+			MOVI2R(R0, rsImm);
+			(this->*arith)(gpr.R(rd), R0, gpr.R(rt));
+		} else {
+			// Generic solution
+			gpr.MapDirtyInIn(rd, rs, rt);
+			(this->*arith)(gpr.R(rd), gpr.R(rs), gpr.R(rt));
+		}
+	}
+
 	void Jit::Comp_RType3(u32 op)
 	{
 		CONDITIONAL_DISABLE;
 		int rt = _RT;
 		int rs = _RS;
 		int rd = _RD;
+
+		// noop, won't write to ZERO.
+		if (rd == 0)
+			return;
 
 		switch (op & 63) 
 		{
@@ -235,43 +270,40 @@ namespace MIPSComp
 			}
 			break;
 			
-		// case 32: //R(rd) = R(rs) + R(rt);        break; //add
+		case 32: //R(rd) = R(rs) + R(rt);           break; //add
 		case 33: //R(rd) = R(rs) + R(rt);           break; //addu
 			// Some optimized special cases
-			if (rs == 0) {
+			if (gpr.IsImm(rs) && gpr.GetImm(rs) == 0) {
 				gpr.MapDirtyIn(rd, rt);
 				MOV(gpr.R(rd), gpr.R(rt));
-			} else if (rt == 0) {
+			} else if (gpr.IsImm(rt) && gpr.GetImm(rt) == 0) {
 				gpr.MapDirtyIn(rd, rs);
 				MOV(gpr.R(rd), gpr.R(rs));
 			} else {
-				gpr.MapDirtyInIn(rd, rs, rt);
-				ADD(gpr.R(rd), gpr.R(rs), gpr.R(rt));
+				CompType3(rd, rs, rt, &ARMXEmitter::ADD, &EvalAdd);
 			}
 			break;
+
 		case 34: //R(rd) = R(rs) - R(rt);           break; //sub
-		case 35:
-			gpr.MapDirtyInIn(rd, rs, rt);
-			SUB(gpr.R(rd), gpr.R(rs), gpr.R(rt));
+		case 35: //R(rd) = R(rs) - R(rt);           break; //subu
+			CompType3(rd, rs, rt, &ARMXEmitter::SUB, &EvalSub, true);
 			break;
 		case 36: //R(rd) = R(rs) & R(rt);           break; //and
-			gpr.MapDirtyInIn(rd, rs, rt);
-			AND(gpr.R(rd), gpr.R(rs), gpr.R(rt));
+			CompType3(rd, rs, rt, &ARMXEmitter::AND, &EvalAnd);
 			break;
 		case 37: //R(rd) = R(rs) | R(rt);           break; //or
-			gpr.MapDirtyInIn(rd, rs, rt);
-			ORR(gpr.R(rd), gpr.R(rs), gpr.R(rt));
+			CompType3(rd, rs, rt, &ARMXEmitter::ORR, &EvalOr);
 			break;
 		case 38: //R(rd) = R(rs) ^ R(rt);           break; //xor/eor	
-			gpr.MapDirtyInIn(rd, rs, rt);
-			EOR(gpr.R(rd), gpr.R(rs), gpr.R(rt));
+			CompType3(rd, rs, rt, &ARMXEmitter::EOR, &EvalEor);
 			break;
 
 		case 39: // R(rd) = ~(R(rs) | R(rt));       break; //nor
-			gpr.MapDirtyInIn(rd, rs, rt);
-			if (rt == 0) {
+			if (gpr.IsImm(rt) && gpr.GetImm(rt) == 0) {
+				gpr.MapDirtyIn(rd, rs);
 				MVN(gpr.R(rd), gpr.R(rs));
 			} else {
+				gpr.MapDirtyInIn(rd, rs, rt);
 				ORR(gpr.R(rd), gpr.R(rs), gpr.R(rt));
 				MVN(gpr.R(rd), gpr.R(rd));
 			}
@@ -318,7 +350,6 @@ namespace MIPSComp
 			break;
 
 		default:
-			// gpr.UnlockAll();
 			Comp_Generic(op);
 			break;
 		}
@@ -341,8 +372,8 @@ namespace MIPSComp
 		int rs = _RS;
 		if (gpr.IsImm(rs))
 		{
-			gpr.MapDirtyIn(rd, rt);
 			int sa = gpr.GetImm(rs) & 0x1F;
+			gpr.MapDirtyIn(rd, rt);
 			MOV(gpr.R(rd), Operand2(gpr.R(rt), shiftType, sa));
 			return;
 		}
@@ -355,7 +386,13 @@ namespace MIPSComp
 	{
 		CONDITIONAL_DISABLE;
 		int rs = _RS;
+		int rd = _RD;
 		int fd = _FD;
+
+		// noop, won't write to ZERO.
+		if (rd == 0)
+			return;
+
 		// WARNING : ROTR
 		switch (op & 0x3f)
 		{
@@ -402,7 +439,10 @@ namespace MIPSComp
 				return;
 			}
 
-			gpr.MapDirtyIn(rt, rs, false);
+			// Reported to break Disgaea.
+			DISABLE;
+
+			gpr.MapDirtyIn(rt, rs);
 			if (useUBFXandBFI) {
 				UBFX(gpr.R(rt), gpr.R(rs), pos, size);
 			} else {
@@ -413,7 +453,6 @@ namespace MIPSComp
 
 		case 0x4: //ins
 			{
-				DISABLE;
 				u32 sourcemask = mask >> pos;
 				u32 destmask = ~(sourcemask << pos);
 				if (gpr.IsImm(rs))

@@ -29,6 +29,7 @@
 #include "../FileSystems/FileSystem.h"
 #include "../FileSystems/MetaFileSystem.h"
 #include "../Util/BlockAllocator.h"
+#include "../CoreTiming.h"
 #include "../PSPLoaders.h"
 #include "../System.h"
 #include "../MemMap.h"
@@ -761,8 +762,10 @@ int sceKernelLoadExec(const char *filename, u32 paramPtr)
 
 u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr)
 {
-	if(!name)
-		return 0;
+	if (!name) {
+		ERROR_LOG(LOADER, "sceKernelLoadModule(NULL, %08x): Bad name", flags);
+		return SCE_KERNEL_ERROR_ILLEGAL_ADDR;
+	}
 
 	PSPFileInfo info = pspFileSystem.GetFileInfo(name);
 	std::string error_string;
@@ -810,7 +813,8 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr)
 		INFO_LOG(HLE,"%i=sceKernelLoadModule(name=%s,flag=%08x,(...))", module->GetUID(), name, flags);
 	}
 
-	return module->GetUID();
+	// TODO: This is not the right timing and probably not the right wait type, just an approximation.
+	return hleDelayResult(module->GetUID(), "module loaded", 500);
 }
 
 void sceKernelStartModule(u32 moduleId, u32 argsize, u32 argAddr, u32 returnValueAddr, u32 optionAddr)

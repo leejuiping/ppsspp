@@ -3,6 +3,7 @@ TARGET = PPSSPPQt
 QT += core gui opengl
 CONFIG += mobility
 MOBILITY += multimedia
+symbian: MOBILITY += sensors
 win32: QT += multimedia
 
 include(Settings.pri)
@@ -37,6 +38,7 @@ HEADERS += ../native/base/QtMain.h
 SOURCES += ../android/jni/EmuScreen.cpp \
 	../android/jni/MenuScreens.cpp \
 	../android/jni/GamepadEmu.cpp \
+	../android/jni/TestRunner.cpp \
 	../android/jni/UIShader.cpp \
 	../android/jni/ui_atlas.cpp
 

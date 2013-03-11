@@ -190,7 +190,7 @@ public:
 		: fontLibID_(fontLibID), font_(font), handle_(handle) {}
 
 	Font *GetFont() { return font_; }
-	FontLib *GetFontLib() { return fontLibList[fontLibID_]; }
+	FontLib *GetFontLib() { if (!IsOpen()) return NULL; return fontLibList[fontLibID_]; }
 	u32 Handle() const { return handle_; }
 
 	bool IsOpen() const { return fontLibID_ != (u32)-1; }
@@ -270,8 +270,8 @@ public:
 		if (false) {
 			// This fails in dissidia. The function at 088ff320 (params_.allocFuncAddr) calls some malloc function, the second one returns 0 which causes
 			// bad stores later. So we just ignore this with if (false) and fake it.
-			u32 args[1] = { allocSize };
-			__KernelDirectMipsCall(params_.allocFuncAddr, action, args, 1, false);
+			u32 args[2] = { params_.userDataAddr, allocSize };
+			__KernelDirectMipsCall(params_.allocFuncAddr, action, args, 2, false);
 		} else {
 			AllocDone(fakeAlloc_);
 			fakeAlloc_ += allocSize;
@@ -296,8 +296,8 @@ public:
 				fontMap.erase(fonts_[i]);
 			}
 		}
-		u32 args[1] = { (u32)handle_ };
-		__KernelDirectMipsCall(params_.freeFuncAddr, 0, args, 1, false);
+		u32 args[2] = { params_.userDataAddr, (u32)handle_ };
+		__KernelDirectMipsCall(params_.freeFuncAddr, 0, args, 2, false);
 		handle_ = 0;
 		fonts_.clear();
 		isfontopen_.clear();
@@ -770,7 +770,7 @@ int sceFontGetShadowInfo(u32 fontHandle, u32 charCode, u32 shadowCharInfoPtr) {
 }
 
 int sceFontGetCharImageRect(u32 fontHandle, u32 charCode, u32 charRectPtr) {
-	ERROR_LOG(HLE, "HACK sceFontGetCharImageRect(%08x, %i, %08x) (char: %c)", fontHandle, charCode, charRectPtr, (char)charCode);
+	ERROR_LOG(HLE, "HACK sceFontGetCharImageRect(%08x, %i, %08x)", fontHandle, charCode, charRectPtr);
 	if (!Memory::IsValidAddress(charRectPtr))
 		return -1;
 
@@ -792,7 +792,7 @@ int sceFontGetShadowImageRect(u32 fontHandle, u32 charCode, u32 charRectPtr) {
 }
 
 int sceFontGetCharGlyphImage(u32 fontHandle, u32 charCode, u32 glyphImagePtr) {
-	ERROR_LOG(HLE, "HACK sceFontGetCharGlyphImage(%x, %x, %x) (char: %c)", fontHandle, charCode, glyphImagePtr, (char)charCode);
+	ERROR_LOG(HLE, "HACK sceFontGetCharGlyphImage(%x, %x, %x)", fontHandle, charCode, glyphImagePtr);
 
 	int pixelFormat = Memory::Read_U32(glyphImagePtr);
 	int xPos64 = Memory::Read_U32(glyphImagePtr+4);
@@ -813,7 +813,7 @@ int sceFontGetCharGlyphImage(u32 fontHandle, u32 charCode, u32 glyphImagePtr) {
 }
 
 int sceFontGetCharGlyphImage_Clip(u32 fontHandle, u32 charCode, u32 glyphImagePtr, int clipXPos, int clipYPos, int clipWidth, int clipHeight) {
-	ERROR_LOG(HLE, "sceFontGetCharGlyphImage_Clip(%08x, %i, %08x, %i, %i, %i, %i) (%c)", fontHandle, charCode, glyphImagePtr, clipXPos, clipYPos, clipWidth, clipHeight, charCode);
+	ERROR_LOG(HLE, "sceFontGetCharGlyphImage_Clip(%08x, %i, %08x, %i, %i, %i, %i)", fontHandle, charCode, glyphImagePtr, clipXPos, clipYPos, clipWidth, clipHeight);
 
 	int pixelFormat = Memory::Read_U32(glyphImagePtr);
 	int xPos64 = Memory::Read_U32(glyphImagePtr+4);
@@ -834,7 +834,7 @@ int sceFontGetCharGlyphImage_Clip(u32 fontHandle, u32 charCode, u32 glyphImagePt
 }
 
 int sceFontSetAltCharacterCode(u32 fontLibHandle, u32 charCode) {
-	INFO_LOG(HLE, "sceFontSetAltCharacterCode(%08x) (%c)", fontLibHandle, charCode);
+	INFO_LOG(HLE, "sceFontSetAltCharacterCode(%08x) (%08x)", fontLibHandle, charCode);
 	FontLib *fl = GetFontLib(fontLibHandle);
 	if (fl) {
 		fl->SetAltCharCode(charCode);

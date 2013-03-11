@@ -65,6 +65,7 @@ public:
 	{
 		switch (level)
 		{
+		case LogTypes::LVERBOSE:
 		case LogTypes::LDEBUG:
 		case LogTypes::LINFO:
 			ILOG("%s", msg);
@@ -99,7 +100,7 @@ public:
 
 	virtual void SetDebugMode(bool mode) { }
 
-	virtual void InitGL() {}
+	virtual bool InitGL(std::string *error_message) {}
 	virtual void BeginFrame() {}
 	virtual void ShutdownGL() {}
 
@@ -252,7 +253,11 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	g_Config.flashDirectory = std::string(external_directory)+"/flash/";
 #elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS)
 	g_Config.memCardDirectory = user_data_path;
+#ifdef BLACKBERRY
+	g_Config.flashDirectory = "app/native/assets/flash/";
+#else
 	g_Config.flashDirectory = user_data_path+"/flash/";
+#endif
 #else
 	g_Config.memCardDirectory = std::string(getenv("HOME"))+"/.ppsspp/";
 	g_Config.flashDirectory = g_Config.memCardDirectory+"/flash/";
@@ -267,6 +272,10 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 		logman->AddListener(type, logger);
 #endif
 	}
+#ifdef __SYMBIAN32__
+	g_Config.bHardwareTransform = true;
+	g_Config.bUseVBO = false;
+#endif
 	// Special hack for G3D as it's very spammy. Need to make a flag for this.
 	if (!gfxLog)
 		logman->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
@@ -349,6 +358,7 @@ void NativeDeviceLost()
 {
 	screenManager->deviceLost();
 	gl_lost();
+	glstate.Restore();
 	// Should dirty EVERYTHING
 }
 

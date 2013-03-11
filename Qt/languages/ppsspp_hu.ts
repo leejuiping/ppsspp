@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.0" language="id_id">
+<TS version="2.0" language="hu_HU">
 <context>
     <name>Controls</name>
     <message>
         <location filename="../controls.ui" line="20"/>
         <source>Controls</source>
         <comment>Controls window title</comment>
-        <translation type="unfinished"></translation>
+        <translation>Írányítás</translation>
     </message>
 </context>
 <context>
@@ -15,7 +15,7 @@
     <message>
         <location filename="../ctrldisasmview.cpp" line="91"/>
         <source>Copy &amp;address</source>
-        <translation type="unfinished"></translation>
+        <translation>Cím másolása</translation>
     </message>
     <message>
         <location filename="../ctrldisasmview.cpp" line="95"/>
@@ -70,7 +70,7 @@
     <message>
         <location filename="../ctrldisasmview.cpp" line="232"/>
         <source>Warning</source>
-        <translation type="unfinished">Peringatan</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../ctrldisasmview.cpp" line="232"/>
@@ -662,27 +662,27 @@
     <message>
         <location filename="../gamepaddialog.ui" line="14"/>
         <source>Gamepad Configuration</source>
-        <translation type="unfinished"></translation>
+        <translation>Játékvezérlő Beállítás</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="22"/>
         <source>GamePad List</source>
-        <translation type="unfinished"></translation>
+        <translation>Játékvezérlők listája</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="46"/>
         <source>Refresh</source>
-        <translation type="unfinished"></translation>
+        <translation>Frissítés</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="53"/>
         <source>Select</source>
-        <translation type="unfinished">Select</translation>
+        <translation>Kiválasztás</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="62"/>
         <source>Gamepad Values :</source>
-        <translation type="unfinished"></translation>
+        <translation>Játékvezérlő Értékei :</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="86"/>
@@ -692,69 +692,69 @@
     <message>
         <location filename="../gamepaddialog.ui" line="98"/>
         <source>Assign Gamepad input</source>
-        <translation type="unfinished"></translation>
+        <translation>Játékvezérlő Gomb hozzárendelése</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="108"/>
         <source> to PSP button/axis</source>
-        <translation type="unfinished"></translation>
+        <translation>PSP gomb/tengelyhez</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="118"/>
         <source>Assign</source>
-        <translation type="unfinished"></translation>
+        <translation>Hozzárendelés</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.ui" line="127"/>
         <source>Press buttons on your gamePad to verify mapping :</source>
-        <translation type="unfinished"></translation>
+        <translation>Nyomj meg gombokat a játékvezérlődön a gombok ellenőrzéséhez :</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="129"/>
         <location filename="../gamepaddialog.cpp" line="361"/>
         <source>&lt;b&gt;No gamepad&lt;/b&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;Nincs Játékvezérlő&lt;/b&gt;</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="141"/>
         <source>&lt;b&gt;Unknown gamepad&lt;/b&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;Ismeretlen Játékvezérlő&lt;/b&gt;</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="282"/>
         <source>Buttons</source>
-        <translation>Tombol</translation>
+        <translation>Gombok</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="296"/>
         <location filename="../gamepaddialog.cpp" line="339"/>
         <source>Button %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Gomb %1</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="299"/>
         <source>Axes</source>
-        <translation type="unfinished"></translation>
+        <translation>Tengelyek</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="305"/>
         <source>%1 Neg</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 Neg</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="312"/>
         <source>Axes %1 Neg</source>
-        <translation type="unfinished"></translation>
+        <translation>Tengely %1 Neg</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="315"/>
         <source>%1 Pos</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 Poz</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="322"/>
         <source>Axes %1 Pos</source>
-        <translation type="unfinished"></translation>
+        <translation>Tengely %1 Poz</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="326"/>
@@ -764,7 +764,7 @@
     <message>
         <location filename="../gamepaddialog.cpp" line="363"/>
         <source>&lt;b&gt;Current gamepad: %1&lt;/b&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;b&gt;Jelenlegi Játékvezérlő: %1&lt;/b&gt;</translation>
     </message>
 </context>
 <context>
@@ -772,17 +772,17 @@
     <message>
         <location filename="../mainwindow.ui" line="20"/>
         <source>PPSSPP</source>
-        <translation type="unfinished"></translation>
+        <translation>PPSSPP</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="52"/>
         <source>&amp;File</source>
-        <translation type="unfinished"></translation>
+        <translation>Fájl</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="66"/>
         <source>&amp;Emulation</source>
-        <translation type="unfinished"></translation>
+        <translation>Emuláció</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="77"/>
@@ -792,7 +792,7 @@
     <message>
         <location filename="../mainwindow.ui" line="93"/>
         <source>&amp;Options</source>
-        <translation type="unfinished"></translation>
+        <translation>Beállítások</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="101"/>
@@ -807,142 +807,142 @@
     <message>
         <location filename="../mainwindow.ui" line="119"/>
         <source>Default</source>
-        <translation type="unfinished"></translation>
+        <translation>Alapértelmezett</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="97"/>
         <source>Lo&amp;g Levels</source>
-        <translation type="unfinished"></translation>
+        <translation>Log szint</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="133"/>
         <source>&amp;Language</source>
-        <translation type="unfinished"></translation>
+        <translation>Nyelv</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="138"/>
         <source>&amp;Video</source>
-        <translation type="unfinished"></translation>
+        <translation>Videó</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="142"/>
         <source>&amp;Anisotropic filtering</source>
-        <translation type="unfinished"></translation>
+        <translation>Anizotróp szűrés</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="152"/>
         <source>&amp;Zoom</source>
-        <translation type="unfinished"></translation>
+        <translation>Nagyítás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="176"/>
         <source>Co&amp;ntrols</source>
-        <translation type="unfinished"></translation>
+        <translation>Irányítás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="183"/>
         <source>&amp;Core</source>
-        <translation type="unfinished"></translation>
+        <translation>Központi</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="206"/>
         <source>&amp;Help</source>
-        <translation type="unfinished"></translation>
+        <translation>Segítség</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="221"/>
         <source>&amp;Open...</source>
-        <translation type="unfinished"></translation>
+        <translation>Megnyitás...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="226"/>
         <source>&amp;Close</source>
-        <translation type="unfinished"></translation>
+        <translation>Bezárás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="231"/>
         <source>-</source>
-        <translation type="unfinished"></translation>
+        <translation>-</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="236"/>
         <source>Quickload state</source>
-        <translation type="unfinished"></translation>
+        <translation>Állás gyorsbetöltése</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="239"/>
         <source>F4</source>
-        <translation type="unfinished"></translation>
+        <translation>F4</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="244"/>
         <source>Quicksave state</source>
-        <translation type="unfinished"></translation>
+        <translation>Állás gyorsmentése</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="247"/>
         <source>F2</source>
-        <translation type="unfinished"></translation>
+        <translation>F2</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="252"/>
         <source>&amp;Load State File...</source>
-        <translation type="unfinished"></translation>
+        <translation>Állás betöltése...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="257"/>
         <source>&amp;Save State File...</source>
-        <translation type="unfinished"></translation>
+        <translation>Állás mentése...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="262"/>
         <source>E&amp;xit</source>
-        <translation type="unfinished"></translation>
+        <translation>Kilépés</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="267"/>
         <source>&amp;Run</source>
-        <translation type="unfinished"></translation>
+        <translation>Futtatás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="270"/>
         <source>F7</source>
-        <translation type="unfinished"></translation>
+        <translation>F7</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="275"/>
         <source>&amp;Pause</source>
-        <translation type="unfinished"></translation>
+        <translation>Szüneteltetés</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="278"/>
         <source>F8</source>
-        <translation type="unfinished"></translation>
+        <translation>F8</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="283"/>
         <source>R&amp;eset</source>
-        <translation type="unfinished"></translation>
+        <translation>Újraindítás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="291"/>
         <source>&amp;Interpreter</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Interpreter</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="299"/>
         <source>&amp;Dynarec</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Dynarec</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="307"/>
         <source>Load &amp;Map File...</source>
-        <translation type="unfinished"></translation>
+        <translation>Map fájl betöltése...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="315"/>
         <source>&amp;Save Map File...</source>
-        <translation type="unfinished"></translation>
+        <translation>Map fájl mentése...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="323"/>
@@ -957,17 +957,17 @@
     <message>
         <location filename="../mainwindow.ui" line="331"/>
         <source>Ctrl+D</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+D</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="339"/>
         <source>&amp;Log Console</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Log Konzol</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="342"/>
         <source>Ctrl+L</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+L</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="347"/>
@@ -977,17 +977,17 @@
     <message>
         <location filename="../mainwindow.ui" line="350"/>
         <source>Ctrl+M</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+M</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="355"/>
         <source>&amp;Keyboard</source>
-        <translation type="unfinished"></translation>
+        <translation>Billentyűzet</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="360"/>
         <source>&amp;Toggle fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>Teljesképernyőre váltás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="417"/>
@@ -997,62 +997,62 @@
     <message>
         <location filename="../mainwindow.ui" line="477"/>
         <source>I&amp;gnore illegal reads/writes</source>
-        <translation type="unfinished"></translation>
+        <translation>Illegális olvasások/írások mellőzése</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="596"/>
         <source>&amp;Gamepad</source>
-        <translation type="unfinished"></translation>
+        <translation>Játékvezérlő</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="601"/>
         <source>Run on loa&amp;d</source>
-        <translation type="unfinished"></translation>
+        <translation>Futtatás betöltéskor</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="680"/>
         <source>Show &amp;FPS counter</source>
-        <translation type="unfinished"></translation>
+        <translation>FPS számláló mutatása</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="688"/>
         <source>S&amp;tretch to display</source>
-        <translation type="unfinished"></translation>
+        <translation>Kép nyújtása</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="696"/>
         <source>&amp;Sound emulation</source>
-        <translation type="unfinished"></translation>
+        <translation>Hang emuláció</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="363"/>
         <source>F12</source>
-        <translation type="unfinished"></translation>
+        <translation>F12</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="371"/>
         <source>&amp;Buffered Rendering</source>
-        <translation type="unfinished"></translation>
+        <translation>Pufferelt Renderelés</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="374"/>
         <source>F5</source>
-        <translation type="unfinished"></translation>
+        <translation>F5</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="382"/>
         <source>&amp;Hardware Transform</source>
-        <translation type="unfinished"></translation>
+        <translation>Hardveres Átváltoztatás</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="385"/>
         <source>F6</source>
-        <translation type="unfinished"></translation>
+        <translation>F6</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="393"/>
         <source>&amp;Linear Filtering</source>
-        <translation type="unfinished"></translation>
+        <translation>Lineáris Szűrés</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="401"/>
@@ -1067,62 +1067,62 @@
     <message>
         <location filename="../mainwindow.ui" line="425"/>
         <source>Screen &amp;1x</source>
-        <translation type="unfinished"></translation>
+        <translation>1x-es méret</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="428"/>
         <source>Ctrl+1</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+1</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="436"/>
         <source>Screen &amp;2x</source>
-        <translation type="unfinished"></translation>
+        <translation>2x-es méret</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="439"/>
         <source>Ctrl+2</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+2</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="447"/>
         <source>Screen &amp;3x</source>
-        <translation type="unfinished"></translation>
+        <translation>3x-os méret</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="450"/>
         <source>Ctrl+3</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+3</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="458"/>
         <source>Screen &amp;4x</source>
-        <translation type="unfinished"></translation>
+        <translation>4x-es méret</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="461"/>
         <source>Ctrl+4</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+4</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="469"/>
         <source>&amp;Fast Memory (dynarec, unstable)</source>
-        <translation type="unfinished"></translation>
+        <translation>Gyors Memória (dynarec, instabil)</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="482"/>
         <source>&amp;Go to http://www.ppsspp.org/</source>
-        <translation type="unfinished"></translation>
+        <translation>Ugrás a honlapra http//www.ppsspp.org/ </translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="487"/>
         <source>&amp;About PPSSPP...</source>
-        <translation type="unfinished"></translation>
+        <translation>PPSSPP Névjegye</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="495"/>
         <source>&amp;Use VBO</source>
-        <translation type="unfinished"></translation>
+        <translation>VBO Használata</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="503"/>
@@ -1136,21 +1136,21 @@
         <location filename="../mainwindow.ui" line="543"/>
         <location filename="../mainwindow.ui" line="575"/>
         <source>Warning</source>
-        <translation>Peringatan</translation>
+        <translation>Figyelmeztetés</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="519"/>
         <location filename="../mainwindow.ui" line="559"/>
         <location filename="../mainwindow.ui" line="591"/>
         <source>Error</source>
-        <translation>Galat</translation>
+        <translation>Hiba</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="527"/>
         <location filename="../mainwindow.ui" line="551"/>
         <location filename="../mainwindow.ui" line="583"/>
         <source>Info</source>
-        <translation>Informasi</translation>
+        <translation>Infó</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="606"/>
@@ -1175,52 +1175,52 @@
     <message>
         <location filename="../mainwindow.ui" line="632"/>
         <source>Simple 2xAA</source>
-        <translation type="unfinished"></translation>
+        <translation>Egyszerű 2x-es AA</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="640"/>
         <source>Off</source>
-        <translation>Mati</translation>
+        <translation>Ki</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="648"/>
         <source>2x</source>
-        <translation type="unfinished"></translation>
+        <translation>2x</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="656"/>
         <source>4x</source>
-        <translation type="unfinished"></translation>
+        <translation>4x</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="664"/>
         <source>8x</source>
-        <translation type="unfinished"></translation>
+        <translation>8x</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="672"/>
         <source>16x</source>
-        <translation type="unfinished"></translation>
+        <translation>16x</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="704"/>
         <source>Frameskip</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Frameskip</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="571"/>
         <source>Gamepad</source>
-        <translation type="unfinished"></translation>
+        <translation>Játékvezérlő</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="571"/>
         <source>You need to compile with SDL to have Gamepad support.</source>
-        <translation type="unfinished"></translation>
+        <translation>SDL-t kell használnod fordításnál Játékvezérlő támogatásért.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="923"/>
         <source>No translations</source>
-        <translation>Tak ada terjemahan</translation>
+        <translation>Nincs Fordítás</translation>
     </message>
 </context>
 <context>
@@ -1228,32 +1228,32 @@
     <message>
         <location filename="../gamepaddialog.cpp" line="19"/>
         <source>Cross</source>
-        <translation>Silang</translation>
+        <translation>Kereszt</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="20"/>
         <source>Circle</source>
-        <translation>Bundar</translation>
+        <translation>Kör</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="21"/>
         <source>Square</source>
-        <translation>Kotak</translation>
+        <translation>Négyzet</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="22"/>
         <source>Triangle</source>
-        <translation>Segitiga</translation>
+        <translation>Háromszög</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="23"/>
         <source>Left Trigger</source>
-        <translation>Trigger Kiri</translation>
+        <translation>Bal Trigger</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="24"/>
         <source>Right Trigger</source>
-        <translation>Trigger Kanan</translation>
+        <translation>Jobb Trigger</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="25"/>
@@ -1268,47 +1268,47 @@
     <message>
         <location filename="../gamepaddialog.cpp" line="27"/>
         <source>Up</source>
-        <translation>Atas</translation>
+        <translation>Fel</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="28"/>
         <source>Down</source>
-        <translation>Bawah</translation>
+        <translation>Le</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="29"/>
         <source>Left</source>
-        <translation>Kiri</translation>
+        <translation>Bal</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="30"/>
         <source>Right</source>
-        <translation>Kanan</translation>
+        <translation>Jobb</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="32"/>
         <source>Home</source>
-        <translation>Beranda</translation>
+        <translation>Home</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="35"/>
         <source>Stick left</source>
-        <translation>Stick kiri</translation>
+        <translation>Stick balra</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="36"/>
         <source>Stick right</source>
-        <translation>Stick kanan</translation>
+        <translation>Stick jobbra</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="37"/>
         <source>Stick up</source>
-        <translation>Stick atas</translation>
+        <translation>Stick fel</translation>
     </message>
     <message>
         <location filename="../gamepaddialog.cpp" line="38"/>
         <source>Stick bottom</source>
-        <translation>Stick bawah</translation>
+        <translation>Stick le</translation>
     </message>
 </context>
 </TS>

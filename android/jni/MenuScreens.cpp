@@ -249,16 +249,21 @@ void InGameMenuScreen::render() {
 
 	int x = 30;
 	int y = 50;
-	UICheckBox(GEN_ID, x, y += 50, "Show Debug Statistics", ALIGN_TOPLEFT, &g_Config.bShowDebugStats);
-	UICheckBox(GEN_ID, x, y += 50, "Show FPS", ALIGN_TOPLEFT, &g_Config.bShowFPSCounter);
+	int stride = 40;
+	int columnw = 420;
+	UICheckBox(GEN_ID, x, y += stride, "Show Debug Statistics", ALIGN_TOPLEFT, &g_Config.bShowDebugStats);
+	UICheckBox(GEN_ID, x + columnw, y, "Show FPS", ALIGN_TOPLEFT, &g_Config.bShowFPSCounter);
 
 	// TODO: Maybe shouldn't show this if the screen ratios are very close...
-	UICheckBox(GEN_ID, x, y += 50, "Stretch to display", ALIGN_TOPLEFT, &g_Config.bStretchToDisplay);
+	UICheckBox(GEN_ID, x, y += stride, "Stretch to display", ALIGN_TOPLEFT, &g_Config.bStretchToDisplay);
 
-	UICheckBox(GEN_ID, x, y += 50, "Hardware Transform", ALIGN_TOPLEFT, &g_Config.bHardwareTransform);
-	UICheckBox(GEN_ID, x, y += 50, "Buffered Rendering", ALIGN_TOPLEFT, &g_Config.bBufferedRendering);
+	UICheckBox(GEN_ID, x, y += stride, "Hardware Transform", ALIGN_TOPLEFT, &g_Config.bHardwareTransform);
+	if (UICheckBox(GEN_ID, x, y += stride, "Buffered Rendering", ALIGN_TOPLEFT, &g_Config.bBufferedRendering)) {
+		if (gpu)
+			gpu->Resized();
+	}
 	bool fs = g_Config.iFrameSkip == 1;
-	UICheckBox(GEN_ID, x, y += 50, "Frameskip", ALIGN_TOPLEFT, &fs);
+	UICheckBox(GEN_ID, x, y += stride, "Frameskip (beta)", ALIGN_TOPLEFT, &fs);
 	g_Config.iFrameSkip = fs ? 1 : 0;
 
 	// TODO: Add UI for more than one slot.
@@ -348,6 +353,10 @@ void SettingsScreen::render() {
 		y += stride;
 	}
 	UICheckBox(GEN_ID, x, y, "Tilt to Analog (horizontal)", ALIGN_TOPLEFT, &g_Config.bAccelerometerToAnalogHoriz);
+	
+
+	ui_draw2d.DrawText(UBUNTU24, "Some settings may require a restart to apply.", dp_xres/2, y += stride + 20, 0xFFFFFFFF, ALIGN_HCENTER);
+
 	// UICheckBox(GEN_ID, x, y += stride, "Draw raw framebuffer (for some homebrew)", ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
 
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {

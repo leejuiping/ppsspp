@@ -84,6 +84,14 @@ umd01: block access - umd
 #define O_NOWAIT		0x8000
 #define O_NPDRM         0x40000000
 
+// chstat
+#define SCE_CST_MODE    0x0001
+#define SCE_CST_ATTR    0x0002
+#define SCE_CST_SIZE    0x0004
+#define SCE_CST_CT      0x0008
+#define SCE_CST_AT      0x0010
+#define SCE_CST_MT      0x0020
+#define SCE_CST_PRVT    0x0040
 
 typedef s32 SceMode;
 typedef s64 SceOff;
@@ -404,6 +412,25 @@ u32 sceIoGetstat(const char *filename, u32 addr) {
 	}
 }
 
+u32 sceIoChstat(const char *filename, u32 iostatptr, u32 changebits) {
+	ERROR_LOG(HLE, "UNIMPL sceIoChstat(%s, %08x, %08x)", filename, iostatptr, changebits);
+	if (changebits & SCE_CST_MODE)
+		ERROR_LOG(HLE, "sceIoChstat: change mode requested");
+	if (changebits & SCE_CST_ATTR)
+		ERROR_LOG(HLE, "sceIoChstat: change attr requested");
+	if (changebits & SCE_CST_SIZE)
+		ERROR_LOG(HLE, "sceIoChstat: change size requested");
+	if (changebits & SCE_CST_CT)
+		ERROR_LOG(HLE, "sceIoChstat: change creation time requested");
+	if (changebits & SCE_CST_AT)
+		ERROR_LOG(HLE, "sceIoChstat: change access time requested");
+	if (changebits & SCE_CST_MT)
+		ERROR_LOG(HLE, "sceIoChstat: change modification time requested");
+	if (changebits & SCE_CST_PRVT)
+		ERROR_LOG(HLE, "sceIoChstat: change private data requested");
+	return 0;
+}
+
 u32 npdrmRead(FileNode *f, u8 *data, int size) {
 	PGD_DESC *pgd = f->pgdInfo;
 	u32 block, offset;
@@ -424,13 +451,13 @@ u32 npdrmRead(FileNode *f, u8 *data, int size) {
 
 		if(offset+remain_size>pgd->block_size){
 			copy_size = pgd->block_size-offset;
+			memcpy(data, pgd->block_buf+offset, copy_size);
 			block += 1;
 			offset = 0;
 		}else{
 			copy_size = remain_size;
+			memcpy(data, pgd->block_buf+offset, copy_size);
 		}
-
-		memcpy(data, pgd->block_buf+offset, copy_size);
 
 		data += copy_size;
 		remain_size -= copy_size;
@@ -600,12 +627,14 @@ u32 npdrmLseek(FileNode *f, s32 where, FileMove whence)
 	}
 
 	f->pgdInfo->file_offset = newPos;
+	pspFileSystem.SeekFile(f->handle, (s32)f->pgdInfo->data_offset+newPos, whence);
+
 	return newPos;
 }
 
 s64 __IoLseek(SceUID id, s64 offset, int whence) {
 	u32 error;
-	FileNode *f = kernelObjects.Get<FileNode>(id, error);
+	FileNode *f = kernelObjects.Get < FileNode > (id, error);
 	if (f) {
 		FileMove seek = FILEMOVE_BEGIN;
 
@@ -1344,6 +1373,7 @@ int __IoIoctl(u32 id, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 out
 		if (Memory::IsValidAddress(indataPtr) && inlen == 16) {
 			u8 keybuf[16];
 			u8 pgd_header[0x90];
+			u8 pgd_magic[4] = {0x00, 0x50, 0x47, 0x44};
 			INFO_LOG(HLE, "Decrypting PGD DRM files");
 			memcpy(keybuf, Memory::GetPointer(indataPtr), 16);
 			pspFileSystem.ReadFile(f->handle, pgd_header, 0x90);
@@ -1352,6 +1382,17 @@ int __IoIoctl(u32 id, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 out
 				ERROR_LOG(HLE, "Not a valid PGD file. Open as normal file.");
 				f->npdrm = false;
 				pspFileSystem.SeekFile(f->handle, (s32)0, FILEMOVE_BEGIN);
+				if(memcmp(pgd_header, pgd_magic, 4)==0){
+					// File is PGD file, but key mismatch
+					return 0x80510204;
+				}else{
+					// File is decrypted.
+					return 0;
+				}
+			}else{
+				// Everthing OK.
+				f->npdrm = true;
+				return 0;
 			}
 		}
 		break;
@@ -1434,7 +1475,7 @@ const HLEFunction IoFileMgrForUser[] = {
 	{ 0xe95a012b, &WrapU_UUUUUU<sceIoIoctlAsync>, "sceIoIoctlAsync" },
 	{ 0x63632449, &WrapU_UUUUUU<sceIoIoctl>, "sceIoIoctl" },
 	{ 0xace946e8, &WrapU_CU<sceIoGetstat>, "sceIoGetstat" },
-	{ 0xb8a740f4, 0, "sceIoChstat" },
+	{ 0xb8a740f4, &WrapU_CUU<sceIoChstat>, "sceIoChstat" },
 	{ 0x55f4717d, &WrapU_C<sceIoChdir>, "sceIoChdir" },
 	{ 0x08bd7374, &WrapU_I<sceIoGetDevType>, "sceIoGetDevType" },
 	{ 0xB2A628C1, &WrapU_UUUIUI<sceIoAssign>, "sceIoAssign" },

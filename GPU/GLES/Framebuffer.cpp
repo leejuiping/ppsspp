@@ -30,6 +30,7 @@
 
 #include "GPU/GLES/Framebuffer.h"
 #include "GPU/GLES/TextureCache.h"
+#include "GPU/GLES/ShaderManager.h"
 
 static const char tex_fs[] =
 	"#ifdef GL_ES\n"
@@ -64,8 +65,8 @@ static bool MaskedEqual(u32 addr1, u32 addr2) {
 	return (addr1 & 0x3FFFFFF) == (addr2 & 0x3FFFFFF);
 }
 
-static void CenterRect(float *x, float *y, float *w, float *h,
-	                     float origW, float origH, float frameW, float frameH)
+void CenterRect(float *x, float *y, float *w, float *h,
+                float origW, float origH, float frameW, float frameH)
 {
 	if (g_Config.bStretchToDisplay)
 	{
@@ -258,11 +259,29 @@ VirtualFramebuffer *FramebufferManager::GetDisplayFBO() {
 	return 0;
 }
 
-void GetViewportDimensions(int *w, int *h) {
+void GetViewportDimensions(int &w, int &h) {
 	float vpXa = getFloat24(gstate.viewportx1);
 	float vpYa = getFloat24(gstate.viewporty1);
-	*w = (int)fabsf(vpXa * 2);
-	*h = (int)fabsf(vpYa * 2);
+	w = (int)fabsf(vpXa * 2);
+	h = (int)fabsf(vpYa * 2);
+}
+
+// Heuristics to figure out the size of FBO to create.
+void GuessDrawingSize(int &drawing_width, int &drawing_height) {
+	GetViewportDimensions(drawing_width, drawing_height);
+
+	// HACK for first frame where some games don't init things right
+	if (drawing_width <= 1 && drawing_height <= 1) {
+		drawing_width = 480;
+		drawing_height = 272;
+	}
+
+	// Now, cap using scissor. Hm, no, this doesn't work so well.
+	/*
+	if (drawing_width > gstate.getScissorX2() + 1)
+		drawing_width = gstate.getScissorX2() + 1;
+	if (drawing_height > gstate.getScissorY2() + 1)
+		drawing_height = gstate.getScissorY2() + 1;*/
 }
 
 void FramebufferManager::SetRenderFrameBuffer() {
@@ -273,10 +292,6 @@ void FramebufferManager::SetRenderFrameBuffer() {
 	u32 z_address = (gstate.zbptr & 0xFFE000) | ((gstate.zbwidth & 0xFF0000) << 8);
 	int z_stride = gstate.zbwidth & 0x3C0;
 
-	// We guess that the viewport size during the first draw call is an appropriate
-	// size for a render target.
-	//UpdateViewportAndProjection();
-
 	// Yeah this is not completely right. but it'll do for now.
 	//int drawing_width = ((gstate.region2) & 0x3FF) + 1;
 	//int drawing_height = ((gstate.region2 >> 10) & 0x3FF) + 1;
@@ -284,17 +299,10 @@ void FramebufferManager::SetRenderFrameBuffer() {
 	// As there are no clear "framebuffer width" and "framebuffer height" registers,
 	// we need to infer the size of the current framebuffer somehow. Let's try the viewport.
 	
-	int drawing_width, drawing_height;
-	GetViewportDimensions(&drawing_width, &drawing_height);
-
-	// HACK for first frame where some games don't init things right
-	
-	if (drawing_width <= 1 && drawing_height <= 1) {
-		drawing_width = 480;
-		drawing_height = 272;
-	}
-
 	int fmt = gstate.framebufpixformat & 3;
+
+	int drawing_width, drawing_height;
+	GuessDrawingSize(drawing_width, drawing_height);
 
 	// Find a matching framebuffer
 	VirtualFramebuffer *vfb = 0;
@@ -373,7 +381,6 @@ void FramebufferManager::SetRenderFrameBuffer() {
 		glClearColor(0,0,0,1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glEnable(GL_DITHER);
-		glstate.viewport.set(0, 0, vfb->renderWidth, vfb->renderHeight);
 		currentRenderVfb_ = vfb;
 
 		INFO_LOG(HLE, "Creating FBO for %08x : %i x %i x %i", vfb->fb_address, vfb->width, vfb->height, vfb->format);
@@ -420,8 +427,16 @@ void FramebufferManager::SetRenderFrameBuffer() {
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		}
 #endif
-		glstate.viewport.set(0, 0, vfb->renderWidth, vfb->renderHeight);
 		currentRenderVfb_ = vfb;
+	} else {
+		vfb->last_frame_used = gpuStats.numFrames;
+	}
+
+	// ugly...
+	if (gstate_c.curRTWidth != vfb->width || gstate_c.curRTHeight != vfb->height) {
+		shaderManager_->DirtyUniform(DIRTY_PROJTHROUGHMATRIX);
+		gstate_c.curRTWidth = vfb->width;
+		gstate_c.curRTHeight = vfb->height;
 	}
 }
 
@@ -430,12 +445,17 @@ void FramebufferManager::CopyDisplayToOutput() {
 
 	VirtualFramebuffer *vfb = GetDisplayFBO();
 	if (!vfb) {
-		DEBUG_LOG(HLE, "Found no FBO! displayFBPtr = %08x", displayFramebufPtr_);
-		// No framebuffer to display! Clear to black.
-		glstate.depthWrite.set(GL_TRUE);
-		glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-		glClearColor(0,0,0,1);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		if (Memory::IsValidAddress(displayFramebufPtr_)) {
+			// The game is displaying something directly from RAM. In GTA, it's decoded video.
+			DrawPixels(Memory::GetPointer(displayFramebufPtr_), displayFormat_, displayStride_);
+		} else {
+			DEBUG_LOG(HLE, "Found no FBO to display! displayFBPtr = %08x", displayFramebufPtr_);
+			// No framebuffer to display! Clear to black.
+			glstate.depthWrite.set(GL_TRUE);
+			glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glClearColor(0,0,0,1);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		}
 		return;
 	}
 
@@ -500,13 +520,12 @@ void FramebufferManager::BeginFrame() {
 }
 
 void FramebufferManager::SetDisplayFramebuffer(u32 framebuf, u32 stride, int format) {
-	if (framebuf & 0x04000000) {
-		//DEBUG_LOG(G3D, "Switch display framebuffer %08x", framebuf);
-		displayFramebufPtr_ = framebuf;
-		displayStride_ = stride;
-		displayFormat_ = format;
-	} else {
-		ERROR_LOG(HLE, "Bogus framebuffer address: %08x", framebuf);
+	displayFramebufPtr_ = framebuf;
+	displayStride_ = stride;
+	displayFormat_ = format;
+
+	if ((framebuf & 0x04000000) == 0) {
+		DEBUG_LOG(HLE, "Non-VRAM display framebuffer address set: %08x", framebuf);
 	}
 }
 
@@ -537,8 +556,9 @@ void FramebufferManager::DecimateFBOs() {
 			++iter;
 			continue;
 		}
-		if ((*iter)->last_frame_used + FBO_OLD_AGE < gpuStats.numFrames) {
-			INFO_LOG(HLE, "Destroying FBO for %08x (%i x %i x %i)", vfb->fb_address, vfb->width, vfb->height, vfb->format)
+		int age = gpuStats.numFrames - (*iter)->last_frame_used;
+		if (age > FBO_OLD_AGE) {
+			INFO_LOG(HLE, "Decimating FBO for %08x (%i x %i x %i), age %i", vfb->fb_address, vfb->width, vfb->height, vfb->format)
 			if (vfb->fbo) {
 				textureCache_->NotifyFramebufferDestroyed(vfb->fb_address, vfb);
 				fbo_destroy(vfb->fbo);
@@ -558,6 +578,7 @@ void FramebufferManager::DestroyAllFBOs() {
 		VirtualFramebuffer *vfb = *iter;
 		textureCache_->NotifyFramebufferDestroyed(vfb->fb_address, vfb);
 		if (vfb->fbo) {
+			INFO_LOG(HLE, "Destroying FBO for %08x : %i x %i x %i", vfb->fb_address, vfb->width, vfb->height, vfb->format);
 			fbo_destroy(vfb->fbo);
 			vfb->fbo = 0;
 		}

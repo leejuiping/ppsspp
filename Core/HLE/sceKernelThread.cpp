@@ -2025,7 +2025,7 @@ static void __KernelSleepThread(bool doCallbacks) {
 		DEBUG_LOG(HLE, "sceKernelSleepThread() - wakeupCount decremented to %i", thread->nt.wakeupCount);
 		RETURN(0);
 	} else {
-		VERBOSE_LOG(HLE, "sceKernelSleepThread()", thread->nt.wakeupCount);
+		VERBOSE_LOG(HLE, "sceKernelSleepThread()");
 		RETURN(0);
 		__KernelWaitCurThread(WAITTYPE_SLEEP, 0, 0, 0, doCallbacks, "thread slept");
 	}
@@ -2709,7 +2709,7 @@ void ActionAfterCallback::run(MipsCall &call) {
 // Returns true if any callbacks were processed on the current thread.
 bool __KernelCheckThreadCallbacks(Thread *thread, bool force)
 {
-	if (!thread->isProcessingCallbacks && !force)
+	if (!thread || (!thread->isProcessingCallbacks && !force))
 		return false;
 
 	for (int i = 0; i < THREAD_CALLBACK_NUM_TYPES; i++) {

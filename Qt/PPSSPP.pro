@@ -9,15 +9,15 @@ win32: QT += multimedia
 include(Settings.pri)
 
 # Libs
-symbian: LIBS += -lCore.lib -lCommon.lib -lNative.lib -lcone -leikcore -lavkon -lezlib
-blackberry: LIBS += -L. -lCore -lCommon -lNative -lscreen -lsocket -lstdc++
+symbian: LIBS += -lCore.lib -lCommon.lib -lNative.lib
+qnx: LIBS += -L. -lCore -lCommon -lNative -lscreen -lz
 win32 {
 	CONFIG(release, debug|release) {
 		LIBS += -L$$OUT_PWD/release
 	} else {
 		LIBS += -L$$OUT_PWD/debug
     }
-	LIBS += -lCore -lCommon -lNative -lwinmm -lws2_32 -lkernel32 -luser32 -lgdi32 -lshell32 -lcomctl32 -ldsound -lxinput
+	LIBS += -lCore -lCommon -lNative -lwinmm -lws2_32
 }
 linux: LIBS += -L. -lCore -lCommon -lNative
 
@@ -45,9 +45,7 @@ SOURCES += ../android/jni/EmuScreen.cpp \
 INCLUDEPATH += .. ../Common ../native
 
 # Temporarily only use new UI for Linux desktop
-mobile_platform {
-	SOURCES += ../android/jni/NativeApp.cpp
-} else {
+linux:!mobile_platform {
 	MOC_DIR = moc
 	UI_DIR = ui
 	RCC_DIR = rcc
@@ -56,6 +54,8 @@ mobile_platform {
 	FORMS += *.ui
 	RESOURCES += resources.qrc
 	INCLUDEPATH += ../Qt
+} else {
+	SOURCES += ../android/jni/NativeApp.cpp
 }
 
 # Translations

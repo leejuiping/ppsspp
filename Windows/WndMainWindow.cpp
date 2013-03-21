@@ -249,9 +249,6 @@ namespace MainWindow
 //			Update();
 			break;
 
-		case WM_LBUTTONDBLCLK:
-			MessageBox(0,"Fullscreen isn't implemented yet","Sorry",0);
-			break;
 		case WM_PAINT:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		default:
@@ -706,7 +703,7 @@ namespace MainWindow
 		EnableMenuItem(menu,ID_CPU_DYNAREC,enable);
 		EnableMenuItem(menu,ID_CPU_INTERPRETER,enable);
 		EnableMenuItem(menu,ID_EMULATION_STOP,!enable);
-		EnableMenuItem(menu,ID_OPTIONS_USEMEDIAENGINE,enable);
+		// EnableMenuItem(menu,ID_OPTIONS_USEMEDIAENGINE,enable);
 
 		const int zoomitems[4] = {
 			ID_OPTIONS_SCREEN1X,
@@ -747,6 +744,7 @@ namespace MainWindow
 	}
 
 	const char *controllist[] = {
+		"TURBO MODE\tHold TAB",
 		"Start\tEnter",
 		"Select\tSpace",
 		"Square\tA",

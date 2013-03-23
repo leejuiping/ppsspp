@@ -28,6 +28,7 @@ BEGIN
     PUSHBUTTON      "Step &Over",IDC_STEPOVER,219,0,40,14
     PUSHBUTTON      "S&kip",IDC_SKIP,265,0,23,14
     PUSHBUTTON      "Next &HLE",IDC_STEPHLE,294,0,40,14
+    PUSHBUTTON      "&Memcheck",IDC_MEMCHECK,340,0,40,14
     EDITTEXT        IDC_ADDRESS,11,24,91,13,ES_UPPERCASE | ES_AUTOHSCROLL
     PUSHBUTTON      "&PC",IDC_GOTOPC,11,40,15,13
     PUSHBUTTON      "&LR",IDC_GOTOLR,28,40,14,13
@@ -47,8 +48,8 @@ FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,243,140,50,14
     ICON            IDI_PPSSPP,IDC_STATIC,10,9,21,20
-    LTEXT           "PPSSPP v0.6.1",IDC_STATIC,40,8,127,9
-    LTEXT           "Copyright (c) by Henrik Rydgård && the PPSSPP project 2012-",IDC_STATIC,40,33,253,8
+    LTEXT           "PPSSPP v0.7.0",IDC_VERSION,40,8,127,9
+    LTEXT           "Copyright (c) by Henrik Rydgard && the PPSSPP project 2012-",IDC_STATIC,40,33,253,8
     LTEXT           "All trademarks are property of their respective owners.\nThe emulator is for educational and development purposes only and it may not be used to play games you do not legally own.",IDC_STATIC,40,102,253,24
     LTEXT           "PSP emulator and debugger",IDC_STATIC,40,19,253,8
     LTEXT           "CISO decompression code by BOOSTER",IDC_STATIC,48,73,240,8
@@ -222,7 +223,7 @@ BEGIN
         MENUITEM "&Run on load",                ID_EMULATION_RUNONLOAD
         MENUITEM SEPARATOR
         MENUITEM "&Interpreter",                ID_CPU_INTERPRETER
-        MENUITEM "&Dynarec",                    ID_CPU_DYNAREC, CHECKED
+        MENUITEM "&Dynarec (JIT)",                    ID_CPU_DYNAREC, CHECKED
     END
     POPUP "Debu&g"
     BEGIN
@@ -241,14 +242,15 @@ BEGIN
         MENUITEM "&Controls",                   ID_OPTIONS_CONTROLS
         MENUITEM SEPARATOR
         MENUITEM "&Toggle Full Screen\tF12",    ID_OPTIONS_FULLSCREEN
-        MENUITEM "&Buffered Rendering\tF5",     ID_OPTIONS_BUFFEREDRENDERING
         MENUITEM "&Stretch to display",         ID_OPTIONS_STRETCHDISPLAY
+        MENUITEM "&Buffered Rendering\tF5",     ID_OPTIONS_BUFFEREDRENDERING
         MENUITEM "&Hardware Transform\tF6",     ID_OPTIONS_HARDWARETRANSFORM
         MENUITEM "&Linear Filtering",           ID_OPTIONS_LINEARFILTERING
         MENUITEM "Si&mple 2x SSAA",             ID_OPTIONS_SIMPLE2XSSAA
         MENUITEM "&Use VBO",                    ID_OPTIONS_USEVBO
         MENUITEM "&Vertex Cache",               ID_OPTIONS_VERTEXCACHE
         MENUITEM "&Frame Skip",                 ID_OPTIONS_FRAMESKIP
+        MENUITEM "Use Media En&gine",           ID_OPTIONS_USEMEDIAENGINE
         MENUITEM SEPARATOR
         MENUITEM "&Wireframe (experimental)",   ID_OPTIONS_WIREFRAME
         MENUITEM "&Display Raw Framebuffer",    ID_OPTIONS_DISPLAYRAWFRAMEBUFFER

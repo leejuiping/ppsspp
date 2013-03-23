@@ -214,12 +214,7 @@ private:
 };
 
 Lighter::Lighter() {
-	disabled_ = false;
 	doShadeMapping_ = (gstate.texmapmode & 0x3) == 2;
-	if (!doShadeMapping_ && !(gstate.lightEnable[0]&1) && !(gstate.lightEnable[1]&1) && !(gstate.lightEnable[2]&1) && !(gstate.lightEnable[3]&1))
-	{
-		disabled_ = true;
-	}
 	materialEmissive.GetFromRGB(gstate.materialemissive);
 	materialEmissive.a = 0.0f;
 	globalAmbient.GetFromRGB(gstate.ambientcolor);
@@ -235,15 +230,8 @@ Lighter::Lighter() {
 	materialUpdate_ = gstate.materialupdate & 7;
 }
 
-void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[4], Vec3 pos, Vec3 normal, float dots[4])
+void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[4], Vec3 pos, Vec3 norm, float dots[4])
 {
-	if (disabled_) {
-		memcpy(colorOut0, colorIn, sizeof(float) * 4);
-		memset(colorOut1, 0, sizeof(float) * 4);
-		return;
-	}
-
-	Vec3 norm = normal.Normalized();
 	Color4 in(colorIn);
 
 	const Color4 *ambient;
@@ -275,8 +263,9 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 
 		GELightComputation comp = (GELightComputation)(gstate.ltype[l] & 3);
 		GELightType type = (GELightType)((gstate.ltype[l] >> 8) & 3);
-		Vec3 toLight;
-
+		
+		Vec3 toLight(0,0,0);
+		
 		if (type == GE_LIGHTTYPE_DIRECTIONAL)
 			toLight = Vec3(gstate_c.lightpos[l]);  // lightdir is for spotlights
 		else
@@ -284,9 +273,10 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 
 		bool doSpecular = (comp != GE_LIGHTCOMP_ONLYDIFFUSE);
 		bool poweredDiffuse = comp == GE_LIGHTCOMP_BOTHWITHPOWDIFFUSE;
-
+		
 		float distanceToLight = toLight.Length();
 		float dot = 0.0f;
+
 		if (distanceToLight > 0.0f)
 		{
 			toLight /= distanceToLight;
@@ -495,7 +485,8 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 		} else {
 			// We do software T&L for now
 			float out[3], norm[3];
-			float pos[3], nrm[3] = {0};
+			float pos[3], nrm[3];
+			Vec3 normal(0, 0, 0);
 			reader.ReadPos(pos);
 			if (reader.hasNormal())
 				reader.ReadNrm(nrm);
@@ -504,8 +495,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 				Vec3ByMatrix43(out, pos, gstate.worldMatrix);
 				if (reader.hasNormal()) {
 					Norm3ByMatrix43(norm, nrm, gstate.worldMatrix);
-				} else {
-					memset(norm, 0, 12);
+					normal = Vec3(norm).Normalized();
 				}
 			} else {
 				float weights[8];
@@ -532,6 +522,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 				Vec3ByMatrix43(out, psum.v, gstate.worldMatrix);
 				if (reader.hasNormal()) {
 					Norm3ByMatrix43(norm, nsum.v, gstate.worldMatrix);
+					normal = Vec3(norm).Normalized();
 				}
 			}
 
@@ -548,7 +539,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 			}
 			float litColor0[4];
 			float litColor1[4];
-			lighter.Light(litColor0, litColor1, unlitColor, out, norm, dots);
+			lighter.Light(litColor0, litColor1, unlitColor, out, normal, dots);
 
 			if (gstate.lightingEnable & 1) {
 				// Don't ignore gstate.lmode - we should send two colors in that case
@@ -641,8 +632,8 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 		memcpy(&transformed[index].u, uv, 2 * sizeof(float));
 		if (gstate_c.flipTexture) {
 			if (throughmode)
-				transformed[index].v = (float)gstate_c.actualTextureHeight / gstate_c.curTextureHeight - transformed[index].v;
-			else
+				transformed[index].v = 1.0f - transformed[index].v;
+			else 
 				transformed[index].v = 1.0f - transformed[index].v * 2.0f;
 		}
 		for (int i = 0; i < 4; i++) {
@@ -937,7 +928,6 @@ void TransformDrawEngine::Flush() {
 
 	int prim = prevPrim_;
 	ApplyDrawState(prim);
-	UpdateViewportAndProjection();
 
 	LinkedShader *program = shaderManager_->ApplyShader(prim);
 

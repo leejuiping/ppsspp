@@ -6,6 +6,7 @@
 //
 
 #import "ViewController.h"
+#import "AudioEngine.h"
 #import <GLKit/GLKit.h>
 
 #include "base/display.h"
@@ -41,11 +42,12 @@ ViewController* sharedViewController;
 @property (nonatomic,retain) NSString* documentsPath;
 @property (nonatomic,retain) NSString* bundlePath;
 @property (nonatomic,retain) NSMutableArray* touches;
+@property (nonatomic,retain) AudioEngine* audioEngine;
 
 @end
 
 @implementation ViewController
-@synthesize documentsPath,bundlePath,touches;
+@synthesize documentsPath,bundlePath,touches,audioEngine;
 
 - (id)init
 {
@@ -80,6 +82,7 @@ ViewController* sharedViewController;
 	view.context = self.context;
 	view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
 	[EAGLContext setCurrentContext:self.context];
+	self.preferredFramesPerSecond = 60;
 
 	float scale = [UIScreen mainScreen].scale;
 	CGSize size = [[UIApplication sharedApplication].delegate window].frame.size;
@@ -103,7 +106,9 @@ ViewController* sharedViewController;
 
 	dp_xscale = (float)dp_xres / (float)pixel_xres;
 	dp_yscale = (float)dp_yres / (float)pixel_yres;
-
+    
+    if (g_Config.bEnableSound)
+        self.audioEngine = [[[AudioEngine alloc] init] autorelease];
 /*
 	UISwipeGestureRecognizer* gesture = [[[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(swipeGesture:)] autorelease];
 	[self.view addGestureRecognizer:gesture];
@@ -128,7 +133,8 @@ ViewController* sharedViewController;
 - (void)dealloc
 {
 	[self viewDidUnload];
-
+    
+    self.audioEngine = nil;
 	self.touches = nil;
 	self.documentsPath = nil;
 	self.bundlePath = nil;
@@ -137,9 +143,16 @@ ViewController* sharedViewController;
 	[super dealloc];
 }
 
+// For iOS before 6.0
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation
 {
-	return YES;
+	return UIInterfaceOrientationIsLandscape(toInterfaceOrientation);
+}
+
+// For iOS 6.0 and up
+- (NSUInteger)supportedInterfaceOrientations
+{
+	return UIInterfaceOrientationMaskLandscape;
 }
 
 //static BOOL menuDown = NO;

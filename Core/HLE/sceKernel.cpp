@@ -20,6 +20,7 @@
 #include "../MIPS/MIPSCodeUtils.h"
 #include "../MIPS/MIPSInt.h"
 
+#include "Common/LogManager.h"
 #include "../FileSystems/FileSystem.h"
 #include "../FileSystems/MetaFileSystem.h"
 #include "../PSPLoaders.h"
@@ -28,7 +29,6 @@
 #include "../../Core/System.h"
 #include "../../GPU/GPUInterface.h"
 #include "../../GPU/GPUState.h"
-
 
 #include "__sceAudio.h"
 #include "sceAtrac.h"
@@ -128,6 +128,7 @@ void __KernelShutdown()
 	}
 	kernelObjects.List();
 	INFO_LOG(HLE, "Shutting down kernel - %i kernel objects alive", kernelObjects.GetCount());
+	hleCurrentThreadName = NULL;
 	kernelObjects.Clear();
 
 	__FontShutdown();
@@ -286,6 +287,13 @@ int sceKernelDcacheInvalidateRange(u32 addr, int size)
 	}
 	return 0;
 }
+
+int sceKernelIcacheInvalidateRange(u32 addr, int size) {
+	DEBUG_LOG(HLE,"sceKernelIcacheInvalidateRange(%08x, %i)", addr, size);
+	// TODO: Make the JIT hash and compare the touched blocks.
+	return 0;
+}
+
 int sceKernelDcacheWritebackAll()
 {
 #ifdef LOG_CACHE
@@ -296,6 +304,7 @@ int sceKernelDcacheWritebackAll()
 	gpu->InvalidateCacheHint(0, -1);
 	return 0;
 }
+
 int sceKernelDcacheWritebackRange(u32 addr, int size)
 {
 #ifdef LOG_CACHE
@@ -442,7 +451,10 @@ void KernelObjectPool::DoState(PointerWrap &p)
 		ERROR_LOG(HLE, "Unable to load state: different kernel object storage.");
 
 	if (p.mode == p.MODE_READ)
+	{
+		hleCurrentThreadName = NULL;
 		kernelObjects.Clear();
+	}
 
 	p.DoArray(occupied, maxCount);
 	for (int i = 0; i < maxCount; ++i)

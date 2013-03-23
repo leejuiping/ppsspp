@@ -50,7 +50,9 @@
 #include "MenuScreens.h"
 #include "UIShader.h"
 
+#ifdef ARM
 #include "ArmEmitterTest.h"
+#endif
 
 Texture *uiTexture;
 
@@ -65,6 +67,7 @@ public:
 	{
 		switch (level)
 		{
+		case LogTypes::LVERBOSE:
 		case LogTypes::LDEBUG:
 		case LogTypes::LINFO:
 			ILOG("%s", msg);
@@ -99,7 +102,7 @@ public:
 
 	virtual void SetDebugMode(bool mode) { }
 
-	virtual bool InitGL(std::string *error_message) {}
+	virtual bool InitGL(std::string *error_message) { return true; }
 	virtual void BeginFrame() {}
 	virtual void ShutdownGL() {}
 
@@ -148,13 +151,20 @@ void NativeMix(short *audio, int num_samples)
 	}
 }
 
+int NativeMixCount(short *audio, int num_samples)
+{
+	if (g_mixer)
+		return g_mixer->Mix(audio, num_samples);
+	return 0;
+}
+
 void NativeGetAppInfo(std::string *app_dir_name, std::string *app_nice_name, bool *landscape)
 {
 	*app_nice_name = "PPSSPP";
 	*app_dir_name = "ppsspp";
 	*landscape = true;
 
-#if defined(ANDROID)
+#if defined(ARM) && defined(ANDROID)
 	ArmEmitterTest();
 #endif
 }
@@ -170,6 +180,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	VFSRegister("", new DirectoryAssetReader("app/native/assets/"));
 #elif defined(IOS)
 	VFSRegister("", new DirectoryAssetReader(external_directory));
+	user_data_path += "/";
 #else
 	VFSRegister("", new DirectoryAssetReader("assets/"));
 #endif
@@ -237,7 +248,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	if (g_Config.currentDirectory == "") {
 #if defined(ANDROID)
 		g_Config.currentDirectory = external_directory;
-#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS)
+#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS) || defined(_WIN32)
 		g_Config.currentDirectory = savegame_directory;
 #else
 		g_Config.currentDirectory = getenv("HOME");
@@ -250,9 +261,15 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	// most sense.
 	g_Config.memCardDirectory = std::string(external_directory) + "/";
 	g_Config.flashDirectory = std::string(external_directory)+"/flash/";
-#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS)
+#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS) || defined(_WIN32)
 	g_Config.memCardDirectory = user_data_path;
+#ifdef BLACKBERRY
+	g_Config.flashDirectory = "app/native/assets/flash/";
+#elif IOS
+	g_Config.flashDirectory = std::string(external_directory) + "flash0/";
+#else
 	g_Config.flashDirectory = user_data_path+"/flash/";
+#endif
 #else
 	g_Config.memCardDirectory = std::string(getenv("HOME"))+"/.ppsspp/";
 	g_Config.flashDirectory = g_Config.memCardDirectory+"/flash/";
@@ -270,7 +287,6 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 #ifdef __SYMBIAN32__
 	g_Config.bHardwareTransform = true;
 	g_Config.bUseVBO = false;
-	g_Config.bVertexCache = false;
 #endif
 	// Special hack for G3D as it's very spammy. Need to make a flag for this.
 	if (!gfxLog)

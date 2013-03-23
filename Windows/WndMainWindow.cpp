@@ -2,34 +2,34 @@
 
 #include <windows.h>
 #include <tchar.h>
-#include "../globals.h"
+#include "Globals.h"
 
 #include "shellapi.h"
 #include "commctrl.h"
 
-#include "../Core/Debugger/SymbolMap.h"
-#include "OpenGLBase.h"
-#include "Debugger/Debugger_Disasm.h"
-#include "Debugger/Debugger_MemoryDlg.h"
+#include "Core/Debugger/SymbolMap.h"
+#include "Windows/OpenGLBase.h"
+#include "Windows/Debugger/Debugger_Disasm.h"
+#include "Windows/Debugger/Debugger_MemoryDlg.h"
 #include "main.h"
 
-#include "../Core/Core.h"
-#include "../Core/MemMap.h"
-#include "../Core/SaveState.h"
-#include "../Core/System.h"
-#include "EmuThread.h"
+#include "Core/Core.h"
+#include "Core/MemMap.h"
+#include "Core/SaveState.h"
+#include "Core/System.h"
+#include "Core/Config.h"
+#include "Windows/EmuThread.h"
 
 #include "resource.h"
 
-#include "WndMainWindow.h"
-#include "LogManager.h"
-#include "ConsoleListener.h"
-#include "W32Util/DialogManager.h"
-#include "W32Util/ShellUtil.h"
-#include "W32Util/Misc.h"
-#include "../Core/Config.h"
-#include "../GPU/GPUInterface.h"
-#include "../GPU/GPUState.h"
+#include "Windows/WndMainWindow.h"
+#include "Common/LogManager.h"
+#include "Common/ConsoleListener.h"
+#include "Windows/W32Util/DialogManager.h"
+#include "Windows/W32Util/ShellUtil.h"
+#include "Windows/W32Util/Misc.h"
+#include "GPU/GPUInterface.h"
+#include "GPU/GPUState.h"
 
 #ifdef THEMES
 #include "XPTheme.h"
@@ -55,7 +55,7 @@ namespace MainWindow
 	TCHAR *szWindowClass = TEXT("PPSSPPWnd");
 	TCHAR *szDisplayClass = TEXT("PPSSPPDisplay");
 
-	// Foward declarations of functions included in this code module:
+	// Forward declarations of functions included in this code module:
 	LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 	LRESULT CALLBACK DisplayProc(HWND, UINT, WPARAM, LPARAM);
 	LRESULT CALLBACK About(HWND, UINT, WPARAM, LPARAM);
@@ -249,9 +249,6 @@ namespace MainWindow
 //			Update();
 			break;
 
-		case WM_LBUTTONDBLCLK:
-			MessageBox(0,"Fullscreen isn't implemented yet","Sorry",0);
-			break;
 		case WM_PAINT:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		default:
@@ -424,6 +421,11 @@ namespace MainWindow
 
 			case ID_OPTIONS_FRAMESKIP:
 				g_Config.iFrameSkip = !g_Config.iFrameSkip;
+				UpdateMenus();
+				break;
+
+			case ID_OPTIONS_USEMEDIAENGINE:
+				g_Config.bUseMediaEngine = !g_Config.bUseMediaEngine;
 				UpdateMenus();
 				break;
 
@@ -685,6 +687,7 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_VERTEXCACHE, g_Config.bVertexCache);
 		CHECKITEM(ID_OPTIONS_SHOWFPS, g_Config.bShowFPSCounter);
 		CHECKITEM(ID_OPTIONS_FRAMESKIP, g_Config.iFrameSkip != 0);
+		CHECKITEM(ID_OPTIONS_USEMEDIAENGINE, g_Config.bUseMediaEngine);
 
 		UINT enable = !Core_IsStepping() ? MF_GRAYED : MF_ENABLED;
 		EnableMenuItem(menu,ID_EMULATION_RUN, g_State.bEmuThreadStarted ? enable : MF_GRAYED);
@@ -699,11 +702,8 @@ namespace MainWindow
 		EnableMenuItem(menu,ID_FILE_QUICKLOADSTATE,!enable);
 		EnableMenuItem(menu,ID_CPU_DYNAREC,enable);
 		EnableMenuItem(menu,ID_CPU_INTERPRETER,enable);
-		EnableMenuItem(menu,ID_DVD_INSERTISO,enable);
-		EnableMenuItem(menu,ID_FILE_BOOTBIOS,enable);
 		EnableMenuItem(menu,ID_EMULATION_STOP,!enable);
-		EnableMenuItem(menu,ID_OPTIONS_SETTINGS,enable);
-		EnableMenuItem(menu,ID_PLUGINS_CHOOSEPLUGINS,enable);
+		// EnableMenuItem(menu,ID_OPTIONS_USEMEDIAENGINE,enable);
 
 		const int zoomitems[4] = {
 			ID_OPTIONS_SCREEN1X,
@@ -724,6 +724,12 @@ namespace MainWindow
 		{
 		case WM_INITDIALOG:
 			W32Util::CenterWindow(hDlg);
+			{
+				HWND versionBox = GetDlgItem(hDlg, IDC_VERSION);
+				char temp[256];
+				sprintf(temp, "PPSSPP %s", PPSSPP_GIT_VERSION);
+				SetWindowText(versionBox, temp);
+			}
 			return TRUE;
 
 		case WM_COMMAND:
@@ -738,6 +744,7 @@ namespace MainWindow
 	}
 
 	const char *controllist[] = {
+		"TURBO MODE\tHold TAB",
 		"Start\tEnter",
 		"Select\tSpace",
 		"Square\tA",

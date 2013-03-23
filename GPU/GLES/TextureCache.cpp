@@ -145,9 +145,8 @@ void TextureCache::NotifyFramebuffer(u32 address, VirtualFramebuffer *framebuffe
 
 void TextureCache::NotifyFramebufferDestroyed(u32 address, VirtualFramebuffer *fbo) {
 	TexCacheEntry *entry = GetEntryAt(address | 0x04000000);
-	if (entry && entry->framebuffer) {
+	if (entry)
 		entry->framebuffer = 0;
-	}
 }
 
 static u32 GetClutAddr(u32 clutEntrySize) {
@@ -700,16 +699,20 @@ void TextureCache::SetTexture() {
 	if (iter != cache.end()) {
 		entry = &iter->second;
 		// Check for FBO - slow!
-		if (g_Config.bBufferedRendering && entry->framebuffer) {
+		if (entry->framebuffer) {
 			entry->framebuffer->usageFlags |= FB_USAGE_TEXTURE;
-			if (entry->framebuffer->fbo){
-				fbo_bind_color_as_texture(entry->framebuffer->fbo, 0);
-			} else {
+			if (!g_Config.bBufferedRendering) {
 				glBindTexture(GL_TEXTURE_2D, 0);
-				gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
+				entry->lastFrame = gpuStats.numFrames;
+			} else {
+				if (entry->framebuffer->fbo) {
+					fbo_bind_color_as_texture(entry->framebuffer->fbo, 0);
+				} else {
+					glBindTexture(GL_TEXTURE_2D, 0);
+					gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
+				}
+				UpdateSamplingParams(*entry, false);
 			}
-
-			UpdateSamplingParams(*entry, false);
 
 			// This isn't right.
 			gstate_c.curTextureWidth = entry->framebuffer->width;

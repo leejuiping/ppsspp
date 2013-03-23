@@ -26,6 +26,9 @@
 #include <e32debug.h>
 #endif
 
+// Don't need to savestate this.
+const char *hleCurrentThreadName = NULL;
+
 // Unfortunately this is quite slow.
 #define LOG_MSC_OUTPUTDEBUG false
 // #define LOG_MSC_OUTPUTDEBUG true
@@ -69,7 +72,7 @@ LogManager::LogManager()
 	m_Log[LogTypes::ME]         = new LogContainer("ME",      "Media Engine");
 
 	// Remove file logging on small devices
-#ifndef USING_GLES2
+#if !defined(USING_GLES2) || defined(_DEBUG)
 	m_fileLog = new FileLogListener(File::GetUserPath(F_MAINLOG_IDX).c_str());
 	m_consoleLog = new ConsoleListener();
 	m_debuggerLog = new DebuggerLogListener();
@@ -82,7 +85,7 @@ LogManager::LogManager()
 	for (int i = 0; i < LogTypes::NUMBER_OF_LOGS; ++i)
 	{
 		m_Log[i]->SetEnable(true);
-#ifndef USING_GLES2
+#if !defined(USING_GLES2) || defined(_DEBUG)
 		m_Log[i]->AddListener(m_fileLog);
 		m_Log[i]->AddListener(m_consoleLog);
 #ifdef _MSC_VER
@@ -97,7 +100,7 @@ LogManager::~LogManager()
 {
 	for (int i = 0; i < LogTypes::NUMBER_OF_LOGS; ++i)
 	{
-#ifndef USING_GLES2
+#if !defined(USING_GLES2) || defined(_DEBUG)
 		if (m_fileLog != NULL)
 			m_logManager->RemoveListener((LogTypes::LOG_TYPE)i, m_fileLog);
 		m_logManager->RemoveListener((LogTypes::LOG_TYPE)i, m_consoleLog);
@@ -111,7 +114,7 @@ LogManager::~LogManager()
 		delete m_Log[i];
 	if (m_fileLog != NULL)
 		delete m_fileLog;
-#ifndef USING_GLES2
+#if !defined(USING_GLES2) || defined(_DEBUG)
 	delete m_consoleLog;
 	delete m_debuggerLog;
 #endif
@@ -165,15 +168,42 @@ void LogManager::Log(LogTypes::LOG_LEVELS level, LogTypes::LOG_TYPE type, const 
 	if (!log || !log->IsEnabled() || level > log->GetLevel() || ! log->HasListeners())
 		return;
 
-	static const char level_to_char[7] = "-NEWID";
+	static const char level_to_char[8] = "-NEWIDV";
 	char formattedTime[13];
 	Common::Timer::GetTimeFormatted(formattedTime);
 
+#ifdef _DEBUG
+#ifdef _WIN32
+	static const char sep = '\\';
+#else
+	static const char sep = '/';
+#endif
+	const char *fileshort = strrchr(file, sep);
+	if (fileshort != NULL) {
+		do
+			--fileshort;
+		while (fileshort > file && *fileshort != sep);
+		if (fileshort != file)
+			file = fileshort + 1;
+	}
+#endif
+
 	char *msgPos = msg;
-	msgPos += sprintf(msgPos, "%s %s:%d %c[%s]: ",
-		formattedTime,
-		file, line, level_to_char[(int)level],
-		log->GetShortName());
+	if (hleCurrentThreadName != NULL)
+	{
+		msgPos += sprintf(msgPos, "%s %-12.12s %c[%s]: %s:%d ",
+			formattedTime,
+			hleCurrentThreadName, level_to_char[(int)level],
+			log->GetShortName(),
+			file, line);
+	}
+	else
+	{
+		msgPos += sprintf(msgPos, "%s %s:%d %c[%s]: ",
+			formattedTime,
+			file, line, level_to_char[(int)level],
+			log->GetShortName());
+	}
 
 	msgPos += vsnprintf(msgPos, MAX_MSGLEN, format, args);
 	// This will include the null terminator.

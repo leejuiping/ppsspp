@@ -95,6 +95,8 @@ static double curFrameTime;
 static double nextFrameTime;
 
 static u64 frameStartTicks;
+const float hCountPerVblank = 285.72f; // insprired by jpcsp
+
 
 std::vector<WaitVBlankInfo> vblankWaitingThreads;
 
@@ -529,7 +531,7 @@ u32 sceDisplayGetFramebuf(u32 topaddrPtr, u32 linesizePtr, u32 pixelFormatPtr, i
 }
 
 u32 sceDisplayWaitVblankStart() {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStart()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStart()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank start waited");
 	return 0;
@@ -537,19 +539,19 @@ u32 sceDisplayWaitVblankStart() {
 
 u32 sceDisplayWaitVblank() {
 	if (!isVblank) {
-		DEBUG_LOG(HLE,"sceDisplayWaitVblank()");
+		VERBOSE_LOG(HLE,"sceDisplayWaitVblank()");
 		vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 		__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank waited");
 		return 0;
 	} else {
 		DEBUG_LOG(HLE,"sceDisplayWaitVblank() - not waiting since in vBlank");
-		hleEatMicro(5);
+		hleEatCycles(5 * 222);
 		return 1;
 	}
 }
 
 u32 sceDisplayWaitVblankStartMulti(int vblanks) {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartMulti()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStartMulti()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread(), vblanks));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, false, "vblank start multi waited");
 	return 0;
@@ -557,41 +559,40 @@ u32 sceDisplayWaitVblankStartMulti(int vblanks) {
 
 u32 sceDisplayWaitVblankCB() {
 	if (!isVblank) {
-		DEBUG_LOG(HLE,"sceDisplayWaitVblankCB()");
+		VERBOSE_LOG(HLE,"sceDisplayWaitVblankCB()");
 		vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 		__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank waited");
 		return 0;
 	} else {
 		DEBUG_LOG(HLE,"sceDisplayWaitVblank() - not waiting since in vBlank");
-		hleEatMicro(5);
+		hleEatCycles(5 * 222);
 		return 1;
 	}
 }
 
 u32 sceDisplayWaitVblankStartCB() {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartCB()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStartCB()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread()));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank start waited");
 	return 0;
 }
 
 u32 sceDisplayWaitVblankStartMultiCB(int vblanks) {
-	DEBUG_LOG(HLE,"sceDisplayWaitVblankStartMultiCB()");
+	VERBOSE_LOG(HLE,"sceDisplayWaitVblankStartMultiCB()");
 	vblankWaitingThreads.push_back(WaitVBlankInfo(__KernelGetCurThread(), vblanks));
 	__KernelWaitCurThread(WAITTYPE_VBLANK, 0, 0, 0, true, "vblank start multi waited");
 	return 0;
 }
 
 u32 sceDisplayGetVcount() {
-	// Too spammy
-	// DEBUG_LOG(HLE,"%i=sceDisplayGetVcount()", vCount);
+	VERBOSE_LOG(HLE,"%i=sceDisplayGetVcount()", vCount);
 
-	hleEatMicro(2);
+	hleEatCycles(2 * 222);
 	return vCount;
 }
 
 u32 sceDisplayGetCurrentHcount() {
-	u32 currentHCount = (CoreTiming::GetTicks() - frameStartTicks) / ((u64)CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / 272);
+	u32 currentHCount = (CoreTiming::GetTicks() - frameStartTicks) / ((u64)CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / hCountPerVblank);
 	DEBUG_LOG(HLE,"%i=sceDisplayGetCurrentHcount()", currentHCount);
 	return currentHCount;
 }
@@ -602,8 +603,7 @@ u32 sceDisplayAdjustAccumulatedHcount() {
 }
 
 u32 sceDisplayGetAccumulatedHcount() {
-	float hCountPerVblank = 285.72f; // insprired by jpcsp
-	u32 currentHCount = (CoreTiming::GetTicks() - frameStartTicks) / ((u64)CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / 272);
+	u32 currentHCount = (CoreTiming::GetTicks() - frameStartTicks) / ((u64)CoreTiming::GetClockFrequencyMHz() * 1000000 / 60 / hCountPerVblank);
 	u32 accumHCount = currentHCount + (u32) (vCount * hCountPerVblank);
 	DEBUG_LOG(HLE,"%i=sceDisplayGetAccumulatedHcount()", accumHCount);
 	return accumHCount;
@@ -621,7 +621,7 @@ u32 sceDisplayIsForeground() {
 }
 
 u32 sceDisplayGetMode(u32 modeAddr, u32 widthAddr, u32 heightAddr) {
-	DEBUG_LOG(HLE,"sceDisplayGetMode()", modeAddr, widthAddr, heightAddr);
+	DEBUG_LOG(HLE,"sceDisplayGetMode(%08x, %08x, %08x)", modeAddr, widthAddr, heightAddr);
 	if (Memory::IsValidAddress(modeAddr))
 		Memory::Write_U32(mode, modeAddr);
 	if (Memory::IsValidAddress(widthAddr))

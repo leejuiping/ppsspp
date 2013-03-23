@@ -27,8 +27,9 @@
 #include "sceKernel.h"
 #include "sceUtility.h"
 
-#define ATRAC_ERROR_API_FAIL		0x80630002
-#define ATRAC_ERROR_ALL_DATA_DECODED	0x80630024
+#define ATRAC_ERROR_API_FAIL                 0x80630002
+#define ATRAC_ERROR_ALL_DATA_DECODED         0x80630024
+#define ATRAC_ERROR_SECOND_BUFFER_NOT_NEEDED 0x80630022
 
 #define AT3_MAGIC		0x0270
 #define AT3_PLUS_MAGIC		0xFFFE
@@ -73,19 +74,20 @@ struct Atrac {
 };
 
 std::map<int, Atrac *> atracMap;
+u8 nextAtracID;
 
-void __AtracInit()
-{
+void __AtracInit() {
+	nextAtracID = 0;
 }
 
 void __AtracDoState(PointerWrap &p) {
 	p.Do(atracMap);
+	p.Do(nextAtracID);
 
 	p.DoMarker("sceAtrac");
 }
 
-void __AtracShutdown()
-{
+void __AtracShutdown() {
 	for (auto it = atracMap.begin(), end = atracMap.end(); it != end; ++it) {
 		delete it->second;
 	}
@@ -100,7 +102,7 @@ Atrac *getAtrac(int atracID) {
 }
 
 int createAtrac(Atrac *atrac) {
-	int id = (int) atracMap.size();
+	int id = nextAtracID++;
 	atracMap[id] = atrac;
 	return id;
 }
@@ -132,6 +134,11 @@ void Atrac::Analyze()
 		ERROR_LOG(HLE, "Atrac buffer very small: %d", first.size);
 		return;
 	}
+	if (!Memory::IsValidAddress(first.addr))
+	{
+		WARN_LOG(HLE, "Atrac buffer at invalid address: %08x-%08x", first.addr, first.size);
+		return;
+	}
 
 	// TODO: Validate stuff.
 
@@ -141,6 +148,12 @@ void Atrac::Analyze()
 	u32 offset = 12;
 	while (first.size > offset + 8)
 	{
+		if (!Memory::IsValidAddress(first.addr + offset))
+		{
+			ERROR_LOG(HLE, "Atrac buffer %08x-%08x not valid at %08x", first.addr, first.addr + first.size, first.addr + offset);
+			return;
+		}
+
 		u32 magic = Memory::Read_U32(first.addr + offset);
 		u32 size = Memory::Read_U32(first.addr + offset + 4);
 		offset += 8;
@@ -371,9 +384,10 @@ u32 sceAtracGetSecondBufferInfo(int atracID, u32 outposAddr, u32 outBytesAddr)
 	if (!atrac) {
 		//return -1;
 	}
-	Memory::Write_U32(0, outposAddr); // outpos
-	Memory::Write_U32(0x10000, outBytesAddr); // outBytes
-	return 0;
+	Memory::Write_U32(0, outposAddr);
+	Memory::Write_U32(0x10000, outBytesAddr);
+	// TODO: Maybe don't write the above?
+	return ATRAC_ERROR_SECOND_BUFFER_NOT_NEEDED;
 }
 
 u32 sceAtracGetSoundSample(int atracID, u32 outEndSampleAddr, u32 outLoopStartSampleAddr, u32 outLoopEndSampleAddr)

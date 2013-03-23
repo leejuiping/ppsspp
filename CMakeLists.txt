@@ -12,6 +12,12 @@ if (IOS)
 	set(ARM ON)
 endif()
 
+if (MAEMO)
+	set(ARM ON)
+	#Maemo's gcc-4.7.2 is strickt
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive")
+endif()
+
 if(BLACKBERRY)
 	set(ARM ON)
 endif()
@@ -26,7 +32,7 @@ else() # Assume x86
 	set(X86 ON)
 endif()
 
-if(ANDROID OR BLACKBERRY OR IOS OR PANDORA)
+if(ANDROID OR BLACKBERRY OR IOS OR PANDORA OR MAEMO)
 	set(HEADLESS OFF)
 elseif(NOT DEFINED HEADLESS)
 	set(HEADLESS ON)
@@ -39,6 +45,7 @@ option(X86 "Set to ON if targeting an X86 processor" ${X86})
 option(ANDROID "Set to ON if targeting an Android device" ${ANDROID})
 option(BLACKBERRY "Set to ON if targeting a Blackberry device" ${BLACKBERRY})
 option(PANDORA "Set to ON if targeting an OpenPandora device" ${PANDORA})
+option(MAEMO "Set to ON if targeting an Maemo (N900) device" ${MAEMO})
 option(IOS "Set to ON if targeting an iOS device" ${IOS})
 option(USING_GLES2 "Set to ON if target device uses OpenGL ES 2.0" ${USING_GLES2})
 option(USING_QT_UI "Set to ON if you wish to use the Qt frontend wrapper" ${USING_QT_UI})
@@ -97,6 +104,10 @@ endif()
 
 if(IOS)
 	add_definitions(-DIOS)
+endif()
+
+if(MAEMO)
+	add_definitions(-DMAEMO)
 endif()
 
 if(PANDORA)
@@ -428,8 +439,10 @@ elseif(IOS)
 		ios/AppDelegate.m
 		ios/AppDelegate.h
 		ios/ViewController.mm
-		ios/ViewController.h)
-	set(nativeExtraLibs ${nativeExtraLibs} "-framework Foundation -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework UIKit -framework GLKit")
+		ios/ViewController.h
+        ios/AudioEngine.mm
+        ios/AudioEngine.h)
+	set(nativeExtraLibs ${nativeExtraLibs} "-framework Foundation -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework UIKit -framework GLKit -framework AudioToolbox -framework OpenAL")
 	set(TargetBin PPSSPP)
 elseif(USING_QT_UI)
 	# Currently unused
@@ -451,7 +464,7 @@ elseif(SDL_FOUND)
 	if(APPLE)
 		set(nativeExtra ${nativeExtra} SDL/SDLMain.h SDL/SDLMain.mm)
 		set(nativeExtraLibs ${nativeExtraLibs} ${COCOA_LIBRARY})
-	elseif(PANDORA)
+	elseif(PANDORA OR MAEMO)
 		set(nativeExtraLibs ${nativeExtraLibs} pthread EGL X11)
 	endif()
 	set(TargetBin PPSSPPSDL)
@@ -717,6 +730,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceDisplay.h
 	Core/HLE/sceDmac.cpp
 	Core/HLE/sceDmac.h
+	Core/HLE/sceGameUpdate.cpp
+	Core/HLE/sceGameUpdate.h
 	Core/HLE/sceGe.cpp
 	Core/HLE/sceGe.h
 	Core/HLE/sceFont.cpp
@@ -761,6 +776,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceNet.h
 	Core/HLE/sceOpenPSID.cpp
 	Core/HLE/sceOpenPSID.h
+	Core/HLE/sceP3da.cpp
+	Core/HLE/sceP3da.h
 	Core/HLE/sceParseHttp.cpp
 	Core/HLE/sceParseHttp.h
 	Core/HLE/sceParseUri.cpp
@@ -998,13 +1015,45 @@ file(INSTALL ${NativeAssets} DESTINATION assets)
 
 # packaging and code signing
 if (IOS)
+	# Fix CMake breaking optimization settings.
+	set(CMAKE_CXX_FLAGS_DEBUG "-g -D_DEBUG")
+	set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -D_NDEBUG")
+	set(CMAKE_CXX_FLAGS_RELEASE "-O2 -D_NDEBUG")
+	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -D_NDEBUG")
+	set(CMAKE_C_FLAGS_DEBUG "-g -D_DEBUG")
+	set(CMAKE_C_FLAGS_MINSIZEREL "-Os -D_NDEBUG")
+	set(CMAKE_C_FLAGS_RELEASE "-O2 -D_NDEBUG")
+	set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -g -D_NDEBUG")
+
+	# These can be fast.
+	set_target_properties(cityhash PROPERTIES COMPILE_FLAGS "-O3")
+	set_target_properties(zlib PROPERTIES COMPILE_FLAGS "-O3")
+
+	add_dependencies(PPSSPP ${CoreLibName} GPU Common native)
+
+	file(GLOB IOSAssets ios/assets/*.png)
+	file(INSTALL ${IOSAssets} DESTINATION assets)
+	file(INSTALL flash0 DESTINATION assets)
+	if (IOS_DEBUG)
+		file(INSTALL pspautotests DESTINATION assets)
+	endif()
 	set(RSRC_XIB_FILES assets/Icon@2x.png)
-	SET_SOURCE_FILES_PROPERTIES(${RSRC_XIB_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+	set_source_files_properties(${RSRC_XIB_FILES}
+		PROPERTIES MACOSX_PACKAGE_LOCATION Resources
+	)
 	set(APP_DIR_NAME \${TARGET_BUILD_DIR}/\${FULL_PRODUCT_NAME})
 	add_custom_command(TARGET PPSSPP POST_BUILD
-		COMMAND tar -c -C . --exclude .DS_Store --exclude .git -H `find assets` | tar -x -C ${APP_DIR_NAME}
+		COMMAND tar -c -C . --exclude .DS_Store --exclude .git -H assets | tar -x -C '${APP_DIR_NAME}'
 	)
-	set_target_properties(${TargetBin} PROPERTIES MACOSX_BUNDLE_INFO_PLIST "../ios/PPSSPP-Info.plist" XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "iPhone Developer: My Name")
+	# Force Xcode to relink the binary.
+	add_custom_command(TARGET Core PRE_BUILD
+		WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+		COMMAND rm -f PPSSPP.build/{Debug,Release,MinSizeRel,RelWithDebInfo}-iphoneos/PPSSPP.build/Objects-normal/*/PPSSPP {Debug,Release,MinSizeRel,RelWithDebInfo}-iphoneos/PPSSPP.app/PPSSPP
+	)
+	set_target_properties(${TargetBin} PROPERTIES
+		MACOSX_BUNDLE_INFO_PLIST "../ios/PPSSPP-Info.plist"
+		XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "iPhone/iPad"
+	)
 endif()
 
 #include(CPack)

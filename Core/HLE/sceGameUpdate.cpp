@@ -15,28 +15,42 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "MediaEngine.h"
-#include "../MemMap.h"
-
-static const int modeBpp[4] = { 2, 2, 2, 4 };
+#include "HLE.h"
 
 
-void MediaEngine::writeVideoImage(u32 bufferPtr, int frameWidth, int videoPixelMode)
+u32 sceGameUpdateInit()
 {
-	if (videoPixelMode > (sizeof(modeBpp) / sizeof(modeBpp[0])) || videoPixelMode < 0)
-	{
-		ERROR_LOG(ME, "Unexpected videoPixelMode %d, using 0 instead.", videoPixelMode);
-		videoPixelMode = 0;
-	}
-
-	int bpp = modeBpp[videoPixelMode];
-
-	// fake image. To be improved.
-	if (Memory::IsValidAddress(bufferPtr))
-		Memory::Memset(bufferPtr, 0x00, frameWidth * videoHeight_ * bpp);
+	ERROR_LOG(HLE, "UNIMPL ceGameUpdateInit()");
+	return 0;
 }
 
-void MediaEngine::feedPacketData(u32 addr, int size)
+u32 sceGameUpdateTerm()
 {
-	// This media engine is totally incompetent and will just ignore all data sent to it.
+	ERROR_LOG(HLE, "UNIMPL sceGameUpdateTerm()");
+	return 0;
+}
+
+u32 sceGameUpdateRun()
+{
+	ERROR_LOG(HLE, "UNIMPL sceGameUpdateRun()");
+	return 0;
+}
+
+u32 sceGameUpdateAbort()
+{
+	ERROR_LOG(HLE, "UNIMPL sceGameUpdateAbort()");
+	return 0;
+}
+
+const HLEFunction sceGameUpdate[] =
+{
+	{0xCBE69FB3, WrapU_V<sceGameUpdateInit>, "sceGameUpdateInit"},
+	{0xBB4B68DE, WrapU_V<sceGameUpdateTerm>, "sceGameUpdateTerm"},
+	{0x596AD78C, WrapU_V<sceGameUpdateRun>, "sceGameUpdateRun"},
+	{0x5F5D98A6, WrapU_V<sceGameUpdateAbort>, "sceGameUpdateAbort"},
+};
+
+void Register_sceGameUpdate()
+{
+	RegisterModule("sceGameUpdate", ARRAY_SIZE(sceGameUpdate), sceGameUpdate);
 }

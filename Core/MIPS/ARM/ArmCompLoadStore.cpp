@@ -85,7 +85,42 @@ namespace MIPSComp
 			BIC(R0, gpr.R(rs), Operand2(0xC0, 4));   // &= 0x3FFFFFFF
 		}
 	}
-	
+
+	void Jit::SetCCAndR0ForSafeAddress(int rs, s16 offset, ARMReg tempReg) {
+		SetR0ToEffectiveAddress(rs, offset);
+
+		// There are three valid ranges.  Each one gets a bit.
+		const u32 BIT_SCRATCH = 1, BIT_RAM = 2, BIT_VRAM = 4;
+		MOVI2R(tempReg, BIT_SCRATCH | BIT_RAM | BIT_VRAM);
+
+		CMP(R0, AssumeMakeOperand2(PSP_GetScratchpadMemoryBase()));
+		SetCC(CC_LO);
+		BIC(tempReg, tempReg, BIT_SCRATCH);
+		SetCC(CC_HS);
+		CMP(R0, AssumeMakeOperand2(PSP_GetScratchpadMemoryEnd()));
+		BIC(tempReg, tempReg, BIT_SCRATCH);
+
+		// If it was in that range, later compares don't matter.
+		CMP(R0, AssumeMakeOperand2(PSP_GetVidMemBase()));
+		SetCC(CC_LO);
+		BIC(tempReg, tempReg, BIT_VRAM);
+		SetCC(CC_HS);
+		CMP(R0, AssumeMakeOperand2(PSP_GetVidMemEnd()));
+		BIC(tempReg, tempReg, BIT_VRAM);
+
+		CMP(R0, AssumeMakeOperand2(PSP_GetKernelMemoryBase()));
+		SetCC(CC_LO);
+		BIC(tempReg, tempReg, BIT_RAM);
+		SetCC(CC_HS);
+		CMP(R0, AssumeMakeOperand2(PSP_GetUserMemoryEnd()));
+		BIC(tempReg, tempReg, BIT_RAM);
+
+		// If we left any bit set, the address is OK.
+		SetCC(CC_AL);
+		CMP(tempReg, 0);
+		SetCC(CC_GT);
+	}
+
 	void Jit::Comp_ITypeMem(u32 op)
 	{
 		CONDITIONAL_DISABLE;
@@ -99,6 +134,9 @@ namespace MIPSComp
 			return;
 		}
 
+		u32 iaddr = gpr.IsImm(rs) ? offset + gpr.GetImm(rs) : 0xFFFFFFFF;
+		bool doCheck = false;
+
 		switch (o)
 		{
 		case 32: //lb
@@ -110,33 +148,42 @@ namespace MIPSComp
 		case 40: //sb
 		case 41: //sh
 		case 43: //sw
-			if (g_Config.bFastMemory) {
-				if (gpr.IsImm(rs)) {
-					// We can compute the full address at compile time. Kickass.
-					u32 addr = (offset + gpr.GetImm(rs)) & 0x3FFFFFFF;
-					// Must be OK even if rs == rt since we have the value from imm already.
-					gpr.MapReg(rt, load ? MAP_NOINIT | MAP_DIRTY : 0);
-					MOVI2R(R0, addr);
+			if (gpr.IsImm(rs) && Memory::IsValidAddress(iaddr)) {
+				// We can compute the full address at compile time. Kickass.
+				u32 addr = iaddr & 0x3FFFFFFF;
+				// Must be OK even if rs == rt since we have the value from imm already.
+				gpr.MapReg(rt, load ? MAP_NOINIT | MAP_DIRTY : 0);
+				MOVI2R(R0, addr);
+			} else {
+				_dbg_assert_msg_(JIT, !gpr.IsImm(rs), "Invalid immediate address?  CPU bug?");
+				load ? gpr.MapDirtyIn(rt, rs) : gpr.MapInIn(rt, rs);
+
+				if (!g_Config.bFastMemory) {
+					SetCCAndR0ForSafeAddress(rs, offset, R1);
+					doCheck = true;
 				} else {
-					load ? gpr.MapDirtyIn(rt, rs) : gpr.MapInIn(rt, rs);
 					SetR0ToEffectiveAddress(rs, offset);
 				}
-				switch (o)
-				{
-				// Load
-				case 35: LDR  (gpr.R(rt), R11, R0, true, true); break;
-				case 37: LDRH (gpr.R(rt), R11, R0, true, true); break;
-				case 33: LDRSH(gpr.R(rt), R11, R0, true, true); break;
-				case 36: LDRB (gpr.R(rt), R11, R0, true, true); break;
-				case 32: LDRSB(gpr.R(rt), R11, R0, true, true); break;
-				// Store
-				case 43: STR  (gpr.R(rt), R11, R0, true, true); break;
-				case 41: STRH (gpr.R(rt), R11, R0, true, true); break;
-				case 40: STRB (gpr.R(rt), R11, R0, true, true); break;
+			}
+			switch (o)
+			{
+			// Load
+			case 35: LDR  (gpr.R(rt), R11, R0); break;
+			case 37: LDRH (gpr.R(rt), R11, R0); break;
+			case 33: LDRSH(gpr.R(rt), R11, R0); break;
+			case 36: LDRB (gpr.R(rt), R11, R0); break;
+			case 32: LDRSB(gpr.R(rt), R11, R0); break;
+			// Store
+			case 43: STR  (gpr.R(rt), R11, R0); break;
+			case 41: STRH (gpr.R(rt), R11, R0); break;
+			case 40: STRB (gpr.R(rt), R11, R0); break;
+			}
+			if (doCheck) {
+				if (load) {
+					SetCC(CC_EQ);
+					MOVI2R(gpr.R(rt), 0);
 				}
-			} else {
-				Comp_Generic(op);
-				return;
+				SetCC(CC_AL);
 			}
 			break;
 		case 34: //lwl
@@ -179,26 +226,26 @@ namespace MIPSComp
 				// Load
 				case 34:
 					AND(gpr.R(rt), gpr.R(rt), 0x00ffffff >> shift);
-					LDR(R0, R11, R0, true, true);
+					LDR(R0, R11, R0);
 					ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSL, 24 - shift));
 					break;
 				case 38:
 					AND(gpr.R(rt), gpr.R(rt), 0xffffff00 << (24 - shift));
-					LDR(R0, R11, R0, true, true);
+					LDR(R0, R11, R0);
 					ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSR, shift));
 					break;
 				// Store
 				case 42:
-					LDR(R1, R11, R0, true, true);
+					LDR(R1, R11, R0);
 					AND(R1, R1, 0xffffff00 << shift);
 					ORR(R1, R1, Operand2(gpr.R(rt), ST_LSR, 24 - shift));
-					STR(R1, R11, R0, true, true);
+					STR(R1, R11, R0);
 					break;
 				case 46:
-					LDR(R1, R11, R0, true, true);
+					LDR(R1, R11, R0);
 					AND(R1, R1, 0x00ffffff >> (24 - shift));
 					ORR(R1, R1, Operand2(gpr.R(rt), ST_LSL, shift));
-					STR(R1, R11, R0, true, true);
+					STR(R1, R11, R0);
 					break;
 				}
 			} else {

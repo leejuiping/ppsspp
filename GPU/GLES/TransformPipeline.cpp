@@ -21,6 +21,7 @@
 #include "../../Core/MemMap.h"
 #include "../../Core/Host.h"
 #include "../../Core/System.h"
+#include "../../Core/Reporting.h"
 #include "../../native/gfx_es2/gl_state.h"
 #include "../../native/ext/cityhash/city.h"
 
@@ -55,6 +56,7 @@ enum {
 TransformDrawEngine::TransformDrawEngine()
 	: collectedVerts(0),
 		prevPrim_(-1),
+		dec_(0),
 		lastVType_(-1),
 		curVbo_(0),
 		shaderManager_(0),
@@ -82,6 +84,9 @@ TransformDrawEngine::~TransformDrawEngine() {
 	FreeMemoryPages(transformed, TRANSFORMED_VERTEX_BUFFER_SIZE);
 	FreeMemoryPages(transformedExpanded, 3 * TRANSFORMED_VERTEX_BUFFER_SIZE);
 	unregister_gl_resource_holder(this);
+	for (auto iter = decoderMap_.begin(); iter != decoderMap_.end(); iter++) {
+		delete iter->second;
+	}
 }
 
 void TransformDrawEngine::InitDeviceObjects() {
@@ -113,6 +118,8 @@ void TransformDrawEngine::GLLost() {
 void TransformDrawEngine::DrawBezier(int ucount, int vcount) {
 	u16 indices[3 * 3 * 6];
 
+	Reporting::ReportMessage("Unsupported bezier curve");
+
 	// Generate indices for a rectangular mesh.
 	int c = 0;
 	for (int y = 0; y < 3; y++) {
@@ -142,8 +149,9 @@ void TransformDrawEngine::DrawBezier(int ucount, int vcount) {
 	}
 
 	if (!(gstate.vertType & GE_VTYPE_TC_MASK)) {
-		dec.SetVertexType(gstate.vertType);
-		u32 newVertType = dec.InjectUVs(decoded2, Memory::GetPointer(gstate_c.vertexAddr), customUV, 16);
+		VertexDecoder *dec = GetVertexDecoder(gstate.vertType);
+		dec->SetVertexType(gstate.vertType);
+		u32 newVertType = dec->InjectUVs(decoded2, Memory::GetPointer(gstate_c.vertexAddr), customUV, 16);
 		SubmitPrim(decoded2, &indices[0], GE_PRIM_TRIANGLES, c, newVertType, GE_VTYPE_IDX_16BIT, 0);
 	} else {
 		SubmitPrim(Memory::GetPointer(gstate_c.vertexAddr), &indices[0], GE_PRIM_TRIANGLES, c, gstate.vertType, GE_VTYPE_IDX_16BIT, 0);
@@ -155,6 +163,8 @@ void TransformDrawEngine::DrawBezier(int ucount, int vcount) {
 void TransformDrawEngine::DrawSpline(int ucount, int vcount, int utype, int vtype) {
 	u16 indices[3 * 3 * 6];
 
+	Reporting::ReportMessage("Unsupported spline curve");
+
 	// Generate indices for a rectangular mesh.
 	int c = 0;
 	for (int y = 0; y < 3; y++) {
@@ -184,8 +194,9 @@ void TransformDrawEngine::DrawSpline(int ucount, int vcount, int utype, int vtyp
 	}
 
 	if (!(gstate.vertType & GE_VTYPE_TC_MASK)) {
-		dec.SetVertexType(gstate.vertType);
-		u32 newVertType = dec.InjectUVs(decoded2, Memory::GetPointer(gstate_c.vertexAddr), customUV, 16);
+		VertexDecoder *dec = GetVertexDecoder(gstate.vertType);
+		dec->SetVertexType(gstate.vertType);
+		u32 newVertType = dec->InjectUVs(decoded2, Memory::GetPointer(gstate_c.vertexAddr), customUV, 16);
 		SubmitPrim(decoded2, &indices[0], GE_PRIM_TRIANGLES, c, newVertType, GE_VTYPE_IDX_16BIT, 0);
 	} else {
 		SubmitPrim(Memory::GetPointer(gstate_c.vertexAddr), &indices[0], GE_PRIM_TRIANGLES, c, gstate.vertType, GE_VTYPE_IDX_16BIT, 0);
@@ -430,6 +441,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 		int prim, u8 *decoded, LinkedShader *program, int vertexCount, u32 vertType, void *inds, int indexType, const DecVtxFormat &decVtxFormat, int maxIndex) {
 
 	bool throughmode = (vertType & GE_VTYPE_THROUGH_MASK) != 0;
+	bool lmode = (gstate.lmode & 1) && (gstate.lightingEnable & 1);
 
 	// TODO: Split up into multiple draw calls for GLES 2.0 where you can't guarantee support for more than 0x10000 verts.
 
@@ -543,31 +555,35 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 
 			if (gstate.lightingEnable & 1) {
 				// Don't ignore gstate.lmode - we should send two colors in that case
-				if (gstate.lmode & 1) {
+				for (int j = 0; j < 4; j++) {
+					c0[j] = litColor0[j];
+				}
+				if (lmode) {
 					// Separate colors
 					for (int j = 0; j < 4; j++) {
-						c0[j] = litColor0[j];
 						c1[j] = litColor1[j];
 					}
 				} else {
 					// Summed color into c0
 					for (int j = 0; j < 4; j++) {
-						c0[j] = litColor0[j] + litColor1[j];
-						c1[j] = 0.0f;
+						c0[j] = c0[j] + litColor1[j];
 					}
 				}
 			} else {
 				if (reader.hasColor0()) {
 					for (int j = 0; j < 4; j++) {
 						c0[j] = unlitColor[j];
-						c1[j] = 0.0f;
 					}
 				} else {
 					c0[0] = (gstate.materialambient & 0xFF) / 255.f;
 					c0[1] = ((gstate.materialambient >> 8) & 0xFF) / 255.f;
 					c0[2] = ((gstate.materialambient >> 16)& 0xFF) / 255.f;
 					c0[3] = (gstate.materialalpha & 0xFF) / 255.f;
-					memset(c1, 0, sizeof(c1));
+				}
+				if (lmode) {
+					for (int j = 0; j < 4; j++) {
+						c1[j] = 0.0f;
+					}
 				}
 			}
 
@@ -757,6 +773,16 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 	}
 }
 
+VertexDecoder *TransformDrawEngine::GetVertexDecoder(u32 vtype) {
+	auto iter = decoderMap_.find(vtype);
+	if (iter != decoderMap_.end())
+		return iter->second;
+	VertexDecoder *dec = new VertexDecoder(); 
+	dec->SetVertexType(vtype);
+	decoderMap_[vtype] = dec;
+	return dec;
+}
+
 void TransformDrawEngine::SubmitPrim(void *verts, void *inds, int prim, int vertexCount, u32 vertType, int forceIndexType, int *bytesRead) {
 	if (vertexCount == 0)
 		return;  // we ignore zero-sized draw calls.
@@ -767,16 +793,15 @@ void TransformDrawEngine::SubmitPrim(void *verts, void *inds, int prim, int vert
 	// If vtype has changed, setup the vertex decoder.
 	// TODO: Simply cache the setup decoders instead.
 	if (vertType != lastVType_) {
-		dec.SetVertexType(vertType);
+		dec_ = GetVertexDecoder(vertType);
 		lastVType_ = vertType;
 	}
 
-	if (bytesRead)
-		*bytesRead = vertexCount * dec.VertexSize();
+	dec_->IncrementStat(STAT_VERTSSUBMITTED, vertexCount);
 
-	if (!indexGen.Empty()) {
-		gpuStats.numJoins++;
-	}
+	if (bytesRead)
+		*bytesRead = vertexCount * dec_->VertexSize();
+
 	gpuStats.numDrawCalls++;
 	gpuStats.numVertsSubmitted += vertexCount;
 
@@ -806,18 +831,10 @@ void TransformDrawEngine::DecodeVerts() {
 		void *inds = dc.inds;
 		if (indexType == GE_VTYPE_IDX_NONE >> GE_VTYPE_IDX_SHIFT) {
 			// Decode the verts and apply morphing. Simple.
-			dec.DecodeVerts(decoded + collectedVerts * (int)dec.GetDecVtxFmt().stride,
+			dec_->DecodeVerts(decoded + collectedVerts * (int)dec_->GetDecVtxFmt().stride,
 				dc.verts, indexLowerBound, indexUpperBound);
 			collectedVerts += indexUpperBound - indexLowerBound + 1;
-			switch (dc.prim) {
-			case GE_PRIM_POINTS: indexGen.AddPoints(dc.vertexCount); break;
-			case GE_PRIM_LINES: indexGen.AddLineList(dc.vertexCount); break;
-			case GE_PRIM_LINE_STRIP: indexGen.AddLineStrip(dc.vertexCount); break;
-			case GE_PRIM_TRIANGLES: indexGen.AddList(dc.vertexCount); break;
-			case GE_PRIM_TRIANGLE_STRIP: indexGen.AddStrip(dc.vertexCount); break;
-			case GE_PRIM_TRIANGLE_FAN: indexGen.AddFan(dc.vertexCount); break;
-			case GE_PRIM_RECTANGLES: indexGen.AddRectangles(dc.vertexCount); break;  // Same
-			}
+			indexGen.AddPrim(dc.prim, dc.vertexCount);
 		} else {
 			// It's fairly common that games issue long sequences of PRIM calls, with differing
 			// inds pointer but the same base vertex pointer. We'd like to reuse vertices between
@@ -850,7 +867,7 @@ void TransformDrawEngine::DecodeVerts() {
 			}
 
 			// 3. Decode that range of vertex data.
-			dec.DecodeVerts(decoded + collectedVerts * (int)dec.GetDecVtxFmt().stride,
+			dec_->DecodeVerts(decoded + collectedVerts * (int)dec_->GetDecVtxFmt().stride,
 				dc.verts, indexLowerBound, indexUpperBound);
 			collectedVerts += indexUpperBound - indexLowerBound + 1;
 
@@ -863,7 +880,7 @@ void TransformDrawEngine::DecodeVerts() {
 
 u32 TransformDrawEngine::ComputeHash() {
 	u32 fullhash = 0;
-	int vertexSize = dec.GetDecVtxFmt().stride;
+	int vertexSize = dec_->GetDecVtxFmt().stride;
 
 	// TODO: Add some caps both for numDrawCalls and num verts to check?
 	for (int i = 0; i < numDrawCalls; i++) {
@@ -872,7 +889,7 @@ u32 TransformDrawEngine::ComputeHash() {
 		} else {
 			fullhash += CityHash32((const char *)drawCalls[i].verts + vertexSize * drawCalls[i].indexLowerBound,
 				vertexSize * (drawCalls[i].indexUpperBound - drawCalls[i].indexLowerBound));
-			int indexSize = (dec.VertexType() & GE_VTYPE_IDX_MASK) == GE_VTYPE_IDX_16BIT ? 2 : 1;
+			int indexSize = (dec_->VertexType() & GE_VTYPE_IDX_MASK) == GE_VTYPE_IDX_16BIT ? 2 : 1;
 			fullhash += CityHash32((const char *)drawCalls[i].inds, indexSize * drawCalls[i].vertexCount);
 		}
 	}
@@ -915,6 +932,17 @@ void TransformDrawEngine::DecimateTrackedVertexArrays() {
 		else
 			++iter;
 	}
+
+	// Enable if you want to see vertex decoders in the log output. Need a better way.
+#if 0
+	char buffer[16384];
+	for (std::map<u32, VertexDecoder*>::iterator dec = decoderMap_.begin(); dec != decoderMap_.end(); ++dec) {
+		char *ptr = buffer;
+		ptr += dec->second->ToString(ptr);
+//		*ptr++ = '\n';
+		NOTICE_LOG(HLE, buffer);
+	}
+#endif
 }
 
 VertexArrayInfo::~VertexArrayInfo() {
@@ -954,7 +982,7 @@ void TransformDrawEngine::Flush() {
 				vai = iter->second;
 			} else {
 				vai = new VertexArrayInfo();
-				vai->decFmt = dec.GetDecVtxFmt();
+				vai->decFmt = dec_->GetDecVtxFmt();
 				vai_[id] = vai;
 			}
 
@@ -1017,7 +1045,7 @@ void TransformDrawEngine::Flush() {
 						
 						glGenBuffers(1, &vai->vbo);
 						glBindBuffer(GL_ARRAY_BUFFER, vai->vbo);
-						glBufferData(GL_ARRAY_BUFFER, dec.GetDecVtxFmt().stride * indexGen.MaxIndex(), decoded, GL_STATIC_DRAW);
+						glBufferData(GL_ARRAY_BUFFER, dec_->GetDecVtxFmt().stride * indexGen.MaxIndex(), decoded, GL_STATIC_DRAW);
 						// If there's only been one primitive type, and it's either TRIANGLES, LINES or POINTS,
 						// there is no need for the index buffer we built. We can then use glDrawArrays instead
 						// for a very minor speed boost.
@@ -1089,7 +1117,7 @@ rotateVBO:
 				if (curVbo_ == NUM_VBOS)
 					curVbo_ = 0;
 				glBindBuffer(GL_ARRAY_BUFFER, vbo);
-				glBufferData(GL_ARRAY_BUFFER, dec.GetDecVtxFmt().stride * indexGen.MaxIndex(), decoded, GL_STREAM_DRAW);
+				glBufferData(GL_ARRAY_BUFFER, dec_->GetDecVtxFmt().stride * indexGen.MaxIndex(), decoded, GL_STREAM_DRAW);
 				if (useElements) {
 					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(short) * vertexCount, (GLvoid *)decIndex, GL_STREAM_DRAW);
@@ -1103,7 +1131,7 @@ rotateVBO:
 		
 		DEBUG_LOG(G3D, "Flush prim %i! %i verts in one go", prim, vertexCount);
 
-		SetupDecFmtForDraw(program, dec.GetDecVtxFmt(), vbo ? 0 : decoded);
+		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
 		if (useElements) {
 			glDrawElements(glprim[prim], vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
 			if (ebo)
@@ -1119,7 +1147,9 @@ rotateVBO:
 		prim = indexGen.Prim();
 		DEBUG_LOG(G3D, "Flush prim %i SW! %i verts in one go", prim, indexGen.VertexCount());
 
-		SoftwareTransformAndDraw(prim, decoded, program, indexGen.VertexCount(), dec.VertexType(), (void *)decIndex, GE_VTYPE_IDX_16BIT, dec.GetDecVtxFmt(),
+		SoftwareTransformAndDraw(
+			prim, decoded, program, indexGen.VertexCount(), 
+			dec_->VertexType(), (void *)decIndex, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
 			indexGen.MaxIndex());
 	}
 

@@ -114,6 +114,14 @@ inline float nanclamp(float f, float lower, float upper)
 	return nanmin(nanmax(f, lower), upper);
 }
 
+#ifdef _MSC_VER
+#define isnan _isnan
+#endif
+
+double rint(double x){
+return floor(x+.5);
+}
+
 void ApplyPrefixST(float *v, u32 data, VectorSize size)
 {
   // Possible optimization shortcut:
@@ -525,7 +533,7 @@ namespace MIPSInt
 			case 20: d[i] = powf(2.0f, s[i]); break; //vexp2
 			case 21: d[i] = logf(s[i])/log(2.0f); break; //vlog2
 			case 22: d[i] = fabsf(sqrtf(s[i])); break; //vsqrt
-			case 23: d[i] = asinf(s[i] * (float)M_2_PI); break; //vasin
+			case 23: d[i] = asinf(s[i]) / M_PI_2; break; //vasin
 			case 24: d[i] = -1.0f / s[i]; break; // vnrcp
 			case 26: d[i] = -sinf((float)M_PI_2 * s[i]); break; // vnsin
 			case 28: d[i] = 1.0f / powf(2.0, s[i]); break; // vrexp2
@@ -620,17 +628,23 @@ namespace MIPSInt
 		ApplySwizzleS(s, sz); //TODO: and the mask to kill everything but swizzle
 		for (int i = 0; i < GetNumVectorElements(sz); i++)
 		{
+			if (isnan(s[i])) {
+				d[i] = 0x7FFFFFFF;
+				continue;
+			}
 			float sv = s[i] * mult;
+			int dsv;
 			// Cap/floor it to 0x7fffffff / 0x80000000
 			if (sv > 0x7fffffff) sv = 0x7fffffff;
 			if (sv < (int)0x80000000) sv = (int)0x80000000;
 			switch ((op >> 21) & 0x1f)
 			{
-			case 16: d[i] = (int)round_ieee_754(sv); break; //n
-			case 17: d[i] = s[i]>=0 ? (int)floor(sv) : (int)ceil(sv); break; //z
-			case 18: d[i] = (int)ceil(sv); break; //u
-			case 19: d[i] = (int)floor(sv); break; //d
+			case 16: dsv = (int)rint(sv); break; //n
+			case 17: dsv = s[i]>=0 ? (int)floor(sv) : (int)ceil(sv); break; //z
+			case 18: dsv = (int)ceil(sv); break; //u
+			case 19: dsv = (int)floor(sv); break; //d
 			}
+			d[i] = (int) dsv;
 		}
 		ApplyPrefixD((float*)d, sz, true);
 		WriteVector((float*)d, sz, vd);
@@ -1647,7 +1661,7 @@ namespace MIPSInt
 		PC += 4;
 		EatPrefixes();
 	}
-	
+
 	void Int_Vsge(u32 op) {
 		int vt = _VT;
 		int vs = _VS;
@@ -1662,11 +1676,12 @@ namespace MIPSInt
 		ApplySwizzleS(s, sz);
 		ReadVector(t, sz, vt);
 		ApplySwizzleT(t, sz);
-		// positive NAN always loses, unlike SSE
-		// negative NAN seems different? TODO
-		for (int i = 0; i < GetNumVectorElements(sz); i++)
-			d[i] = s[i] >= t[i] ? 1.0f : 0.0f;
-
+		for (int i = 0; i < GetNumVectorElements(sz); i++) {
+			if ( isnan(s[i]) || isnan(t[i]) )
+				d[i] = 0.0f;
+			else
+				d[i] = s[i] >= t[i] ? 1.0f : 0.0f;
+		}
 		ApplyPrefixD(d, sz);
 		WriteVector(d, sz, vd);
 		PC += 4;
@@ -1687,11 +1702,12 @@ namespace MIPSInt
 		ApplySwizzleS(s, sz);
 		ReadVector(t, sz, vt);
 		ApplySwizzleT(t, sz);
-		// positive NAN always loses, unlike SSE
-		// negative NAN seems different? TODO
-		for (int i = 0; i < GetNumVectorElements(sz); i++)
-			d[i] = s[i] < t[i] ? 1.0f : 0.0f;
-
+		for (int i = 0; i < GetNumVectorElements(sz); i++) {
+			if ( isnan(s[i]) || isnan(t[i]) )
+				d[i] = 0.0f;
+			else
+				d[i] = s[i] < t[i] ? 1.0f : 0.0f;
+		}
 		ApplyPrefixD(d, sz);
 		WriteVector(d, sz, vd);
 		PC += 4;
@@ -1702,7 +1718,7 @@ namespace MIPSInt
 	void Int_Vcmov(u32 op)
 	{
 		int vs = _VS;
-		int vd = _VD; 
+		int vd = _VD;
 		int tf = (op >> 19) & 1;
 		int imm3 = (op >> 16) & 7;
 		VectorSize sz = GetVecSize(op);
@@ -1731,7 +1747,7 @@ namespace MIPSInt
 					d[i] = s[i];
 			}
 		}
-		else 
+		else
 		{
 			_dbg_assert_msg_(CPU,0,"Bad Imm3 in cmov");
 		}

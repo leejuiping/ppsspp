@@ -571,54 +571,54 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 				}
 			}
 
-			if (reader.hasUV()) {
-				float ruv[2];
+			float ruv[2] = {0.0f, 0.0f};
+			if (reader.hasUV())
 				reader.ReadUV(ruv);
-				// Perform texture coordinate generation after the transform and lighting - one style of UV depends on lights.
-				switch (gstate.getUVGenMode())
-				{
-				case 0:	// UV mapping
-					// Texture scale/offset is only performed in this mode.
-					uv[0] = uscale * (ruv[0]*gstate_c.uScale + gstate_c.uOff);
-					uv[1] = vscale * (ruv[1]*gstate_c.vScale + gstate_c.vOff);
-					break;
-				case 1:
-					{
-						// Projection mapping
-						Vec3 source;
-						switch (gstate.getUVProjMode())
-						{
-						case 0: // Use model space XYZ as source
-							source = pos;
-							break;
-						case 1: // Use unscaled UV as source
-							source = Vec3(ruv[0], ruv[1], 0.0f);
-							break;
-						case 2: // Use normalized normal as source
-							source = Vec3(norm).Normalized();
-							break;
-						case 3: // Use non-normalized normal as source!
-							source = Vec3(norm);
-							break;
-						}
 
-						float uvw[3];
-						Vec3ByMatrix43(uvw, &source.x, gstate.tgenMatrix);
-						uv[0] = uvw[0];
-						uv[1] = uvw[1];
-					}
-					break;
-				case 2:
-					// Shade mapping - use dot products from light sources to generate U and V.
+			// Perform texture coordinate generation after the transform and lighting - one style of UV depends on lights.
+			switch (gstate.getUVGenMode())
+			{
+			case 0:	// UV mapping
+				// Texture scale/offset is only performed in this mode.
+				uv[0] = uscale * (ruv[0]*gstate_c.uScale + gstate_c.uOff);
+				uv[1] = vscale * (ruv[1]*gstate_c.vScale + gstate_c.vOff);
+				break;
+			case 1:
+				{
+					// Projection mapping
+					Vec3 source;
+					switch (gstate.getUVProjMode())
 					{
-						uv[0] = dots[gstate.getUVLS0()];
-						uv[1] = dots[gstate.getUVLS1()];
+					case 0: // Use model space XYZ as source
+						source = pos;
+						break;
+					case 1: // Use unscaled UV as source
+						source = Vec3(ruv[0], ruv[1], 0.0f);
+						break;
+					case 2: // Use normalized normal as source
+						source = Vec3(norm).Normalized();
+						break;
+					case 3: // Use non-normalized normal as source!
+						source = Vec3(norm);
+						break;
 					}
-					break;
-				case 3:
-					// Illegal
-					break;
+
+					float uvw[3];
+					Vec3ByMatrix43(uvw, &source.x, gstate.tgenMatrix);
+					uv[0] = uvw[0];
+					uv[1] = uvw[1];
 				}
+				break;
+			case 2:
+				// Shade mapping - use dot products from light sources to generate U and V.
+				{
+					uv[0] = dots[gstate.getUVLS0()];
+					uv[1] = dots[gstate.getUVLS1()];
+				}
+				break;
+			case 3:
+				// Illegal
+				break;
 			}
 
 			// Transform the coord by the view matrix.
@@ -759,9 +759,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 
 void TransformDrawEngine::SubmitPrim(void *verts, void *inds, int prim, int vertexCount, u32 vertType, int forceIndexType, int *bytesRead) {
 	if (vertexCount == 0)
-	{
 		return;  // we ignore zero-sized draw calls.
-	}
 
 	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawCalls >= MAX_DEFERRED_DRAW_CALLS)
 		Flush();
@@ -804,50 +802,61 @@ void TransformDrawEngine::DecodeVerts() {
 		indexGen.SetIndex(collectedVerts);
 		int indexLowerBound = dc.indexLowerBound, indexUpperBound = dc.indexUpperBound;
 
-		// Decode the verts and apply morphing
-		dec.DecodeVerts(decoded + collectedVerts * (int)dec.GetDecVtxFmt().stride,
-			dc.verts, dc.inds, dc.prim, dc.vertexCount, indexLowerBound, indexUpperBound);
-		collectedVerts += indexUpperBound - indexLowerBound + 1;
-
 		u32 indexType = dc.indexType;
-		int vertexCount = dc.vertexCount;
 		void *inds = dc.inds;
-		switch (indexType) {
-		case GE_VTYPE_IDX_NONE >> GE_VTYPE_IDX_SHIFT:
+		if (indexType == GE_VTYPE_IDX_NONE >> GE_VTYPE_IDX_SHIFT) {
+			// Decode the verts and apply morphing. Simple.
+			dec.DecodeVerts(decoded + collectedVerts * (int)dec.GetDecVtxFmt().stride,
+				dc.verts, indexLowerBound, indexUpperBound);
+			collectedVerts += indexUpperBound - indexLowerBound + 1;
 			switch (dc.prim) {
-			case GE_PRIM_POINTS: indexGen.AddPoints(vertexCount); break;
-			case GE_PRIM_LINES: indexGen.AddLineList(vertexCount); break;
-			case GE_PRIM_LINE_STRIP: indexGen.AddLineStrip(vertexCount); break;
-			case GE_PRIM_TRIANGLES: indexGen.AddList(vertexCount); break;
-			case GE_PRIM_TRIANGLE_STRIP: indexGen.AddStrip(vertexCount); break;
-			case GE_PRIM_TRIANGLE_FAN: indexGen.AddFan(vertexCount); break;
-			case GE_PRIM_RECTANGLES: indexGen.AddRectangles(vertexCount); break;  // Same
+			case GE_PRIM_POINTS: indexGen.AddPoints(dc.vertexCount); break;
+			case GE_PRIM_LINES: indexGen.AddLineList(dc.vertexCount); break;
+			case GE_PRIM_LINE_STRIP: indexGen.AddLineStrip(dc.vertexCount); break;
+			case GE_PRIM_TRIANGLES: indexGen.AddList(dc.vertexCount); break;
+			case GE_PRIM_TRIANGLE_STRIP: indexGen.AddStrip(dc.vertexCount); break;
+			case GE_PRIM_TRIANGLE_FAN: indexGen.AddFan(dc.vertexCount); break;
+			case GE_PRIM_RECTANGLES: indexGen.AddRectangles(dc.vertexCount); break;  // Same
 			}
-			break;
+		} else {
+			// It's fairly common that games issue long sequences of PRIM calls, with differing
+			// inds pointer but the same base vertex pointer. We'd like to reuse vertices between
+			// these as much as possible, so we make sure here to combine as many as possible
+			// into one nice big drawcall, sharing data.
 
-		case GE_VTYPE_IDX_8BIT >> GE_VTYPE_IDX_SHIFT:
-			switch (dc.prim) {
-			case GE_PRIM_POINTS: indexGen.TranslatePoints(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_LINES: indexGen.TranslateLineList(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_LINE_STRIP: indexGen.TranslateLineStrip(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_TRIANGLES: indexGen.TranslateList(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_TRIANGLE_STRIP: indexGen.TranslateStrip(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_TRIANGLE_FAN: indexGen.TranslateFan(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_RECTANGLES: indexGen.TranslateRectangles(vertexCount, (const u8 *)inds, indexLowerBound, indexUpperBound); break;  // Same
+			// 1. Look ahead to find the max index, only looking as "matching" drawcalls.
+			//    Expand the lower and upper bounds as we go.
+			int j = i + 1;
+			int lastMatch = i;
+			while (j < numDrawCalls) {
+				if (drawCalls[j].verts != dc.verts)
+					break;
+				indexLowerBound = std::min(indexLowerBound, (int)drawCalls[j].indexLowerBound);
+				indexUpperBound = std::max(indexUpperBound, (int)drawCalls[j].indexUpperBound);
+				lastMatch = j;
+				j++;
 			}
-			break;
+			
+			// 2. Loop through the drawcalls, translating indices as we go.
+			for (j = i; j <= lastMatch; j++) {
+				switch (indexType) {
+				case GE_VTYPE_IDX_8BIT >> GE_VTYPE_IDX_SHIFT:
+					indexGen.TranslatePrim(drawCalls[j].prim, drawCalls[j].vertexCount, (const u8 *)drawCalls[j].inds, indexLowerBound);
+					break;
+				case GE_VTYPE_IDX_16BIT >> GE_VTYPE_IDX_SHIFT:
+					indexGen.TranslatePrim(drawCalls[j].prim, drawCalls[j].vertexCount, (const u16 *)drawCalls[j].inds, indexLowerBound);
+					break;
+				}
+			}
 
-		case GE_VTYPE_IDX_16BIT >> GE_VTYPE_IDX_SHIFT:
-			switch (dc.prim) {
-			case GE_PRIM_POINTS: indexGen.TranslatePoints(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_LINES: indexGen.TranslateLineList(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_LINE_STRIP: indexGen.TranslateLineStrip(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_TRIANGLES: indexGen.TranslateList(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_TRIANGLE_STRIP: indexGen.TranslateStrip(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_TRIANGLE_FAN: indexGen.TranslateFan(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;
-			case GE_PRIM_RECTANGLES: indexGen.TranslateRectangles(vertexCount, (const u16 *)inds, indexLowerBound, indexUpperBound); break;  // Same
-			}
-			break;
+			// 3. Decode that range of vertex data.
+			dec.DecodeVerts(decoded + collectedVerts * (int)dec.GetDecVtxFmt().stride,
+				dc.verts, indexLowerBound, indexUpperBound);
+			collectedVerts += indexUpperBound - indexLowerBound + 1;
+
+			// 4. Advance indexgen vertex counter.
+			indexGen.Advance(indexUpperBound - indexLowerBound + 1);
+			i = lastMatch;
 		}
 	}
 }

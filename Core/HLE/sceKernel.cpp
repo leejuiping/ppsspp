@@ -52,6 +52,7 @@
 #include "sceKernelVTimer.h"
 #include "sceKernelTime.h"
 #include "sceMpeg.h"
+#include "sceNet.h"
 #include "scePower.h"
 #include "sceUtility.h"
 #include "sceUmd.h"
@@ -109,6 +110,7 @@ void __KernelInit()
 	__ImposeInit();
 	__UsbInit();
 	__FontInit();
+	__NetInit();
 	
 	SaveState::Init();  // Must be after IO, as it may create a directory
 
@@ -131,6 +133,7 @@ void __KernelShutdown()
 	hleCurrentThreadName = NULL;
 	kernelObjects.Clear();
 
+	__NetShutdown();
 	__FontShutdown();
 
 	__MpegShutdown();
@@ -194,6 +197,9 @@ void __KernelDoState(PointerWrap &p)
 	__UsbDoState(p);
 
 	__PPGeDoState(p);
+	
+	// Didn't feel like breaking save states right now for this. Next time you have to change something, uncomment.
+	// __NetDoState(p);
 
 	__InterruptsDoStateLate(p);
 	__KernelThreadingDoStateLate(p);
@@ -610,8 +616,8 @@ const HLEFunction ThreadManForUser[] =
 	{0x58b1f937,&WrapI_II<sceKernelPollSema>,                  "sceKernelPollSema"},
 	{0xBC6FEBC5,&WrapI_IU<sceKernelReferSemaStatus>,           "sceKernelReferSemaStatus"},
 	{0x3F53E640,&WrapI_II<sceKernelSignalSema>,                "sceKernelSignalSema"},
-	{0x4E3A1105,&WrapI_IIU<sceKernelWaitSema>,                 "sceKernelWaitSema"},
-	{0x6d212bac,&WrapI_IIU<sceKernelWaitSemaCB>,               "sceKernelWaitSemaCB"},
+	{0x4E3A1105,&WrapI_IIU<sceKernelWaitSema>,                 "sceKernelWaitSema", HLE_NOT_DISPATCH_SUSPENDED},
+	{0x6d212bac,&WrapI_IIU<sceKernelWaitSemaCB>,               "sceKernelWaitSemaCB", HLE_NOT_DISPATCH_SUSPENDED},
 
 	{0x60107536,&WrapI_U<sceKernelDeleteLwMutex>,              "sceKernelDeleteLwMutex"},
 	{0x19CFF145,&WrapI_UCUIU<sceKernelCreateLwMutex>,          "sceKernelCreateLwMutex"},
@@ -619,8 +625,8 @@ const HLEFunction ThreadManForUser[] =
 	// NOTE: LockLwMutex, UnlockLwMutex, and ReferLwMutexStatus are in Kernel_Library, see sceKernelInterrupt.cpp.
 
 	{0xf8170fbe,&WrapI_I<sceKernelDeleteMutex>,                "sceKernelDeleteMutex"},
-	{0xB011B11F,&WrapI_IIU<sceKernelLockMutex>,                "sceKernelLockMutex"},
-	{0x5bf4dd27,&WrapI_IIU<sceKernelLockMutexCB>,              "sceKernelLockMutexCB"},
+	{0xB011B11F,&WrapI_IIU<sceKernelLockMutex>,                "sceKernelLockMutex", HLE_NOT_DISPATCH_SUSPENDED},
+	{0x5bf4dd27,&WrapI_IIU<sceKernelLockMutexCB>,              "sceKernelLockMutexCB", HLE_NOT_DISPATCH_SUSPENDED},
 	{0x6b30100f,&WrapI_II<sceKernelUnlockMutex>,               "sceKernelUnlockMutex"},
 	{0xb7d098c6,&WrapI_CUIU<sceKernelCreateMutex>,             "sceKernelCreateMutex"},
 	{0x0DDCD2C9,&WrapI_II<sceKernelTryLockMutex>,              "sceKernelTryLockMutex"},
@@ -655,7 +661,7 @@ const HLEFunction ThreadManForUser[] =
 	{0x616403ba,WrapI_I<sceKernelTerminateThread>,"sceKernelTerminateThread"},
 	{0x383f7bcc,WrapI_I<sceKernelTerminateDeleteThread>,"sceKernelTerminateDeleteThread"},
 	{0x840E8133,WrapI_IU<sceKernelWaitThreadEndCB>,"sceKernelWaitThreadEndCB"},
-	{0xd13bde95,sceKernelCheckThreadStack,"sceKernelCheckThreadStack"},
+	{0xd13bde95,WrapI_V<sceKernelCheckThreadStack>,"sceKernelCheckThreadStack"},
 
 	{0x94416130,WrapU_UUUU<sceKernelGetThreadmanIdList>,"sceKernelGetThreadmanIdList"},
 	{0x57CF62DD,WrapU_U<sceKernelGetThreadmanIdType>,"sceKernelGetThreadmanIdType"},

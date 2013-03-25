@@ -717,7 +717,7 @@ void GetIndexBounds(void *inds, int count, u32 vertType, u16 *indexLowerBound, u
 	*indexUpperBound = (u16)upperBound;
 }
 
-void VertexDecoder::DecodeVerts(u8 *decodedptr, const void *verts, const void *inds, int prim, int count, int indexLowerBound, int indexUpperBound) const {
+void VertexDecoder::DecodeVerts(u8 *decodedptr, const void *verts, int indexLowerBound, int indexUpperBound) const {
 	// Decode the vertices within the found bounds, once each
 	decoded_ = decodedptr;  // + lowerBound * decFmt.stride;
 	ptr_ = (const u8*)verts + indexLowerBound * size;
@@ -749,4 +749,27 @@ u32 VertexDecoder::InjectUVs(u8 *decoded, const void *verts, float *customuv, in
 		out += decOut.onesize_;
 	}
 	return customVertType;
+}
+
+int VertexDecoder::ToString(char *output) const {
+	char * start = output;
+	output += sprintf(output, "P: %i ", pos);
+	if (nrm)
+		output += sprintf(output, "N: %i ", nrm);
+	if (col)
+		output += sprintf(output, "C: %i ", col);
+	if (tc)
+		output += sprintf(output, "T: %i ", tc);
+	if (weighttype)
+		output += sprintf(output, "W: %i ", weighttype);
+	if (idx)
+		output += sprintf(output, "I: %i ", idx);
+	if (morphcount > 1)
+		output += sprintf(output, "Morph: %i ", morphcount);
+	output += sprintf(output, "Verts: %i ", stats_[STAT_VERTSSUBMITTED]);
+	if (throughmode)
+		output += sprintf(output, " (through)");
+
+	output += sprintf(output, " (size: %i)", VertexSize());
+	return output - start;
 }

@@ -2,13 +2,28 @@
 # Automated script to run the pspautotests test suite in PPSSPP.
 
 import sys
-import io
 import os
 import subprocess
 import threading
+import glob
 
 
-PPSSPP_EXECUTABLES = [ "Windows\\Release\\PPSSPPHeadless.exe", "build/PPSSPPHeadless" ]
+PPSSPP_EXECUTABLES = [
+  # Windows
+  "Windows\\Debug\\PPSSPPHeadless.exe",
+  "Windows\\Release\\PPSSPPHeadless.exe",
+  "Windows\\x64\\Debug\\PPSSPPHeadless.exe",
+  "Windows\\x64\\Release\\PPSSPPHeadless.exe",
+  # Mac
+  "build*/Debug/PPSSPPHeadless",
+  "build*/Release/PPSSPPHeadless",
+  "build*/RelWithDebInfo/PPSSPPHeadless",
+  "build*/MinSizeRel/PPSSPPHeadless",
+  # Linux
+  "build*/PPSSPPHeadless",
+  "./PPSSPPHeadless"
+]
+
 PPSSPP_EXE = None
 TEST_ROOT = "pspautotests/tests/"
 teamcity_mode = False
@@ -31,8 +46,12 @@ class Command(object):
     thread.start()
 
     thread.join(timeout)
-    if thread.is_alive():
+    if thread.isAlive():
       self.timeout = True
+      if sys.version_info < (2, 6):
+        os.kill(process.pid, signal.SIGKILL)
+      else:
+        process.terminate()
       self.process.terminate()
       thread.join()
 
@@ -199,10 +218,13 @@ def init():
     print("(checked for existence of cpu/cpu_alu/cpu_alu.prx)")
     sys.exit(1)
 
-  for p in PPSSPP_EXECUTABLES:
-    if os.path.exists(p):
-      PPSSPP_EXE = p
-      break
+  possible_exes = [glob.glob(f) for f in PPSSPP_EXECUTABLES]
+  possible_exes = [x for sublist in possible_exes for x in sublist]
+  existing = filter(os.path.exists, possible_exes)
+  if existing:
+    PPSSPP_EXE = max((os.path.getmtime(f), f) for f in existing)[1]
+  else:
+    PPSSPP_EXE = None
 
   if not PPSSPP_EXE:
     print("PPSSPP executable missing, please build one.")

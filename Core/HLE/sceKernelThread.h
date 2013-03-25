@@ -46,7 +46,7 @@ u32 sceKernelReferThreadRunStatus(u32 uid, u32 statusPtr);
 int sceKernelReleaseWaitThread(SceUID threadID);
 void sceKernelChangeCurrentThreadAttr();
 int sceKernelRotateThreadReadyQueue(int priority);
-void sceKernelCheckThreadStack();
+int sceKernelCheckThreadStack();
 void sceKernelSuspendThread();
 void sceKernelResumeThread();
 void sceKernelWakeupThread();
@@ -116,6 +116,7 @@ KernelObject *__KernelCallbackObject();
 
 void __KernelScheduleWakeup(int threadnumber, s64 usFromNow);
 SceUID __KernelGetCurThread();
+u32 __KernelGetCurThreadStack();
 const char *__KernelGetThreadName(SceUID threadID);
 
 void __KernelSaveContext(ThreadContext *ctx);
@@ -175,6 +176,7 @@ void __KernelStartIdleThreads();
 void __KernelReturnFromThread();  // Called as HLE function
 u32 __KernelGetThreadPrio(SceUID id);
 bool __KernelThreadSortPriority(SceUID thread1, SceUID thread2);
+bool __KernelIsDispatchEnabled();
 
 void __KernelIdle();
 

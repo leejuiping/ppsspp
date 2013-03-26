@@ -117,8 +117,7 @@ namespace MIPSComp
 				// Prefix may say "z, z, z, z" but if this is a pair, we force to x.
 				// TODO: But some ops seem to use const 0 instead?
 				if (regnum >= n) {
-					ERROR_LOG(CPU, "Invalid VFPU swizzle: %08x / %d", prefix, sz);
-					Reporting::ReportMessage("Invalid VFPU swizzle: %08x / %d", prefix, sz);
+					ERROR_LOG_REPORT(CPU, "Invalid VFPU swizzle: %08x / %d", prefix, sz);
 					regnum = 0;
 				}
 				
@@ -582,13 +581,11 @@ namespace MIPSComp
 				DISABLE;
 				break;
 			case 16: // d[i] = 1.0f / s[i]; break; //vrcp
-				MOVI2R(R0, 0x3F800000);  // 1.0f
-				VMOV(S0, R0);
+				MOVI2F(S0, 1.0f, R0);
 				VDIV(tempxregs[i], S0, fpr.V(sregs[i]));
 				break;
 			case 17: // d[i] = 1.0f / sqrtf(s[i]); break; //vrsq
-				MOVI2R(R0, 0x3F800000);  // 1.0f
-				VMOV(S0, R0);
+				MOVI2F(S0, 1.0f, R0);
 				VSQRT(S1, fpr.V(sregs[i]));
 				VDIV(tempxregs[i], S0, S1);
 				break;
@@ -612,8 +609,7 @@ namespace MIPSComp
 				DISABLE;
 				break;
 			case 24: // d[i] = -1.0f / s[i]; break; // vnrcp
-				MOVI2R(R0, 0x80000000 | 0x3F800000);  // -1.0f
-				VMOV(S0, R0);
+				MOVI2F(S0, -1.0f, R0);
 				VDIV(tempxregs[i], S0, fpr.V(sregs[i]));
 				break;
 			case 26: // d[i] = -sinf((float)M_PI_2 * s[i]); break; // vnsin

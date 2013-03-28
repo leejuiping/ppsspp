@@ -204,7 +204,10 @@ BEGIN
     POPUP "&File"
     BEGIN
         MENUITEM "&Open...",                    ID_FILE_LOAD
+        MENUITEM "&Open from MS:/PSP/GAME...",  ID_FILE_LOAD_MEMSTICK
         MENUITEM "&Close",                      ID_EMULATION_STOP
+        MENUITEM SEPARATOR
+        MENUITEM "Open &Memory Stick",          ID_FILE_MEMSTICK
         MENUITEM SEPARATOR
         MENUITEM "Quickload state\tF4",         ID_FILE_QUICKLOADSTATE
         MENUITEM "Quicksave state\tF2",         ID_FILE_QUICKSAVESTATE

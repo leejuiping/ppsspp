@@ -197,7 +197,7 @@ namespace MainWindow
 		return TRUE;
 	}
 
-	void BrowseAndBoot(void)
+	void BrowseAndBoot(std::string defaultPath)
 	{
 		std::string fn;
 		std::string filter = "";
@@ -213,7 +213,7 @@ namespace MainWindow
 				filter[i] = '\0';
 		}
 
-		if (W32Util::BrowseForFileName(true, GetHWND(), "Load File",0,filter.c_str(),"*.pbp;*.elf;*.iso;*.cso;",fn))
+		if (W32Util::BrowseForFileName(true, GetHWND(), "Load File",defaultPath.size() ? defaultPath.c_str() : 0, filter.c_str(),"*.pbp;*.elf;*.iso;*.cso;",fn))
 		{
 			// decode the filename with fullpath
 			std::string fullpath = fn;
@@ -282,10 +282,27 @@ namespace MainWindow
 			switch (wmId)
 			{
 			case ID_FILE_LOAD:
-				BrowseAndBoot();
+				BrowseAndBoot("");
+				break;
+
+			case ID_FILE_LOAD_MEMSTICK:
+				{
+					std::string memStickDir, flash0dir;
+					GetSysDirectories(memStickDir, flash0dir);
+					memStickDir += "PSP\\GAME\\";
+					BrowseAndBoot(memStickDir);
+				}
 				break;
 
 			case ID_FILE_REFRESHGAMELIST:
+				break;
+
+			case ID_FILE_MEMSTICK:
+				{
+					std::string memStickDir, flash0dir;
+					GetSysDirectories(memStickDir, flash0dir);
+					ShellExecuteA(NULL, "open", memStickDir.c_str(), 0, 0, SW_SHOW);
+				}
 				break;
 
 			case ID_EMULATION_RUN:

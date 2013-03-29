@@ -26,8 +26,9 @@
 #include "../MIPS/MIPSInt.h"
 #include "../MIPS/MIPSCodeUtils.h"
 #include "../MIPS/MIPS.h"
-#include "../../Core/CoreTiming.h"
-#include "../../Core/MemMap.h"
+#include "Core/CoreTiming.h"
+#include "Core/MemMap.h"
+#include "Core/Reporting.h"
 #include "ChunkFile.h"
 
 #include "sceAudio.h"
@@ -817,7 +818,7 @@ void __KernelIdle()
 		}
 		else
 		{
-			WARN_LOG(HLE, "UNTESTED - Callback thread deleted during interrupt?");
+			WARN_LOG_REPORT(HLE, "UNTESTED - Callback thread deleted during interrupt?");
 			g_inCbCount = 0;
 			currentCallbackThreadID = 0;
 		}
@@ -1144,13 +1145,13 @@ void __KernelWaitCurThread(WaitType type, SceUID waitID, u32 waitValue, u32 time
 {
 	if (!dispatchEnabled)
 	{
-		WARN_LOG(HLE, "Ignoring wait, dispatching disabled... right thing to do?");
+		WARN_LOG_REPORT(HLE, "Ignoring wait, dispatching disabled... right thing to do?");
 		return;
 	}
 
 	// TODO: Need to defer if in callback?
 	if (g_inCbCount > 0)
-		WARN_LOG(HLE, "UNTESTED - waiting within a callback, probably bad mojo.");
+		WARN_LOG_REPORT(HLE, "UNTESTED - waiting within a callback, probably bad mojo.");
 
 	Thread *thread = __GetCurrentThread();
 	thread->nt.waitID = waitID;
@@ -1283,7 +1284,7 @@ Thread *__KernelNextThread() {
 void __KernelReSchedule(const char *reason)
 {
 	// cancel rescheduling when in interrupt or callback, otherwise everything will be fucked up
-	if (__IsInInterrupt() || __KernelInCallback())
+	if (__IsInInterrupt() || __KernelInCallback() || !__KernelIsDispatchEnabled())
 	{
 		reason = "In Interrupt Or Callback";
 		return;
@@ -1298,7 +1299,7 @@ void __KernelReSchedule(const char *reason)
 
 	// Execute any pending events while we're doing scheduling.
 	CoreTiming::AdvanceQuick();
-	if (__IsInInterrupt() || __KernelInCallback())
+	if (__IsInInterrupt() || __KernelInCallback() || !__KernelIsDispatchEnabled())
 	{
 		reason = "In Interrupt Or Callback";
 		return;
@@ -1486,13 +1487,13 @@ int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32
 	// TODO: PSP actually fails for many of these cases, but trying for compat.
 	if (stacksize < 0x200 || stacksize >= 0x20000000)
 	{
-		WARN_LOG(HLE, "sceKernelCreateThread(name=\"%s\"): bogus stack size %08x, using 0x4000", threadName, stacksize);
+		WARN_LOG_REPORT(HLE, "sceKernelCreateThread(name=\"%s\"): bogus stack size %08x, using 0x4000", threadName, stacksize);
 		stacksize = 0x4000;
 	}
 	if (prio < 0x08 || prio > 0x77)
-		WARN_LOG(HLE, "sceKernelCreateThread(name=\"%s\"): bogus priority %08x", threadName, prio);
+		WARN_LOG_REPORT(HLE, "sceKernelCreateThread(name=\"%s\"): bogus priority %08x", threadName, prio);
 	if (!Memory::IsValidAddress(entry))
-		WARN_LOG(HLE, "sceKernelCreateThread(name=\"%s\"): invalid entry %08x", threadName, entry);
+		WARN_LOG_REPORT(HLE, "sceKernelCreateThread(name=\"%s\"): invalid entry %08x", threadName, entry);
 
 	// We're assuming all threads created are user threads.
 	if ((attr & PSP_THREAD_ATTR_KERNEL) == 0)
@@ -1502,7 +1503,7 @@ int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32
 	__KernelCreateThread(id, moduleID, threadName, entry, prio, stacksize, attr);
 	INFO_LOG(HLE, "%i = sceKernelCreateThread(name=\"%s\", entry=%08x, prio=%x, stacksize=%i)", id, threadName, entry, prio, stacksize);
 	if (optionAddr != 0)
-		WARN_LOG(HLE, "sceKernelCreateThread(name=\"%s\"): unsupported options parameter %08x", threadName, optionAddr);
+		WARN_LOG_REPORT(HLE, "sceKernelCreateThread(name=\"%s\"): unsupported options parameter %08x", threadName, optionAddr);
 	return id;
 }
 
@@ -1565,9 +1566,16 @@ int sceKernelStartThread(SceUID threadToStartID, u32 argSize, u32 argBlockPtr)
 		// Smaller is better for priority.  Only switch if the new thread is better.
 		if (cur && cur->nt.currentPriority > startThread->nt.currentPriority)
 		{
+			// Starting a thread automatically resumes the dispatch thread.
+			// TODO: Maybe this happens even for worse-priority started threads?
+			dispatchEnabled = true;
+
 			__KernelChangeReadyState(currentThread, true);
 			hleReSchedule("thread started");
 		}
+		else if (!dispatchEnabled)
+			WARN_LOG_REPORT(HLE, "UNTESTED Dispatch disabled while starting worse-priority thread");
+
 		__KernelChangeReadyState(startThread, threadToStartID, true);
 		return 0;
 	}
@@ -1692,19 +1700,25 @@ void sceKernelExitDeleteThread()
 
 u32 sceKernelSuspendDispatchThread()
 {
-	u32 oldDispatchSuspended = !dispatchEnabled;
+	u32 oldDispatchEnabled = dispatchEnabled;
 	dispatchEnabled = false;
-	DEBUG_LOG(HLE,"%i=sceKernelSuspendDispatchThread()", oldDispatchSuspended);
-	return oldDispatchSuspended;
+	DEBUG_LOG(HLE, "%i=sceKernelSuspendDispatchThread()", oldDispatchEnabled);
+	return oldDispatchEnabled;
 }
 
-u32 sceKernelResumeDispatchThread(u32 suspended)
+u32 sceKernelResumeDispatchThread(u32 enabled)
 {
-	u32 oldDispatchSuspended = !dispatchEnabled;
-	dispatchEnabled = !suspended;
-	DEBUG_LOG(HLE,"%i=sceKernelResumeDispatchThread(%i)", oldDispatchSuspended, suspended);
+	u32 oldDispatchEnabled = dispatchEnabled;
+	dispatchEnabled = enabled != 0;
+	DEBUG_LOG(HLE, "sceKernelResumeDispatchThread(%i) - from %i", enabled, oldDispatchEnabled);
 	hleReSchedule("dispatch resumed");
-	return oldDispatchSuspended;
+	return 0;
+}
+
+bool __KernelIsDispatchEnabled()
+{
+	// Dispatch can never be enabled when interrupts are disabled.
+	return dispatchEnabled && __InterruptsEnabled();
 }
 
 int sceKernelRotateThreadReadyQueue(int priority)
@@ -2108,7 +2122,7 @@ int sceKernelReleaseWaitThread(SceUID threadID)
 {
 	DEBUG_LOG(HLE, "sceKernelReleaseWaitThread(%i)", threadID);
 	if (__KernelInCallback())
-		WARN_LOG(HLE, "UNTESTED sceKernelReleaseWaitThread() might not do the right thing in a callback");
+		WARN_LOG_REPORT(HLE, "UNTESTED sceKernelReleaseWaitThread() might not do the right thing in a callback");
 
 	if (threadID == 0 || threadID == currentThread)
 		return SCE_KERNEL_ERROR_ILLEGAL_THID;
@@ -2558,7 +2572,7 @@ void __KernelExecuteMipsCallOnCurrentThread(u32 callId, bool reschedAfter)
 	}
 
 	if (g_inCbCount > 0) {
-		WARN_LOG(HLE, "__KernelExecuteMipsCallOnCurrentThread(): Already in a callback!");
+		WARN_LOG_REPORT(HLE, "__KernelExecuteMipsCallOnCurrentThread(): Already in a callback!");
 	}
 	DEBUG_LOG(HLE, "Executing mipscall %i", callId);
 	MipsCall *call = mipsCalls.get(callId);
@@ -2599,7 +2613,7 @@ void __KernelReturnFromMipsCall()
 
 	u32 callId = cur->currentCallbackId;
 	if (currentMIPS->r[MIPS_REG_CALL_ID] != callId)
-		WARN_LOG(HLE, "__KernelReturnFromMipsCall(): s0 is %08x != %08x", currentMIPS->r[MIPS_REG_CALL_ID], callId);
+		WARN_LOG_REPORT(HLE, "__KernelReturnFromMipsCall(): s0 is %08x != %08x", currentMIPS->r[MIPS_REG_CALL_ID], callId);
 
 	MipsCall *call = mipsCalls.pop(callId);
 

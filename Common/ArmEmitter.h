@@ -393,6 +393,7 @@ public:
 
 	void FlushLitPool();
 	void AddNewLit(u32 val);
+	bool TrySetValue_TwoOp(ARMReg reg, u32 val);
 
 	CCFlags GetCC() { return CCFlags(condition >> 28); }
 	void SetCC(CCFlags cond = CC_AL);
@@ -558,7 +559,9 @@ public:
 	void MOVI2R(ARMReg reg, u32 val, bool optimize = true);
 	void MOVI2F(ARMReg dest, float val, ARMReg tempReg);
 
+	void ADDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
 	void ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
+	void CMPI2R(ARMReg rs, u32 val, ARMReg scratch);
 	void ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
 
 

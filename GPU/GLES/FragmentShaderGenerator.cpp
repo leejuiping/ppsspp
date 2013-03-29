@@ -68,25 +68,26 @@ static bool IsAlphaTestTriviallyTrue() {
 void ComputeFragmentShaderID(FragmentShaderID *id) {
 	memset(&id->d[0], 0, sizeof(id->d));
 	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
-	int lmode = (gstate.lmode & 1) && (gstate.lightingEnable & 1);
+	bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue();
+	bool enableColorTest = gstate.isColorTestEnabled();
+	int lmode = (gstate.lmode & 1) && gstate.isLightingEnabled();
+
 	if (gstate.clearmode & 1) {
 		// We only need one clear shader, so let's ignore the rest of the bits.
 		id->d[0] = 1;
 	} else {
-		bool enableAlphaTest = (gstate.alphaTestEnable & 1) && !IsAlphaTestTriviallyTrue();
-		bool enableColorTest = (gstate.colorTestEnable & 1);
 		// id->d[0] |= (gstate.clearmode & 1);
-		if (gstate.textureMapEnable & 1) {
+		if (gstate.isTextureMapEnabled()) {
 			id->d[0] |= 1 << 1;
 			id->d[0] |= (gstate.texfunc & 0x7) << 2;
 			id->d[0] |= ((gstate.texfunc & 0x100) >> 8) << 5; // rgb or rgba
 			id->d[0] |= ((gstate.texfunc & 0x10000) >> 16) << 6;	// color double
 		}
 		id->d[0] |= (lmode & 1) << 7;
-		id->d[0] |= (gstate.alphaTestEnable & 1) << 8;
+		id->d[0] |= gstate.isAlphaTestEnabled() << 8;
 		if (enableAlphaTest)
 			id->d[0] |= (gstate.alphatest & 0x7) << 9;	 // alpha test func
-		id->d[0] |= (gstate.colorTestEnable & 1) << 12;
+		id->d[0] |= gstate.isColorTestEnabled() << 12;
 		if (enableColorTest)
 			id->d[0] |= (gstate.colortest & 0x3) << 13;	 // color test func
 		id->d[0] |= (enableFog & 1) << 15;
@@ -107,24 +108,25 @@ void GenerateFragmentShader(char *buffer) {
 	WRITE(p, "#version 110\n");
 #endif
 
-	int lmode = (gstate.lmode & 1) && (gstate.lightingEnable & 1);
+	int lmode = (gstate.lmode & 1) && gstate.isLightingEnabled();
+	int doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 
-	int doTexture = (gstate.textureMapEnable & 1) && !(gstate.clearmode & 1);
 	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
-	bool enableAlphaTest = (gstate.alphaTestEnable & 1) && !gstate.isModeClear() && !IsAlphaTestTriviallyTrue();
-	bool enableColorTest = (gstate.colorTestEnable & 1) && !gstate.isModeClear();
+	bool enableAlphaTest = gstate.isAlphaTestEnabled() && !gstate.isModeClear() && !IsAlphaTestTriviallyTrue();
+	bool enableColorTest = gstate.isColorTestEnabled() && !gstate.isModeClear();
 	bool enableColorDoubling = (gstate.texfunc & 0x10000) != 0;
 
 
 	if (doTexture)
 		WRITE(p, "uniform sampler2D tex;\n");
+
 	if (enableAlphaTest || enableColorTest) {
 		WRITE(p, "uniform vec4 u_alphacolorref;\n");
 		WRITE(p, "uniform vec4 u_colormask;\n");
 	}
-	if (gstate.textureMapEnable & 1) {
+	if (gstate.isTextureMapEnabled()) 
 		WRITE(p, "uniform vec3 u_texenv;\n");
-	}
+	
 	WRITE(p, "varying vec4 v_color0;\n");
 	if (lmode)
 		WRITE(p, "varying vec3 v_color1;\n");
@@ -207,17 +209,15 @@ void GenerateFragmentShader(char *buffer) {
 			if (alphaTestFuncs[alphaTestFunc][0] != '#')
 				WRITE(p, "  if (v.a %s u_alphacolorref.a) discard;\n", alphaTestFuncs[alphaTestFunc]);
 		}
-
-		// Disabled for now until we actually find a need for it.
-		/*
+		
 		if (enableColorTest) {
 			// TODO: There are some colortestmasks we could handle.
 			int colorTestFunc = gstate.colortest & 3;
-			const char *colorTestFuncs[] = { "#", "#", " == ", " != " };	// never/always don't make sense}
+			const char *colorTestFuncs[] = { "#", "#", " != ", " == " };	// never/always don't make sense
 			int colorTestMask = gstate.colormask;
 			if (colorTestFuncs[colorTestFunc][0] != '#')
-				WRITE(p, "if (!(v.rgb %s (u_alphacolorref.rgb & u_colormask.rgb)) discard;\n", colorTestFuncs[colorTestFunc]);
-		}*/	
+				WRITE(p, "if (v.rgb %s u_alphacolorref.rgb) discard;\n", colorTestFuncs[colorTestFunc]);
+		}
 
 		if (enableFog) {
 			WRITE(p, "  float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");

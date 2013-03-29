@@ -19,6 +19,7 @@
 #include "HLE.h"
 #include "../MIPS/MIPS.h"
 #include "Core/CoreTiming.h"
+#include "Core/Reporting.h"
 #include "ChunkFile.h"
 #include "sceKernel.h"
 #include "sceKernelThread.h"
@@ -172,12 +173,12 @@ int sceKernelCreateSema(const char* name, u32 attr, int initVal, int maxVal, u32
 {
 	if (!name)
 	{
-		WARN_LOG(HLE, "%08x=sceKernelCreateSema(): invalid name", SCE_KERNEL_ERROR_ERROR);
+		WARN_LOG_REPORT(HLE, "%08x=sceKernelCreateSema(): invalid name", SCE_KERNEL_ERROR_ERROR);
 		return SCE_KERNEL_ERROR_ERROR;
 	}
 	if (attr >= 0x200)
 	{
-		WARN_LOG(HLE, "%08x=sceKernelCreateSema(): invalid attr parameter: %08x", SCE_KERNEL_ERROR_ILLEGAL_ATTR, attr);
+		WARN_LOG_REPORT(HLE, "%08x=sceKernelCreateSema(): invalid attr parameter: %08x", SCE_KERNEL_ERROR_ILLEGAL_ATTR, attr);
 		return SCE_KERNEL_ERROR_ILLEGAL_ATTR;
 	}
 
@@ -196,9 +197,9 @@ int sceKernelCreateSema(const char* name, u32 attr, int initVal, int maxVal, u32
 	DEBUG_LOG(HLE, "%i=sceKernelCreateSema(%s, %08x, %i, %i, %08x)", id, s->ns.name, s->ns.attr, s->ns.initCount, s->ns.maxCount, optionPtr);
 
 	if (optionPtr != 0)
-		WARN_LOG(HLE, "sceKernelCreateSema(%s) unsupported options parameter: %08x", name, optionPtr);
+		WARN_LOG_REPORT(HLE, "sceKernelCreateSema(%s) unsupported options parameter: %08x", name, optionPtr);
 	if ((attr & ~PSP_SEMA_ATTR_PRIORITY) != 0)
-		WARN_LOG(HLE, "sceKernelCreateSema(%s) unsupported attr parameter: %08x", name, attr);
+		WARN_LOG_REPORT(HLE, "sceKernelCreateSema(%s) unsupported attr parameter: %08x", name, attr);
 
 	return id;
 }
@@ -298,9 +299,9 @@ void __KernelSemaTimeout(u64 userdata, int cycleslate)
 		// actually running, it will get a DELETE result instead of a TIMEOUT.
 		// So, we need to remember it or we won't be able to mark it DELETE instead later.
 		s->ns.numWaitThreads--;
-	}
 
-	__KernelResumeThreadFromWait(threadID, SCE_KERNEL_ERROR_WAIT_TIMEOUT);
+		__KernelResumeThreadFromWait(threadID, SCE_KERNEL_ERROR_WAIT_TIMEOUT);
+	}
 }
 
 void __KernelSetSemaTimeout(Semaphore *s, u32 timeoutPtr)
@@ -329,7 +330,7 @@ int __KernelWaitSema(SceUID id, int wantedCount, u32 timeoutPtr, const char *bad
 		if (wantedCount > s->ns.maxCount || wantedCount <= 0)
 			return SCE_KERNEL_ERROR_ILLEGAL_COUNT;
 
-		if (s->ns.currentCount >= wantedCount)
+		if (s->ns.currentCount >= wantedCount && s->ns.numWaitThreads == 0)
 		{
 			s->ns.currentCount -= wantedCount;
 			if (processCallbacks)
@@ -382,7 +383,7 @@ int sceKernelPollSema(SceUID id, int wantedCount)
 	Semaphore *s = kernelObjects.Get<Semaphore>(id, error);
 	if (s)
 	{
-		if (s->ns.currentCount >= wantedCount)
+		if (s->ns.currentCount >= wantedCount && s->ns.numWaitThreads == 0)
 		{
 			s->ns.currentCount -= wantedCount;
 			return 0;

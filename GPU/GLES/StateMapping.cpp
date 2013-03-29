@@ -183,15 +183,16 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 	}
 
 	// Set Dither
-	glstate.dither.set(gstate.isDitherEnabled());
-
+	if (gstate.isDitherEnabled()) {
+		glstate.dither.enable();
+		glstate.dither.set(GL_TRUE);
+	} else
+		glstate.dither.disable();
 
 	// Set ColorMask/Stencil/Depth
 	if (gstate.isModeClear()) {
 		bool colorMask = (gstate.clearmode >> 8) & 1;
 		bool alphaMask = (gstate.clearmode >> 9) & 1;
-		bool depthMask = ((gstate.clearmode >> 10) & 1) || !(gstate.zmsk & 1);
-		
 		glstate.colorMask.set(colorMask, colorMask, colorMask, alphaMask);
 
 		glstate.stencilTest.enable();
@@ -200,16 +201,17 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 
 		glstate.depthTest.enable();
 		glstate.depthFunc.set(GL_ALWAYS);
-		glstate.depthWrite.set(depthMask ? GL_TRUE : GL_FALSE);
+		glstate.depthWrite.set(GL_TRUE);
 
 	} else {	
 		if (gstate.isDepthTestEnabled()) {
 			glstate.depthTest.enable();
 			glstate.depthFunc.set(ztests[gstate.getDepthTestFunc()]);
-			glstate.depthWrite.set(gstate.isDepthWriteEnabled() ? GL_TRUE : GL_FALSE);
 		} else {
 			glstate.depthTest.disable();
 		}
+
+		glstate.depthWrite.set(gstate.isDepthWriteEnabled() ? GL_TRUE : GL_FALSE);
 
 		// PSP color/alpha mask is per bit but we can only support per byte.
 		// But let's do that, at least. And let's try a threshold.
@@ -218,7 +220,7 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		bool bmask = ((gstate.pmskc >> 16) & 0xFF) < 128;
 		bool amask = (gstate.pmska & 0xFF) < 128;
 		glstate.colorMask.set(rmask, gmask, bmask, amask);
-
+		
 		if (gstate.isStencilTestEnabled()) {
 			glstate.stencilTest.enable();
 			glstate.stencilFunc.set(ztests[gstate.stenciltest & 0x7],  // func

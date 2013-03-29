@@ -15,16 +15,13 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
-#include "../Config.h"
-#include "../Host.h"
-#include "../SaveState.h"
+#include "Core/Config.h"
+#include "Core/System.h"
+#include "Core/Host.h"
+#include "Core/SaveState.h"
 #include "HLE.h"
-#include "../MIPS/MIPS.h"
-#include "../HW/MemoryStick.h"
+#include "Core/MIPS/MIPS.h"
+#include "Core/HW/MemoryStick.h"
 #include "Core/CoreTiming.h"
 #include "Core/Reporting.h"
 
@@ -244,31 +241,9 @@ void __IoInit() {
 
 	asyncNotifyEvent = CoreTiming::RegisterEvent("IoAsyncNotify", __IoAsyncNotify);
 
-#ifdef _WIN32
-
-	char path_buffer[_MAX_PATH], drive[_MAX_DRIVE] ,dir[_MAX_DIR], file[_MAX_FNAME], ext[_MAX_EXT];
-	char memstickpath[_MAX_PATH];
-	char flash0path[_MAX_PATH];
-
-	GetModuleFileName(NULL,path_buffer,sizeof(path_buffer));
-
-	char *winpos = strstr(path_buffer, "Windows");
-	if (winpos)
-	*winpos = 0;
-	strcat(path_buffer, "dummy.txt");
-
-	_splitpath_s(path_buffer, drive, dir, file, ext );
-
-	// Mount a couple of filesystems
-	sprintf(memstickpath, "%s%smemstick\\", drive, dir);
-	sprintf(flash0path, "%s%sflash0\\", drive, dir);
-
-#else
-	// TODO
-	std::string memstickpath = g_Config.memCardDirectory;
-	std::string flash0path = g_Config.flashDirectory;
-#endif
-
+	std::string memstickpath;
+	std::string flash0path;
+	GetSysDirectories(memstickpath, flash0path);
 
 	DirectoryFileSystem *memstick = new DirectoryFileSystem(&pspFileSystem, memstickpath);
 #ifdef ANDROID
@@ -859,8 +834,7 @@ u32 sceIoDevctl(const char *name, int cmd, u32 argAddr, int argLen, u32 outPtr, 
 	case 0x01F100A8:
 	case 0x01F100A9:
 	case 0x01F300A7:
-		Reporting::ReportMessage("sceIoDevctl(\"%s\", %08x, %08x, %i, %08x, %i)", name, cmd, argAddr, argLen, outPtr, outLen);
-		ERROR_LOG(HLE, "UNIMPL sceIoDevctl(\"%s\", %08x, %08x, %i, %08x, %i)", name, cmd, argAddr, argLen, outPtr, outLen);
+		ERROR_LOG_REPORT(HLE, "UNIMPL sceIoDevctl(\"%s\", %08x, %08x, %i, %08x, %i)", name, cmd, argAddr, argLen, outPtr, outLen);
 		return 0;
 	}
 
@@ -930,7 +904,7 @@ u32 sceIoDevctl(const char *name, int cmd, u32 argAddr, int argLen, u32 outPtr, 
 				DEBUG_LOG(HLE, "Returned memstick size: maxSectors=%i", deviceSize.maxSectors);
 				return 0;
 			} else {
-				ERROR_LOG(HLE, "memstick size query: bad params");
+				ERROR_LOG_REPORT(HLE, "memstick size query: bad params");
 				return ERROR_MEMSTICK_DEVCTL_BAD_PARAMS;
 			}
 
@@ -1432,8 +1406,13 @@ int __IoIoctl(u32 id, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 out
 		break;
 
 	default:
-		Reporting::ReportMessage("sceIoIoctl(%s, %08x, %x, %08x, %x)", f->fullpath.c_str(), indataPtr, inlen, outdataPtr, outlen);
-		ERROR_LOG(HLE, "UNIMPL 0=sceIoIoctl id: %08x, cmd %08x, indataPtr %08x, inlen %08x, outdataPtr %08x, outLen %08x", id,cmd,indataPtr,inlen,outdataPtr,outlen);
+		{
+			char temp[256];
+			// We want the reported message to include the cmd, so it's unique.
+			sprintf(temp, "sceIoIoctl(%%s, %08x, %%08x, %%x, %%08x, %%x)", cmd);
+			Reporting::ReportMessage(temp, f->fullpath.c_str(), cmd, indataPtr, inlen, outdataPtr, outlen);
+			ERROR_LOG(HLE, "UNIMPL 0=sceIoIoctl id: %08x, cmd %08x, indataPtr %08x, inlen %08x, outdataPtr %08x, outLen %08x", id,cmd,indataPtr,inlen,outdataPtr,outlen);
+		}
 		break;
 	}
 

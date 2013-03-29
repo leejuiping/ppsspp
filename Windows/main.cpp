@@ -17,6 +17,11 @@
 
 #include <windows.h>
 
+void LaunchBrowser(const char *url)
+{
+	ShellExecute(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+}
+
 #include "file/vfs.h"
 #include "file/zip_read.h"
 
@@ -156,9 +161,11 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		MainWindow::SetPlaying(fileToStart);
 		MainWindow::Update();
 		MainWindow::UpdateMenus();
-
-		EmuThread_Start(fileToStart);
 	}
+
+	// Emu thread is always running!
+	EmuThread_Start();
+
 	if (g_Config.bBrowse)
 		MainWindow::BrowseAndBoot("");
 

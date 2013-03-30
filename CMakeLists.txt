@@ -577,6 +577,8 @@ add_library(native STATIC
 	native/ui/screen.h
 	native/ui/ui.cpp
 	native/ui/ui.h
+	native/ui/ui_context.cpp
+	native/ui/ui_context.h
 	native/ui/virtual_input.cpp
 	native/ui/virtual_input.h
 	native/util/bits/bits.cpp
@@ -983,13 +985,14 @@ if(HEADLESS)
 endif()
 
 set(NativeAppSource
-	android/jni/NativeApp.cpp
-	android/jni/EmuScreen.cpp
+	UI/NativeApp.cpp
+	UI/EmuScreen.cpp
 	android/jni/TestRunner.cpp
-	android/jni/MenuScreens.cpp
-	android/jni/GamepadEmu.cpp
-	android/jni/UIShader.cpp
-	android/jni/ui_atlas.cpp)
+    UI/GameInfoCache.cpp
+	UI/MenuScreens.cpp
+	UI/GamepadEmu.cpp
+	UI/UIShader.cpp
+	UI/ui_atlas.cpp)
 if(ANDROID)
 	set(NativeAppSource ${NativeAppSource} android/jni/ArmEmitterTest.cpp)
 endif()

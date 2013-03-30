@@ -12,6 +12,7 @@
 #include "Core/Host.h"
 #include "Log.h"
 #include "LogManager.h"
+#include "native/input/input_state.h"
 
 #include "Compare.h"
 #include "StubHost.h"
@@ -55,6 +56,10 @@ struct InputState;
 void GL_SwapBuffers() { }
 void NativeUpdate(InputState &input_state) { }
 void NativeRender() { }
+
+#ifndef _WIN32
+InputState input_state;
+#endif
 
 void printUsage(const char *progname, const char *reason)
 {

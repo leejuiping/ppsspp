@@ -83,8 +83,7 @@ void Core_WaitInactive()
 
 void Core_WaitInactive(int milliseconds)
 {
-	while (!Core_IsInactive())
-		m_hInactiveEvent.wait_for(m_hInactiveMutex, milliseconds);
+	m_hInactiveEvent.wait_for(m_hInactiveMutex, milliseconds);
 }
 
 void UpdateScreenScale() {
@@ -109,16 +108,18 @@ void Core_RunLoop()
 				input_state.pad_buttons = 0;
 				input_state.pad_lstick_x = 0;
 				input_state.pad_lstick_y = 0;
+				input_state.pad_rstick_x = 0;
+				input_state.pad_rstick_y = 0;
 				// Temporary hack.
 				if (GetAsyncKeyState(VK_ESCAPE)) {
 					input_state.pad_buttons |= PAD_BUTTON_MENU;
-				} else {
-					input_state.pad_buttons &= ~PAD_BUTTON_MENU;
 				}
 				host->PollControllers(input_state);
+				UpdateInputState(&input_state);
 #endif
 			}
 			NativeUpdate(input_state);
+			EndInputState(&input_state);
 		}
 		NativeRender();
 		// Simple throttling to not burn the GPU in the menu.

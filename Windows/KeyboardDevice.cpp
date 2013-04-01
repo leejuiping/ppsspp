@@ -6,7 +6,6 @@
 
 static const unsigned int key_pad_map[] = {
 	VK_TAB,   PAD_BUTTON_LEFT_THUMB,
-<<<<<<< HEAD
 	VK_RETURN, PAD_BUTTON_START,
 	VK_SPACE,      PAD_BUTTON_SELECT,
 	'A',      PAD_BUTTON_X,
@@ -19,20 +18,6 @@ static const unsigned int key_pad_map[] = {
 	VK_DOWN,  PAD_BUTTON_DOWN,
 	VK_LEFT,  PAD_BUTTON_LEFT,
 	VK_RIGHT, PAD_BUTTON_RIGHT,
-=======
-	VK_RETURN, CTRL_START,
-	VK_SPACE, CTRL_SELECT,
-	'A',      CTRL_SQUARE,
-	'W',      CTRL_TRIANGLE,
-	'D',      CTRL_CIRCLE,
-	'S',      CTRL_CROSS,
-	'Q',      CTRL_LTRIGGER,
-	'E',      CTRL_RTRIGGER,
-	VK_UP,    CTRL_UP,
-	VK_DOWN,  CTRL_DOWN,
-	VK_LEFT,  CTRL_LEFT,
-	VK_RIGHT, CTRL_RIGHT,
->>>>>>> a58516d55afe7cc2a953d0105ecd73cfbf5b888b
 };
 
 static const unsigned short analog_ctrl_map[] = {

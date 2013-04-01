@@ -20,8 +20,9 @@
 #include "IniFile.h"
 #include "HLE/sceUtility.h"
 
-SState g_State;
 Config g_Config;
+
+#define MAX_RECENT 4
 
 Config::Config()
 {
@@ -57,6 +58,12 @@ void Config::Load(const char *iniFileName)
 	// "default" means let emulator decide, "" means disable.
 	general->Get("ReportHost", &sReportHost, "default");
 	general->Get("Recent", recentIsos);
+	general->Get("WindowX", &iWindowX, 40);
+	general->Get("WindowY", &iWindowY, 100);
+	general->Get("AutoSaveSymbolMap", &bAutoSaveSymbolMap, false);
+
+	if (recentIsos.size() > MAX_RECENT)
+		recentIsos.resize(MAX_RECENT);
 
 	IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 	cpu->Get("Jit", &bJit, true);
@@ -66,7 +73,11 @@ void Config::Load(const char *iniFileName)
 	IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
 	graphics->Get("ShowFPSCounter", &bShowFPSCounter, false);
 	graphics->Get("DisplayFramebuffer", &bDisplayFramebuffer, false);
+#ifdef _WIN32
+	graphics->Get("WindowZoom", &iWindowZoom, 2);
+#else
 	graphics->Get("WindowZoom", &iWindowZoom, 1);
+#endif
 	graphics->Get("BufferedRendering", &bBufferedRendering, true);
 	graphics->Get("HardwareTransform", &bHardwareTransform, true);
 	graphics->Get("LinearFiltering", &bLinearFiltering, false);
@@ -127,6 +138,9 @@ void Config::Save()
 		general->Set("ShowDebuggerOnLoad", bShowDebuggerOnLoad);
 		general->Set("ReportHost", sReportHost);
 		general->Set("Recent", recentIsos);
+		general->Set("WindowX", iWindowX);
+		general->Set("WindowY", iWindowY);
+		general->Set("AutoSaveSymbolMap", bAutoSaveSymbolMap);
 
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 		cpu->Set("Jit", bJit);
@@ -179,10 +193,12 @@ void Config::AddRecent(const std::string &file) {
 		if (*str == file) {
 			recentIsos.erase(str);
 			recentIsos.insert(recentIsos.begin(), file);
+			if (recentIsos.size() > MAX_RECENT)
+				recentIsos.resize(MAX_RECENT);
 			return;
 		}
 	}
 	recentIsos.insert(recentIsos.begin(), file);
-	if (recentIsos.size() > 4)
-		recentIsos.resize(4);
+	if (recentIsos.size() > MAX_RECENT)
+		recentIsos.resize(MAX_RECENT);
 }

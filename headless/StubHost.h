@@ -34,7 +34,6 @@ public:
 	virtual void SetDebugMode(bool mode) { }
 
 	virtual bool InitGL(std::string *error_message) {return true;}
-	virtual void BeginFrame() {}
 	virtual void ShutdownGL() {}
 
 	virtual void InitSound(PMixer *mixer) {}
@@ -43,7 +42,6 @@ public:
 
 	// this is sent from EMU thread! Make sure that Host handles it properly
 	virtual void BootDone() {}
-	virtual void PrepareShutdown() {}
 
 	virtual bool IsDebuggingEnabled() {return false;}
 	virtual bool AttemptLoadSymbolMap() {return false;}

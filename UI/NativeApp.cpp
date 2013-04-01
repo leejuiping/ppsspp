@@ -35,7 +35,9 @@
 #include "math/lin/matrix4x4.h"
 #include "ui/screen.h"
 #include "ui/ui.h"
+#include "ui/ui_context.h"
 
+#include "base/mutex.h"
 #include "FileUtil.h"
 #include "LogManager.h"
 #include "../../Core/PSPMixer.h"
@@ -43,6 +45,7 @@
 #include "../../Core/Config.h"
 #include "../../Core/HLE/sceCtrl.h"
 #include "../../Core/Host.h"
+#include "../../Core/SaveState.h"
 #include "../../Common/MemArena.h"
 
 #include "ui_atlas.h"
@@ -51,7 +54,7 @@
 #include "UIShader.h"
 
 #ifdef ARM
-#include "ArmEmitterTest.h"
+#include "../../android/jni/ArmEmitterTest.h"
 #endif
 
 Texture *uiTexture;
@@ -59,6 +62,13 @@ Texture *uiTexture;
 ScreenManager *screenManager;
 std::string config_filename;
 std::string game_title;
+
+recursive_mutex pendingMutex;
+static bool isMessagePending;
+static std::string pendingMessage;
+static std::string pendingValue;
+static UIContext *uiContext;
+
 
 class AndroidLogger : public LogListener
 {
@@ -103,7 +113,6 @@ public:
 	virtual void SetDebugMode(bool mode) { }
 
 	virtual bool InitGL(std::string *error_message) { return true; }
-	virtual void BeginFrame() {}
 	virtual void ShutdownGL() {}
 
 	virtual void InitSound(PMixer *mixer);
@@ -112,7 +121,6 @@ public:
 
 	// this is sent from EMU thread! Make sure that Host handles it properly!
 	virtual void BootDone() {}
-	virtual void PrepareShutdown() {}
 
 	virtual bool IsDebuggingEnabled() {return false;}
 	virtual bool AttemptLoadSymbolMap() {return false;}
@@ -125,7 +133,9 @@ public:
 
 // globals
 static PMixer *g_mixer = 0;
+#ifndef _WIN32
 static AndroidLogger *logger = 0;
+#endif
 
 std::string boot_filename = "";
 
@@ -139,23 +149,17 @@ void NativeHost::ShutdownSound()
 	g_mixer = 0;
 }
 
-void NativeMix(short *audio, int num_samples)
+int NativeMix(short *audio, int num_samples)
 {
 	if (g_mixer)
 	{
-		g_mixer->Mix(audio, num_samples);
+		return g_mixer->Mix(audio, num_samples);
 	}
 	else
 	{
 		//memset(audio, 0, numSamples * 2);
+		return 0;
 	}
-}
-
-int NativeMixCount(short *audio, int num_samples)
-{
-	if (g_mixer)
-		return g_mixer->Mix(audio, num_samples);
-	return 0;
 }
 
 void NativeGetAppInfo(std::string *app_dir_name, std::string *app_nice_name, bool *landscape)
@@ -173,7 +177,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 {
 	EnableFZ();
 	std::string user_data_path = savegame_directory;
-
+	isMessagePending = false;
 	// We want this to be FIRST.
 #ifdef BLACKBERRY
 	// Packed assets are included in app/native/ dir
@@ -188,6 +192,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 
 	host = new NativeHost();
 
+#ifndef _WIN32
 	logger = new AndroidLogger();
 
 	LogManager::Init();
@@ -195,10 +200,11 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	ILOG("Logman: %p", logman);
 
 	config_filename = user_data_path + "/ppsspp.ini";
-
 	g_Config.Load(config_filename.c_str());
+#endif
 
 	const char *fileToLog = 0;
+	const char *stateToLoad = 0;
 
 	bool gfxLog = false;
 	// Parse command line
@@ -225,6 +231,8 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 			case '-':
 				if (!strncmp(argv[i], "--log=", strlen("--log=")) && strlen(argv[i]) > strlen("--log="))
 					fileToLog = argv[i] + strlen("--log=");
+				if (!strncmp(argv[i], "--state=", strlen("--state=")) && strlen(argv[i]) > strlen("--state="))
+					stateToLoad = argv[i] + strlen("--state=");
 				break;
 			}
 		} else {
@@ -245,6 +253,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	if (fileToLog != NULL)
 		LogManager::GetInstance()->ChangeFileLog(fileToLog);
 
+#ifndef _WIN32
 	if (g_Config.currentDirectory == "") {
 #if defined(ANDROID)
 		g_Config.currentDirectory = external_directory;
@@ -292,11 +301,14 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	if (!gfxLog)
 		logman->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
 	INFO_LOG(BOOT, "Logger inited.");
+#endif	
+
+	if (!boot_filename.empty() && stateToLoad != NULL)
+		SaveState::Load(stateToLoad);
 }
 
 void NativeInitGraphics()
 {
-	INFO_LOG(BOOT, "NativeInitGraphics - should only be called once!");
 	gl_lost_manager_init();
 	ui_draw2d.SetAtlas(&ui_atlas);
 
@@ -328,9 +340,15 @@ void NativeInitGraphics()
 	uiTexture = new Texture();
 	if (!uiTexture->Load("ui_atlas.zim"))
 	{
-		ELOG("Failed to load texture");
+		PanicAlert("Failed to load ui_atlas.zim.\n\nPlace it in the directory \"assets\" under your PPSSPP directory.");
+		ELOG("Failed to load ui_atlas.zim");
 	}
 	uiTexture->Bind(0);
+
+	uiContext = new UIContext();
+	uiContext->Init(UIShader_Get(), UIShader_GetPlain(), uiTexture, &ui_draw2d, &ui_draw2d_front);
+
+	screenManager->setUIContext(uiContext);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -350,8 +368,9 @@ void NativeRender()
 	glClearColor(0,0,0,1);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
+	glstate.viewport.set(0, 0, pixel_xres, pixel_yres);
 	glstate.Restore();
-	glViewport(0, 0, pixel_xres, pixel_yres);
+
 	Matrix4x4 ortho;
 	ortho.setOrtho(0.0f, dp_xres, dp_yres, 0.0f, -1.0f, 1.0f);
 	glsl_bind(UIShader_Get());
@@ -362,9 +381,17 @@ void NativeRender()
 
 void NativeUpdate(InputState &input)
 {
+	{
+		lock_guard lock(pendingMutex);
+		if (isMessagePending) {
+			screenManager->sendMessage(pendingMessage.c_str(), pendingValue.c_str());
+			isMessagePending = false;
+		}
+	}
+
 	UIUpdateMouse(0, input.pointer_x[0], input.pointer_y[0], input.pointer_down[0]);
 	screenManager->update(input);
-}
+} 
 
 void NativeDeviceLost()
 {
@@ -394,7 +421,13 @@ void NativeTouch(int finger, float x, float y, double time, TouchEvent event)
 
 void NativeMessageReceived(const char *message, const char *value)
 {
-	// Unused
+	// We can only have one message queued.
+	lock_guard lock(pendingMutex);
+	if (!isMessagePending) {
+		pendingMessage = message;
+		pendingValue = value;
+		isMessagePending = true;
+	}
 }
 
 void NativeShutdownGraphics()
@@ -419,7 +452,9 @@ void NativeShutdown()
 	delete host;
 	host = 0;
 	g_Config.Save();
+#ifndef _WIN32
 	LogManager::Shutdown();
+#endif
 	// This means that the activity has been completely destroyed. PPSSPP does not
 	// boot up correctly with "dirty" global variables currently, so we hack around that
 	// by simply exiting.

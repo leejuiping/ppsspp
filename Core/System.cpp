@@ -49,8 +49,21 @@
 
 MetaFileSystem pspFileSystem;
 ParamSFOData g_paramSFO;
+GlobalUIState globalUIState;
 static CoreParameter coreParameter;
 static PSPMixer *mixer;
+
+// This can be read and written from ANYWHERE.
+volatile CoreState coreState = CORE_STEPPING;
+// Note: intentionally not used for CORE_NEXTFRAME.
+volatile bool coreStatePending = false;
+
+void Core_UpdateState(CoreState newState)
+{
+	if ((coreState == CORE_RUNNING || coreState == CORE_NEXTFRAME) && newState != CORE_RUNNING)
+		coreStatePending = true;
+	coreState = newState;
+}
 
 bool PSP_Init(const CoreParameter &coreParam, std::string *error_string)
 {
@@ -62,6 +75,8 @@ bool PSP_Init(const CoreParameter &coreParam, std::string *error_string)
 	Memory::Init();
 	mipsr4k.Reset();
 	mipsr4k.pc = 0;
+
+	host->AttemptLoadSymbolMap();
 
 	if (coreParameter.enableSound)
 	{
@@ -112,6 +127,9 @@ void PSP_Shutdown()
 	pspFileSystem.Shutdown();
 
 	CoreTiming::Shutdown();
+
+	if (g_Config.bAutoSaveSymbolMap)
+		host->SaveSymbolMap();
 
 	if (coreParameter.enableSound)
 	{

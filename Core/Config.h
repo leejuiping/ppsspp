@@ -23,12 +23,6 @@
 
 extern const char *PPSSPP_GIT_VERSION;
 
-struct SState
-{
-	bool bEmuThreadStarted;	// is anything loaded into the emulator?
-	bool bBooted;
-};
-
 struct Config
 {
 public:
@@ -50,6 +44,7 @@ public:
 	bool bIgnoreBadMemAccess;
 	bool bFastMemory;
 	bool bJit;
+	bool bAutoSaveSymbolMap;
 	std::string sReportHost;
 	std::vector<std::string> recentIsos;
 
@@ -64,6 +59,8 @@ public:
 	int iFrameSkip;  // 0 = off;  1 = auto;  (future:  2 = skip every 2nd frame;  3 = skip every 3rd frame etc).
 	bool bUseMediaEngine;
 
+	int iWindowX;
+	int iWindowY;
 	int iWindowZoom;  // for Windows
 	bool SSAntiAliasing; //for Windows, too
 	bool bVertexCache;
@@ -105,5 +102,4 @@ private:
 	std::string iniFilename_;
 };
 
-extern SState g_State;
 extern Config g_Config;

@@ -17,15 +17,11 @@ x86:!mobile_platform: {
 	HEADERS += ../native/base/backtrace.h
 }
 
-# EtcPack
+# RG_ETC1
 
-SOURCES += ../native/ext/etcpack/etcdec.cpp \
-	../native/ext/etcpack/etcpack.cpp \
-	../native/ext/etcpack/image.cpp
-HEADERS += ../native/ext/etcpack/etcdec.h \
-	../native/ext/etcpack/etcpack.h \
-	../native/ext/etcpack/image.h
-INCLUDEPATH += ../native/ext/etcpack
+SOURCES += ../native/ext/rg_etc1/rg_etc1.cpp
+HEADERS += ../native/ext/rg_etc1/rg_etc1.h
+INCLUDEPATH += ../native/ext/rg_etc1
 
 # Cityhash
 SOURCES += ../native/ext/cityhash/city.cpp
@@ -84,9 +80,7 @@ SOURCES +=  ../native/audio/*.cpp \
 	../native/midi/midi_input.cpp \
 	../native/net/*.cpp \
 	../native/profiler/profiler.cpp \
-	../native/ui/screen.cpp \
-	../native/ui/ui.cpp \
-	../native/ui/virtual_input.cpp \
+	../native/ui/*.cpp \
 	../native/util/bits/*.cpp \
 	../native/util/hash/hash.cpp \
 	../native/util/random/perlin.cpp \

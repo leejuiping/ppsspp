@@ -313,14 +313,10 @@ add_library(snappy STATIC
 )
 include_directories(ext/snappy)
 
-add_library(etcpack STATIC
-	native/ext/etcpack/etcdec.cpp
-	native/ext/etcpack/etcdec.h
-	native/ext/etcpack/etcpack.cpp
-	native/ext/etcpack/etcpack.h
-	native/ext/etcpack/image.cpp
-	native/ext/etcpack/image.h)
-include_directories(native/ext/etcpack)
+add_library(rg_etc1 STATIC
+	native/ext/rg_etc1/rg_etc1.cpp
+	native/ext/rg_etc1/rg_etc1.h)
+include_directories(native/ext/rg_etc1)
 
 add_library(cityhash STATIC
   native/ext/cityhash/city.cpp
@@ -581,6 +577,8 @@ add_library(native STATIC
 	native/ui/screen.h
 	native/ui/ui.cpp
 	native/ui/ui.h
+	native/ui/ui_context.cpp
+	native/ui/ui_context.h
 	native/ui/virtual_input.cpp
 	native/ui/virtual_input.h
 	native/util/bits/bits.cpp
@@ -602,7 +600,7 @@ add_library(native STATIC
 include_directories(native)
 # rapidxml is headers only so we can't make a lib specific for it
 include_directories(native/ext/rapidxml)
-target_link_libraries(native ${LIBZIP} etcpack sha1 stb_image stb_vorbis #vjson
+target_link_libraries(native ${LIBZIP} rg_etc1 sha1 stb_image stb_vorbis #vjson
 	zlib snappy ${GLEW_LIBRARIES})
 if(ANDROID)
 	target_link_libraries(native log)
@@ -987,13 +985,14 @@ if(HEADLESS)
 endif()
 
 set(NativeAppSource
-	android/jni/NativeApp.cpp
-	android/jni/EmuScreen.cpp
+	UI/NativeApp.cpp
+	UI/EmuScreen.cpp
 	android/jni/TestRunner.cpp
-	android/jni/MenuScreens.cpp
-	android/jni/GamepadEmu.cpp
-	android/jni/UIShader.cpp
-	android/jni/ui_atlas.cpp)
+    UI/GameInfoCache.cpp
+	UI/MenuScreens.cpp
+	UI/GamepadEmu.cpp
+	UI/UIShader.cpp
+	UI/ui_atlas.cpp)
 if(ANDROID)
 	set(NativeAppSource ${NativeAppSource} android/jni/ArmEmitterTest.cpp)
 endif()
@@ -1014,22 +1013,26 @@ endif()
 # installs
 file(INSTALL ${NativeAssets} DESTINATION assets)
 
-# packaging and code signing
-if (IOS)
+# Fix CMake some Xcode settings.
+if(APPLE)
 	# Fix CMake breaking optimization settings.
 	set(CMAKE_CXX_FLAGS_DEBUG "-g -D_DEBUG")
 	set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -D_NDEBUG")
-	set(CMAKE_CXX_FLAGS_RELEASE "-O2 -D_NDEBUG")
+	set(CMAKE_CXX_FLAGS_RELEASE "-O3 -D_NDEBUG")
 	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -D_NDEBUG")
 	set(CMAKE_C_FLAGS_DEBUG "-g -D_DEBUG")
 	set(CMAKE_C_FLAGS_MINSIZEREL "-Os -D_NDEBUG")
-	set(CMAKE_C_FLAGS_RELEASE "-O2 -D_NDEBUG")
+	set(CMAKE_C_FLAGS_RELEASE "-O3 -D_NDEBUG")
 	set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -g -D_NDEBUG")
 
-	# These can be fast.
+	# These can be fast even for debug.
 	set_target_properties(cityhash PROPERTIES COMPILE_FLAGS "-O3")
+	set_target_properties(snappy PROPERTIES COMPILE_FLAGS "-O3")
 	set_target_properties(zlib PROPERTIES COMPILE_FLAGS "-O3")
+endif()
 
+# packaging and code signing
+if(IOS)
 	add_dependencies(PPSSPP ${CoreLibName} GPU Common native)
 
 	file(GLOB IOSAssets ios/assets/*.png)

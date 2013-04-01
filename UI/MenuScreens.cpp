@@ -19,6 +19,12 @@
 #include <string>
 #include <cstdio>
 
+#ifdef _WIN32
+namespace MainWindow {
+	void BrowseAndBoot(std::string defaultPath);
+}
+#endif
+
 #ifdef _MSC_VER
 #define snprintf _snprintf
 #endif
@@ -33,22 +39,26 @@
 #include "input/input_state.h"
 #include "math/curves.h"
 #include "ui/ui.h"
+#include "ui/ui_context.h"
 #include "ui_atlas.h"
 #include "util/random/rng.h"
 #include "util/text/utf8.h"
 #include "UIShader.h"
 
 #include "Common/StringUtil.h"
-#include "../../GPU/ge_constants.h"
-#include "../../GPU/GPUState.h"
-#include "../../GPU/GPUInterface.h"
-#include "../../Core/Config.h"
-#include "../../Core/CoreParameter.h"
-#include "../../Core/SaveState.h"
+#include "Core/System.h"
+#include "Core/CoreParameter.h"
+#include "GPU/ge_constants.h"
+#include "GPU/GPUState.h"
+#include "GPU/GPUInterface.h"
+#include "Core/Config.h"
+#include "Core/CoreParameter.h"
+#include "Core/SaveState.h"
 
 #include "MenuScreens.h"
 #include "EmuScreen.h"
-#include "TestRunner.h"
+#include "GameInfoCache.h"
+#include "android/jni/TestRunner.h"
 
 #ifdef USING_QT_UI
 #include <QFileDialog>
@@ -56,10 +66,8 @@
 #include <QDir>
 #endif
 
-
 // Ugly communication with NativeApp
 extern std::string game_title;
-
 
 static const int symbols[4] = {
 	I_CROSS,
@@ -84,12 +92,16 @@ static const uint32_t colors[4] = {
 static void DrawBackground(float alpha) {
 	static float xbase[100] = {0};
 	static float ybase[100] = {0};
-	if (xbase[0] == 0.0f) {
+	static int last_dp_xres = 0;
+	static int last_dp_yres = 0;
+	if (xbase[0] == 0.0f || last_dp_xres != dp_xres || last_dp_yres != dp_yres) {
 		GMRng rng;
 		for (int i = 0; i < 100; i++) {
 			xbase[i] = rng.F() * dp_xres;
 			ybase[i] = rng.F() * dp_yres;
 		}
+		last_dp_xres = dp_xres;
+		last_dp_yres = dp_yres;
 	}
 	glstate.depthWrite.set(GL_TRUE);
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -122,6 +134,12 @@ void LogoScreen::update(InputState &input_state) {
 	}
 }
 
+void LogoScreen::sendMessage(const char *message, const char *value) {
+	if (!strcmp(message, "boot")) {
+		screenManager()->switchScreen(new EmuScreen(value));
+	}
+}
+
 void LogoScreen::render() {
 	float t = (float)frames_ / 60.0f;
 
@@ -131,7 +149,7 @@ void LogoScreen::render() {
 	if (t > 2.0f) alphaText = 3.0f - t;
 
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(alpha);
 
 	ui_draw2d.SetFontScale(1.5f, 1.5f);
@@ -146,9 +164,6 @@ void LogoScreen::render() {
 
 	DrawWatermark();
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 
@@ -157,12 +172,19 @@ void LogoScreen::render() {
 // ==================
 
 void MenuScreen::update(InputState &input_state) {
+	globalUIState = UISTATE_MENU;
 	frames_++;
+}
+
+void MenuScreen::sendMessage(const char *message, const char *value) {
+	if (!strcmp(message, "boot")) {
+		screenManager()->switchScreen(new EmuScreen(value));
+	}
 }
 
 void MenuScreen::render() {
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	double xoff = 150 - frames_ * frames_ * 0.4f;
@@ -189,6 +211,8 @@ void MenuScreen::render() {
 			g_Config.Save();
 			screenManager()->switchScreen(new EmuScreen(fileName.toStdString()));
 		}
+#elif _WIN32
+		MainWindow::BrowseAndBoot("");
 #else
 		FileSelectScreenOptions options;
 		options.allowChooseDirectory = true;
@@ -203,22 +227,26 @@ void MenuScreen::render() {
 		UIReset();
 	}
 
+#ifndef _WIN32
 	if (UIButton(GEN_ID, vlinear, w, "Settings", ALIGN_RIGHT)) {
 		screenManager()->push(new SettingsScreen(), 0);
 		UIReset();
 	}
+#endif
 
 	if (UIButton(GEN_ID, vlinear, w, "Credits", ALIGN_RIGHT)) {
 		screenManager()->switchScreen(new CreditsScreen());
 		UIReset();
 	}
 
+#ifndef _WIN32
 	if (UIButton(GEN_ID, vlinear, w, "Exit", ALIGN_RIGHT)) {
 		// TODO: Save when setting changes, rather than when we quit
 		NativeShutdown();
 		// TODO: Need a more elegant way to quit
 		exit(0);
 	}
+#endif
 
 	if (UIButton(GEN_ID, vlinear, w, "www.ppsspp.org", ALIGN_RIGHT)) {
 		LaunchBrowser("http://www.ppsspp.org/");
@@ -230,29 +258,48 @@ void MenuScreen::render() {
 	}
 	for (size_t i = 0; i < g_Config.recentIsos.size(); i++) {
 		std::string filename;
-		SplitPath(g_Config.recentIsos[i], nullptr, &filename, nullptr);
-		if (UIButton(GEN_ID_LOOP(i), vlinear2, recentW, filename.c_str(), ALIGN_LEFT)) {
-			screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
+		std::string rec = g_Config.recentIsos[i];
+		for (size_t j = 0; j < rec.size(); j++)
+			if (rec[j] == '\\') rec[j] = '/';
+		SplitPath(rec, nullptr, &filename, nullptr);
+
+		UIContext *ctx = screenManager()->getUIContext();
+		// This might create a texture so we must flush first.
+		UIFlush();
+		GameInfo *ginfo = g_gameInfoCache.GetInfo(g_Config.recentIsos[i], false);
+
+		if (ginfo) {
+			if (UITextureButton(ctx, GEN_ID_LOOP(i), vlinear2, 144, 80, ginfo->iconTexture, ALIGN_LEFT)) {
+				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
+			}
+		} else {
+			if (UIButton(GEN_ID_LOOP(i), vlinear2, recentW, filename.c_str(), ALIGN_LEFT)) {
+				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
+			}
 		}
 	}
 	DrawWatermark();
 
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 
-void InGameMenuScreen::update(InputState &input) {
+void PauseScreen::update(InputState &input) {
+	globalUIState = UISTATE_PAUSEMENU;
 	if (input.pad_buttons_down & PAD_BUTTON_BACK) {
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
 }
 
-void InGameMenuScreen::render() {
+void PauseScreen::sendMessage(const char *msg, const char *value) {
+	if (!strcmp(msg, "run")) {
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+}
+
+void PauseScreen::render() {
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	const char *title;
@@ -263,7 +310,37 @@ void InGameMenuScreen::render() {
 		title = game_title.c_str();
 	}
 
-	ui_draw2d.DrawText(UBUNTU48, title, dp_xres / 2, 30, 0xFFFFFFFF, ALIGN_HCENTER);
+
+	UIContext *ctx = screenManager()->getUIContext();
+	// This might create a texture so we must flush first.
+	UIFlush();
+	GameInfo *ginfo = g_gameInfoCache.GetInfo(PSP_CoreParameter().fileToStart, true);
+
+	if (ginfo && ginfo->pic1Texture) {
+		ginfo->pic1Texture->Bind(0);
+		ui_draw2d.DrawTexRect(0,0,dp_xres, dp_yres, 0,0,1,1,0xFFc0c0c0);
+		ui_draw2d.Flush();
+		ctx->RebindTexture();
+	}
+
+	if (ginfo && ginfo->pic0Texture) {
+		ginfo->pic0Texture->Bind(0);
+		// Pic0 is drawn in the bottom right corner, overlaying pic1.
+		float sizeX = dp_xres / 480 * ginfo->pic0Texture->Width();
+		float sizeY = dp_yres / 272 * ginfo->pic0Texture->Height();
+		ui_draw2d.DrawTexRect(dp_xres - sizeX, dp_yres - sizeY, dp_xres, dp_yres, 0,0,1,1,0xFFc0c0c0);
+		ui_draw2d.Flush();
+		ctx->RebindTexture();
+	}
+
+	if (ginfo && ginfo->iconTexture) {
+		ginfo->iconTexture->Bind(0);
+		ui_draw2d.DrawTexRect(10,10,10+144, 10+80, 0,0,1,1,0xFFFFFFFF);
+		ui_draw2d.Flush();
+		ctx->RebindTexture();
+	}
+
+	ui_draw2d.DrawText(UBUNTU48, title, 10+144+10, 30, 0xFFFFFFFF, ALIGN_LEFT);
 
 	int x = 30;
 	int y = 50;
@@ -300,9 +377,11 @@ void InGameMenuScreen::render() {
 	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Continue", ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
+#ifndef _WIN32
 	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Settings", ALIGN_RIGHT)) {
 		screenManager()->push(new SettingsScreen(), 0);
 	}
+#endif
 	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Return to Menu", ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
@@ -315,12 +394,10 @@ void InGameMenuScreen::render() {
 
 	DrawWatermark();
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 void SettingsScreen::update(InputState &input) {
+	globalUIState = UISTATE_MENU;
 	if (input.pad_buttons_down & PAD_BUTTON_BACK) {
 		g_Config.Save();
 		screenManager()->finishDialog(this, DR_OK);
@@ -329,7 +406,7 @@ void SettingsScreen::update(InputState &input) {
 
 void SettingsScreen::render() {
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	ui_draw2d.DrawText(UBUNTU48, "Settings", dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
@@ -388,9 +465,6 @@ void SettingsScreen::render() {
 	}
 
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 void DeveloperScreen::update(InputState &input) {
@@ -402,7 +476,7 @@ void DeveloperScreen::update(InputState &input) {
 
 void DeveloperScreen::render() {
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	ui_draw2d.DrawText(UBUNTU48, "Developer Tools", dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
@@ -423,21 +497,20 @@ void DeveloperScreen::render() {
 	}
 
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 
 class FileListAdapter : public UIListAdapter {
 public:
-	FileListAdapter(const FileSelectScreenOptions &options, const std::vector<FileInfo> *items) : options_(options), items_(items) {}
+	FileListAdapter(const FileSelectScreenOptions &options, const std::vector<FileInfo> *items, UIContext *ctx) 
+		: options_(options), items_(items), ctx_(ctx) {}
 	virtual size_t getCount() const { return items_->size(); }
 	virtual void drawItem(int item, int x, int y, int w, int h, bool active) const;
 
 private:
 	const FileSelectScreenOptions &options_;
 	const std::vector<FileInfo> *items_;
+	const UIContext *ctx_;
 };
 
 void FileListAdapter::drawItem(int item, int x, int y, int w, int h, bool selected) const
@@ -451,16 +524,40 @@ void FileListAdapter::drawItem(int item, int x, int y, int w, int h, bool select
 		if (iter != options_.iconMapping.end())
 			icon = iter->second;
 	}
+
 	int iconSpace = this->itemHeight(item);
 	ui_draw2d.DrawImage2GridH(selected ? I_BUTTON_SELECTED: I_BUTTON, x, y, x + w);
 	ui_draw2d.DrawTextShadow(UBUNTU24, (*items_)[item].name.c_str(), x + UI_SPACE + iconSpace, y + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
+
+#if 0
+	// This might create a texture so we must flush first.
+	UIFlush();
+	GameInfo *ginfo = 0;
+	if (!(*items_)[item].isDirectory)
+		ginfo = g_gameInfoCache.GetInfo((*items_)[item].fullName, false);
+	if (ginfo && ginfo->iconTexture) {
+		float scaled_w = h * (144.f / 80.f);
+		UIFlush();
+		ginfo->iconTexture->Bind(0);
+		ui_draw2d.DrawTexRect(x + 10, y, x + 10 + scaled_w, y + h, 0, 0, 1, 1, 0xFFFFFFFF);
+		ui_draw2d.Flush();
+		ctx_->RebindTexture();
+	} else {
+		if (icon != -1)
+			ui_draw2d.DrawImage(icon, x + UI_SPACE, y + 25, 1.0f, 0xFFFFFFFF, ALIGN_VCENTER | ALIGN_LEFT);
+	}
+#else
 	if (icon != -1)
 		ui_draw2d.DrawImage(icon, x + UI_SPACE, y + 25, 1.0f, 0xFFFFFFFF, ALIGN_VCENTER | ALIGN_LEFT);
+#endif
 }
-
 
 FileSelectScreen::FileSelectScreen(const FileSelectScreenOptions &options) : options_(options) {
 	currentDirectory_ = g_Config.currentDirectory;
+#ifdef _WIN32
+	// HACK
+	// currentDirectory_ = "E:/PSP ISO/";
+#endif
 	updateListing();
 }
 
@@ -479,10 +576,10 @@ void FileSelectScreen::update(InputState &input_state) {
 }
 
 void FileSelectScreen::render() {
-	FileListAdapter adapter(options_, &listing_);
+	FileListAdapter adapter(options_, &listing_, screenManager()->getUIContext());
 
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	if (list_.Do(GEN_ID, 10, BUTTON_HEIGHT + 20, dp_xres-20, dp_yres - BUTTON_HEIGHT - 30, &adapter)) {
@@ -508,19 +605,17 @@ void FileSelectScreen::render() {
 		updateListing();
 	}
 	ui_draw2d.DrawTextShadow(UBUNTU24, currentDirectory_.c_str(), 20 + SMALL_BUTTON_WIDTH, 10 + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
-
-	/*
+#ifndef ANDROID
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, 10), SMALL_BUTTON_WIDTH, "Back", ALIGN_RIGHT)) {
 		g_Config.Save();
 		screenManager()->switchScreen(new MenuScreen());
-	}*/
+	}
+#endif
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 void CreditsScreen::update(InputState &input_state) {
+	globalUIState = UISTATE_MENU;
 	if (input_state.pad_buttons_down & PAD_BUTTON_BACK) {
 		screenManager()->switchScreen(new MenuScreen());
 	}
@@ -593,7 +688,7 @@ void CreditsScreen::render() {
 	credits[0] = (const char *)temp;
 
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	const int numItems = ARRAY_SIZE(credits);
@@ -613,9 +708,6 @@ void CreditsScreen::render() {
 	}
 
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }
 
 void ErrorScreen::update(InputState &input_state) {
@@ -627,7 +719,7 @@ void ErrorScreen::update(InputState &input_state) {
 void ErrorScreen::render()
 {
 	UIShader_Prepare();
-	UIBegin();
+	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
 	ui_draw2d.DrawText(UBUNTU48, errorTitle_.c_str(), dp_xres / 2, 30, 0xFFFFFFFF, ALIGN_HCENTER);
@@ -638,7 +730,4 @@ void ErrorScreen::render()
 	}
 
 	UIEnd();
-
-	glsl_bind(UIShader_Get());
-	ui_draw2d.Flush(UIShader_Get());
 }

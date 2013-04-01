@@ -66,12 +66,11 @@ void RunTests()
 	coreParam.headLess = false;
 	coreParam.renderWidth = 480;
 	coreParam.renderHeight = 272;
-	coreParam.outputWidth = 480;
-	coreParam.outputHeight = 272;
 	coreParam.pixelWidth = 480;
 	coreParam.pixelHeight = 272;
 	coreParam.useMediaEngine = false;
 	coreParam.collectEmuLog = &output;
+	coreParam.unthrottle = true;
 
 #ifdef IOS
 	std::string baseDirectory = g_Config.flashDirectory + "../";

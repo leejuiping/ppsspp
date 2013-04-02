@@ -155,6 +155,7 @@ struct StreamInfo {
 	int type;
 	int num;
 	int sid;
+	bool needsReset;
 };
 
 typedef std::map<u32, StreamInfo> StreamInfoMap;
@@ -618,6 +619,7 @@ int sceMpegRegistStream(u32 mpeg, u32 streamType, u32 streamNum)
 	StreamInfo info;
 	info.type = streamType;
 	info.num = streamNum;
+	info.needsReset = true;
 	ctx->streamMap[sid] = info;
 	return sid;
 }
@@ -813,6 +815,7 @@ u32 sceMpegUnRegistStream(u32 mpeg, int streamUid)
 	ctx->streamMap[streamUid] = info;
 	info.type = -1;
 	info.sid = -1 ;
+	info.needsReset = true;
 	ctx->isAnalyzed = false;
 	return 0;
 }
@@ -1094,10 +1097,17 @@ int sceMpegGetAvcAu(u32 mpeg, u32 streamId, u32 auAddr, u32 attrAddr)
 		return PSP_ERROR_MPEG_NO_DATA;
 	}
 
-	if (ctx->streamMap.find(streamId) == ctx->streamMap.end())
+	auto streamInfo = ctx->streamMap.find(streamId);
+	if (streamInfo == ctx->streamMap.end())
 	{
 		ERROR_LOG(HLE, "sceMpegGetAvcAu - bad stream id %i", streamId);
 		return -1;
+	}
+
+	if (streamInfo->second.needsReset)
+	{
+		sceAu.pts = 0;
+		streamInfo->second.needsReset = false;
 	}
 
 	// Wait for audio if too much ahead
@@ -1166,6 +1176,13 @@ int sceMpegGetAtracAu(u32 mpeg, u32 streamId, u32 auAddr, u32 attrAddr)
 	SceMpegAu sceAu;
 	sceAu.read(auAddr);
 
+	auto streamInfo = ctx->streamMap.find(streamId);
+	if (streamInfo != ctx->streamMap.end() && streamInfo->second.needsReset)
+	{
+		sceAu.pts = 0;
+		streamInfo->second.needsReset = false;
+	}
+
 	int result = 0;
 
 	if (mpegRingbuffer.packetsFree == mpegRingbuffer.packets) {
@@ -1220,7 +1237,7 @@ u32 sceMpegChangeGetAuMode(u32 mpeg, int streamUid, int mode)
 	// NOTE: Where is the info supposed to come from?
 	StreamInfo info = {0};
 	info.sid = streamUid;
-  if (info.sid) {
+	if (info.sid) {
 		switch (info.type) {
 		case MPEG_AVC_STREAM:
 			if(mode == MPEG_AU_MODE_DECODE) {
@@ -1282,12 +1299,6 @@ u32 sceMpegFlushAllStream(u32 mpeg)
 	}
 	WARN_LOG(HLE, "UNIMPL sceMpegFlushAllStream(%08x)", mpeg);
 
-	ctx->avcRegistered = false;
-	ctx->atracRegistered = false;
-	ctx->pcmRegistered = false;
-	ctx->dataRegistered = false;
-
-	ctx->streamMap.clear();
 	ctx->isAnalyzed = false;
 
 	if (Memory::IsValidAddress(ctx->mpegRingbufferAddr))

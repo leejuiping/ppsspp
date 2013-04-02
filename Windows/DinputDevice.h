@@ -16,30 +16,20 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #pragma once
+#define DIRECTINPUT_VERSION 0x0800
+#include "InputDevice.h"
+#include "dinput.h"
 
-#include "../GPUCommon.h"
-
-class ShaderManager;
-
-class NullGPU : public GPUCommon
+class DinputDevice :
+	public InputDevice
 {
 public:
-	NullGPU();
-	~NullGPU();
-	virtual void InitClear() {}
-	virtual void ExecuteOp(u32 op, u32 diff);
-	virtual u32  DrawSync(int mode);
-
-	virtual void BeginFrame() {}
-	virtual void SetDisplayFramebuffer(u32 framebuf, u32 stride, int format) {}
-	virtual void CopyDisplayToOutput() {}
-	virtual void UpdateStats();
-	virtual void InvalidateCache(u32 addr, int size);
-	virtual void InvalidateCacheHint(u32 addr, int size);
-	virtual void Flush() {}
-
-	virtual void DeviceLost() {}
-	virtual void DumpNextFrame() {}
-
-	virtual void Resized() {}
+	DinputDevice();
+	~DinputDevice();
+	virtual int UpdateState(InputState &input_state);
+private:
+	LPDIRECTINPUT8			pDI;
+	LPDIRECTINPUTDEVICE8    pJoystick;
+	bool					analog;
 };
+

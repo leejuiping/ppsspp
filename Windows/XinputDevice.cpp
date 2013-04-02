@@ -45,9 +45,17 @@ int XinputDevice::UpdateState(InputState &input_state) {
 		input_state.pad_lstick_y += left.y;
 		input_state.pad_rstick_x += right.x;
 		input_state.pad_rstick_y += right.y;
+
+		// Also convert the analog triggers.
+		input_state.pad_ltrigger = state.Gamepad.bLeftTrigger / 255.0f;
+		input_state.pad_rtrigger = state.Gamepad.bRightTrigger / 255.0f;
+
 		this->prevState = state;
 		this->check_delay = 0;
-		return 0;
+
+		// If there's an XInput pad, skip following pads. This prevents DInput and XInput
+		// from colliding.
+		return UPDATESTATE_SKIP_NEXT;
 	} else {
 		// wait check_delay frames before polling the controller again
 		this->gamepad_idx = -1;

@@ -18,6 +18,7 @@
 
 std::string boot_filename = "";
 Texture *uiTexture;
+UIContext *uiContext;
 
 ScreenManager *screenManager;
 std::string config_filename;
@@ -259,6 +260,8 @@ void NativeInitGraphics()
 
 	uiContext = new UIContext();
 	uiContext->Init(UIShader_Get(), UIShader_GetPlain(), uiTexture, &ui_draw2d, &ui_draw2d_front);
+
+	screenManager->setUIContext(uiContext);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);

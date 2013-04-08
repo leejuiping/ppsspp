@@ -158,6 +158,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/GPU/GLES/FragmentShaderGenerator.cpp \
   $(SRC)/GPU/Null/NullGpu.cpp \
   $(SRC)/Core/ELF/ElfReader.cpp \
+  $(SRC)/Core/ELF/PBPReader.cpp \
   $(SRC)/Core/ELF/PrxDecrypter.cpp \
   $(SRC)/Core/ELF/ParamSFO.cpp \
   $(SRC)/Core/HW/MemoryStick.cpp \
@@ -192,6 +193,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/HLE/sceAudio.cpp \
   $(SRC)/Core/HLE/sceChnnlsv.cpp \
   $(SRC)/Core/HLE/sceCtrl.cpp \
+  $(SRC)/Core/HLE/sceDeflt.cpp \
   $(SRC)/Core/HLE/sceDisplay.cpp \
   $(SRC)/Core/HLE/sceDmac.cpp \
   $(SRC)/Core/HLE/sceGe.cpp \

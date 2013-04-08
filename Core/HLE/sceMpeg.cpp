@@ -56,7 +56,7 @@ static const int MPEG_DATA_STREAM = 3;      // Arbitrary user defined type. Can 
 static const int MPEG_AUDIO_STREAM = 15;
 static const int MPEG_AU_MODE_DECODE = 0;
 static const int MPEG_AU_MODE_SKIP = 1;
-static const int MPEG_MEMSIZE = 0x10000;          // 64k.
+static const u32 MPEG_MEMSIZE = 0x10000;          // 64k.
 
 static const int MPEG_AVC_DECODE_SUCCESS = 1;       // Internal value.
 static const int MPEG_AVC_DECODE_ERROR_FATAL = -8;
@@ -968,7 +968,7 @@ int sceMpegInitAu(u32 mpeg, u32 bufferAddr, u32 auPointer)
 	SceMpegAu sceAu;
 	sceAu.read(auPointer);
 
-	if (bufferAddr >= 1 && bufferAddr <= NUM_ES_BUFFERS && ctx->esBuffers[bufferAddr - 1]) {
+	if (bufferAddr >= 1 && bufferAddr <= (u32)NUM_ES_BUFFERS && ctx->esBuffers[bufferAddr - 1]) {
 		// This esbuffer has been allocated for Avc.
 		sceAu.esBuffer = bufferAddr;   // Can this be right??? not much of a buffer pointer..
 		sceAu.esSize = MPEG_AVC_ES_SIZE;
@@ -1419,10 +1419,19 @@ u32 sceMpegAvcResourceInit(u32 mpeg)
 
 
 int sceMpegAvcConvertToYuv420(u32 mpeg, u32 bufferOutput, u32 unknown1, int unknown2)
- {
- ERROR_LOG(HLE, "UNIMPL sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)", mpeg, bufferOutput, unknown1, unknown2);
- return 0;
- }
+{
+	ERROR_LOG(HLE, "UNIMPL sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)", mpeg, bufferOutput, unknown1, unknown2);
+	return 0;
+}
+
+int sceMpegGetUserdataAu(u32 mpeg, u32 streamUid, u32 auAddr, u32 resultAddr)
+{
+	ERROR_LOG(HLE, "UNIMPL sceMpegGetUserdataAu(%08x, %08x, %08x, %08x)", mpeg, streamUid, auAddr, resultAddr);
+	// TODO: Are these at all right?  Seen in Phantasy Star Portable 2.
+	Memory::Write_U32(0, resultAddr);
+	Memory::Write_U32(0, resultAddr + 4);
+	return 0;
+}
 
 /* MP3 */
 int sceMp3Decode(u32 mp3, u32 outPcmPtr)
@@ -1570,7 +1579,7 @@ int sceMp3Init(u32 mp3)
 
 	// 0 == VBR
 	int bitrate = ((header >> 10) & 0x3);
-	if(bitrate < sizeof(MP3_BITRATES) / sizeof(MP3_BITRATES[0]))
+	if(bitrate < (int)ARRAY_SIZE(MP3_BITRATES))
 		ctx->mp3Bitrate = MP3_BITRATES[bitrate];
 	else
 		ctx->mp3Bitrate = -1;
@@ -1700,7 +1709,7 @@ int sceMp3GetInfoToAddStreamData(u32 mp3, u32 dstPtr, u32 towritePtr, u32 srcpos
 	if(Memory::IsValidAddress(towritePtr))
 		Memory::Write_U32(ctx->mp3BufSize, towritePtr);
 	if(Memory::IsValidAddress(srcposPtr))
-		Memory::Write_U32(ctx->mp3StreamPosition, srcposPtr);
+		Memory::Write_U32((u32)ctx->mp3StreamPosition, srcposPtr);
 
 	return 0;
 }
@@ -1799,7 +1808,7 @@ const HLEFunction sceMpeg[] =
 	{0xaf26bb01,WrapU_U<sceMpegAvcResourceGetAvcEsBuf>,"sceMpegAvcResourceGetAvcEsBuf"},
 	{0xfcbdb5ad,WrapU_U<sceMpegAvcResourceInit>,"sceMpegAvcResourceInit"},
 	{0xF5E7EA31,WrapI_UUUI<sceMpegAvcConvertToYuv420>,"sceMpegAvcConvertToYuv420"},
-	{0x01977054,0,"sceMpegQueryUserdataEsSize"},
+	{0x01977054,WrapI_UUUU<sceMpegGetUserdataAu>,"sceMpegGetUserdataAu"},
 };
 
 const HLEFunction sceMp3[] =

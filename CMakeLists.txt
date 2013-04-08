@@ -695,6 +695,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/ELF/ElfReader.cpp
 	Core/ELF/ElfReader.h
 	Core/ELF/ElfTypes.h
+	Core/ELF/PBPReader.cpp
+	Core/ELF/PBPReader.h
 	Core/ELF/PrxDecrypter.cpp
 	Core/ELF/PrxDecrypter.h
 	Core/ELF/ParamSFO.cpp
@@ -725,6 +727,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceChnnlsv.h
 	Core/HLE/sceCtrl.cpp
 	Core/HLE/sceCtrl.h
+	Core/HLE/sceDeflt.cpp
+	Core/HLE/sceDeflt.h
 	Core/HLE/sceDisplay.cpp
 	Core/HLE/sceDisplay.h
 	Core/HLE/sceDmac.cpp

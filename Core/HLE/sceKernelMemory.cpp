@@ -804,7 +804,7 @@ bool __KernelUnlockVplForThread(VPL *vpl, VplWaitingThread &threadInfo, u32 &err
 	if (timeoutPtr != 0 && vplWaitTimer != -1)
 	{
 		// Remove any event for this thread.
-		u64 cyclesLeft = CoreTiming::UnscheduleEvent(vplWaitTimer, threadID);
+		s64 cyclesLeft = CoreTiming::UnscheduleEvent(vplWaitTimer, threadID);
 		Memory::Write_U32((u32) cyclesToUs(cyclesLeft), timeoutPtr);
 	}
 
@@ -1171,6 +1171,30 @@ u32 GetMemoryBlockPtr(u32 uid, u32 addr) {
 	INFO_LOG(HLE, "GetMemoryBlockPtr(%08x, %08x)", uid, addr);
 	Memory::Write_U32(uid, addr);
 	return 0;
+}
+
+// These aren't really in sysmem, but they are memory related?
+
+SceUID ThreadManForUser_8DAFF657(const char *name, u32 partitionid, u32 attr, u32 size, u32 count, u32 optionsPtr)
+{
+	u32 totalSize = size * count;
+	u32 blockPtr = userMemory.Alloc(totalSize, (attr & 0x4000) != 0, name);
+	userMemory.ListBlocks();
+	ERROR_LOG(HLE, "UNIMPL %08x=ThreadManForUser_8DAFF657(%s, %d, %08x, %d, %d, %08x)", blockPtr, name, partitionid, attr, size, count, optionsPtr);
+	return blockPtr;
+}
+
+int ThreadManForUser_32BF938E(SceUID uid)
+{
+	ERROR_LOG(HLE, "UNIMPL ThreadManForUser_32BF938E(%08x)", uid);
+	userMemory.Free(uid);
+	return 0;
+}
+
+int Kernel_Library_FA835CDE(SceUID uid)
+{
+	ERROR_LOG(HLE, "UNIMPL Kernel_Library_FA835CDE(%08x)", uid);
+	return uid;
 }
 
 const HLEFunction SysMemUserForUser[] = {

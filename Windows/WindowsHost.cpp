@@ -103,7 +103,6 @@ void WindowsHost::ShutdownSound()
 void WindowsHost::UpdateUI()
 {
 	MainWindow::Update();
-	MainWindow::UpdateMenus();
 }
 
 
@@ -131,15 +130,24 @@ void WindowsHost::SetDebugMode(bool mode)
 
 void WindowsHost::PollControllers(InputState &input_state)
 {
+	bool doPad = true;
 	for (auto iter = this->input.begin(); iter != this->input.end(); iter++)
-		if ((*iter)->UpdateState(input_state) == InputDevice::UPDATESTATE_SKIP_NEXT)
-			break;
+	{
+		auto device = *iter;
+		if (!doPad && device->IsPad())
+			continue;
+		if (device->UpdateState(input_state) == InputDevice::UPDATESTATE_SKIP_PAD)
+			doPad = false;
+	}
 }
 
 void WindowsHost::BootDone()
 {
 	symbolMap.SortSymbols();
-	PostMessage(MainWindow::GetHWND(), WM_USER+1, 0,0);
+	SendMessage(MainWindow::GetHWND(), WM_USER+1, 0,0);
+
+	SetDebugMode(!g_Config.bAutoRun);
+	Core_EnableStepping(!g_Config.bAutoRun);
 }
 
 static std::string SymbolMapFilename(const char *currentFilename)

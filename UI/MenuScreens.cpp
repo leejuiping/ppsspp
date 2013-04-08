@@ -41,7 +41,6 @@ namespace MainWindow {
 #include "ui/ui.h"
 #include "ui/ui_context.h"
 #include "ui_atlas.h"
-#include "util/random/rng.h"
 #include "util/text/utf8.h"
 #include "UIShader.h"
 
@@ -200,7 +199,7 @@ void MenuScreen::render() {
 	ui_draw2d.DrawTextShadow(UBUNTU24, PPSSPP_GIT_VERSION, dp_xres + xoff, 85, 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_BOTTOM);
 	ui_draw2d.SetFontScale(1.0f, 1.0f);
 	VLinear vlinear(dp_xres + xoff, 100, 20);
-	VLinear vlinear2(-xoff, 100, 20);
+	VGrid vgrid_recent(-xoff + 40, 100, 480, 40, 20);
 
 	if (UIButton(GEN_ID, vlinear, w, "Load...", ALIGN_RIGHT)) {
 #if defined(USING_QT_UI)
@@ -239,14 +238,12 @@ void MenuScreen::render() {
 		UIReset();
 	}
 
-#ifndef _WIN32
 	if (UIButton(GEN_ID, vlinear, w, "Exit", ALIGN_RIGHT)) {
 		// TODO: Save when setting changes, rather than when we quit
 		NativeShutdown();
 		// TODO: Need a more elegant way to quit
 		exit(0);
 	}
-#endif
 
 	if (UIButton(GEN_ID, vlinear, w, "www.ppsspp.org", ALIGN_RIGHT)) {
 		LaunchBrowser("http://www.ppsspp.org/");
@@ -254,7 +251,7 @@ void MenuScreen::render() {
 
 	int recentW = 350;
 	if (g_Config.recentIsos.size()) {
-		ui_draw2d.DrawText(UBUNTU24, "Recent", -xoff, 80, 0xFFFFFFFF, ALIGN_BOTTOMLEFT);
+		ui_draw2d.DrawText(UBUNTU24, "Recent", -xoff + 20, 80, 0xFFFFFFFF, ALIGN_BOTTOMLEFT);
 	}
 	for (size_t i = 0; i < g_Config.recentIsos.size(); i++) {
 		std::string filename;
@@ -269,11 +266,11 @@ void MenuScreen::render() {
 		GameInfo *ginfo = g_gameInfoCache.GetInfo(g_Config.recentIsos[i], false);
 
 		if (ginfo) {
-			if (UITextureButton(ctx, GEN_ID_LOOP(i), vlinear2, 144, 80, ginfo->iconTexture, ALIGN_LEFT)) {
+			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, 144, 80, ginfo->iconTexture, ALIGN_LEFT)) {
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 			}
 		} else {
-			if (UIButton(GEN_ID_LOOP(i), vlinear2, recentW, filename.c_str(), ALIGN_LEFT)) {
+			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, recentW, filename.c_str(), ALIGN_LEFT)) {
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 			}
 		}
@@ -340,7 +337,7 @@ void PauseScreen::render() {
 		ctx->RebindTexture();
 	}
 
-	ui_draw2d.DrawText(UBUNTU48, title, 10+144+10, 30, 0xFFFFFFFF, ALIGN_LEFT);
+	ui_draw2d.DrawText(UBUNTU48, title, 10+144+10, 20, 0xFFFFFFFF, ALIGN_LEFT);
 
 	int x = 30;
 	int y = 50;
@@ -359,7 +356,8 @@ void PauseScreen::render() {
 			gpu->Resized();
 	}
 	bool fs = g_Config.iFrameSkip == 1;
-	UICheckBox(GEN_ID, x, y += stride, "Frameskip (beta)", ALIGN_TOPLEFT, &fs);
+	UICheckBox(GEN_ID, x, y += stride, "Frame Skipping", ALIGN_TOPLEFT, &fs);
+	UICheckBox(GEN_ID, x, y += stride, "Use Media Engine", ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 	g_Config.iFrameSkip = fs ? 1 : 0;
 
 	// TODO: Add UI for more than one slot.
@@ -419,7 +417,7 @@ void SettingsScreen::render() {
 	int stride = 40;
 	int columnw = 400;
 	UICheckBox(GEN_ID, x, y += stride, "Sound Emulation", ALIGN_TOPLEFT, &g_Config.bEnableSound);
-	UICheckBox(GEN_ID, x + columnw, y, "True Color", ALIGN_TOPLEFT, &g_Config.bTrueColor);
+	UICheckBox(GEN_ID, x + columnw, y, "MipMapping", ALIGN_TOPLEFT, &g_Config.bMipMap);
 	if (UICheckBox(GEN_ID, x, y += stride, "Buffered Rendering", ALIGN_TOPLEFT, &g_Config.bBufferedRendering)) {
 		if (gpu)
 			gpu->Resized();
@@ -434,14 +432,14 @@ void SettingsScreen::render() {
 	}
 #ifndef __SYMBIAN32__
 	UICheckBox(GEN_ID, x, y += stride, "Hardware Transform", ALIGN_TOPLEFT, &g_Config.bHardwareTransform);
-	UICheckBox(GEN_ID, x + columnw, y, "Draw using Stream VBO", ALIGN_TOPLEFT, &g_Config.bUseVBO);
+	UICheckBox(GEN_ID, x + columnw, y, "Use Stream VBO", ALIGN_TOPLEFT, &g_Config.bUseVBO);
 #endif
 	UICheckBox(GEN_ID, x, y += stride, "Vertex Cache", ALIGN_TOPLEFT, &g_Config.bVertexCache);
 	UICheckBox(GEN_ID, x + columnw, y, "Use Media Engine", ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 
 	UICheckBox(GEN_ID, x, y += stride, "JIT (Dynarec)", ALIGN_TOPLEFT, &g_Config.bJit);
 	if (g_Config.bJit)
-		UICheckBox(GEN_ID, x + columnw, y, "Fastmem (may be unstable)", ALIGN_TOPLEFT, &g_Config.bFastMemory);
+		UICheckBox(GEN_ID, x + columnw, y, "Fast Memory (unstable)", ALIGN_TOPLEFT, &g_Config.bFastMemory);
 
 	UICheckBox(GEN_ID, x, y += stride, "On-screen Touch Controls", ALIGN_TOPLEFT, &g_Config.bShowTouchControls);
 	if (g_Config.bShowTouchControls) {

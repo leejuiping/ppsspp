@@ -179,6 +179,7 @@ void MainWindow::ShowMemory(u32 addr)
 
 void MainWindow::Update()
 {
+	globalUIState = UISTATE_INGAME;
 	UpdateInputState(&input_state);
 
 	for (int i = 0; i < controllistCount; i++)
@@ -194,7 +195,7 @@ void MainWindow::Update()
 
 void MainWindow::UpdateMenus()
 {
-	bool enable = false;
+	bool enable = globalUIState == UISTATE_MENU;
 	ui->action_FileLoad->setEnabled(enable);
 	ui->action_FileClose->setEnabled(!enable);
 	ui->action_FileSaveStateFile->setEnabled(!enable);
@@ -210,10 +211,9 @@ void MainWindow::UpdateMenus()
 	ui->action_DebugMemoryViewTexture->setEnabled(!enable);
 	ui->action_DebugDisplayList->setEnabled(!enable);
 
-	enable = !Core_IsStepping() ? false : true;
-	ui->action_EmulationRun->setEnabled(false);
-	ui->action_EmulationPause->setEnabled(true);
-	ui->action_EmulationReset->setEnabled(true);
+	ui->action_EmulationRun->setEnabled(Core_IsStepping() || globalUIState == UISTATE_PAUSEMENU);
+	ui->action_EmulationPause->setEnabled(globalUIState == UISTATE_INGAME);
+	ui->action_EmulationReset->setEnabled(globalUIState == UISTATE_INGAME);
 
 	// checking
 	ui->action_EmulationRunLoad->setChecked(g_Config.bAutoRun);

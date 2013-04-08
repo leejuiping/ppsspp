@@ -85,6 +85,8 @@ enum WaitType
 	WAITTYPE_LWMUTEX = 14,
 	WAITTYPE_CTRL = 15,
 	WAITTYPE_IO = 16,
+	WAITTYPE_GEDRAWSYNC = 17,
+	WAITTYPE_GELISTSYNC = 18,
 
 	NUM_WAITTYPES
 };
@@ -128,8 +130,8 @@ SceUID __KernelGetCurThread();
 u32 __KernelGetCurThreadStack();
 const char *__KernelGetThreadName(SceUID threadID);
 
-void __KernelSaveContext(ThreadContext *ctx);
-void __KernelLoadContext(ThreadContext *ctx);
+void __KernelSaveContext(ThreadContext *ctx, bool vfpuEnabled);
+void __KernelLoadContext(ThreadContext *ctx, bool vfpuEnabled);
 
 // TODO: Replace this with __KernelResumeThreadFromWait over time as it's misguided.
 // It's better that each subsystem keeps track of the list of waiting threads
@@ -226,6 +228,7 @@ void __KernelNotifyCallback(RegisteredCallbackType type, SceUID cbId, int notify
 // Switch to an idle / non-user thread, if not already on one.
 // Returns whether a switch occurred.
 bool __KernelSwitchOffThread(const char *reason);
+bool __KernelSwitchToThread(SceUID threadID, const char *reason);
 
 // A call into game code. These can be pending on a thread.
 // Similar to Callback-s (NOT CallbackInfos) in JPCSP.

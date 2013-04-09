@@ -46,7 +46,7 @@ bool CanUseHardwareTransform(int prim)
 // prim so we can special case for RECTANGLES :(
 void ComputeVertexShaderID(VertexShaderID *id, int prim)
 {
-	int doTexture = (gstate.textureMapEnable & 1) && !(gstate.isModeClear());
+	int doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 
 	bool hasColor = (gstate.vertType & GE_VTYPE_COL_MASK) != 0;
 	bool hasNormal = (gstate.vertType & GE_VTYPE_NRM_MASK) != 0;
@@ -142,8 +142,8 @@ void GenerateVertexShader(int prim, char *buffer) {
 	WRITE(p, "#define mediump\n");
 #endif
 
-	int lmode = (gstate.lmode & 1) && (gstate.lightingEnable & 1);
-	int doTexture = (gstate.textureMapEnable & 1) && !(gstate.clearmode & 1);
+	int lmode = (gstate.lmode & 1) && gstate.isLightingEnabled();
+	int doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 
 	bool hwXForm = CanUseHardwareTransform(prim);
 	bool hasColor = (gstate.vertType & GE_VTYPE_COL_MASK) != 0 || !hwXForm;
@@ -230,6 +230,8 @@ void GenerateVertexShader(int prim, char *buffer) {
 				// These are needed for the full thing
 				WRITE(p, "uniform vec3 u_lightdir%i;\n", i);
 				WRITE(p, "uniform vec3 u_lightatt%i;\n", i);
+				WRITE(p, "uniform float u_lightangle%i;\n", i);
+				WRITE(p, "uniform float u_lightspotCoef%i;\n", i);
 
 				WRITE(p, "uniform lowp vec3 u_lightambient%i;\n", i);
 				WRITE(p, "uniform lowp vec3 u_lightdiffuse%i;\n", i);
@@ -336,13 +338,28 @@ void GenerateVertexShader(int prim, char *buffer) {
 				WRITE(p, "  dot%i = pow(dot%i, u_matspecular.a);\n", i, i);
 			}
 
-			WRITE(p, "  float lightScale%i = 1.0;\n", i);
-			if (type != GE_LIGHTTYPE_DIRECTIONAL) {
-				// Attenuation
+			// Attenuation
+			switch (type) {
+			case GE_LIGHTTYPE_DIRECTIONAL:
+				WRITE(p, "  float lightScale%i = 1.0;\n", i);
+				break;
+			case GE_LIGHTTYPE_POINT:
 				WRITE(p, "  float distance%i = length(toLight%i);\n", i, i);
-				WRITE(p, "  lightScale%i = 1.0 / dot(u_lightatt%i, vec3(1.0, distance%i, distance%i*distance%i));\n", i, i, i, i, i);
-				WRITE(p, "  if (lightScale%i > 1.0) lightScale%i = 1.0;\n", i, i);
+				WRITE(p, "  float lightScale%i = clamp(1.0 / dot(u_lightatt%i, vec3(1.0, distance%i, distance%i*distance%i)), 0.0, 1.0);\n", i, i, i, i, i);
+				break;
+			case GE_LIGHTTYPE_SPOT:
+				WRITE(p, "  float lightScale%i = 0.0;\n", i);
+				WRITE(p, "  float angle%i = dot(normalize(u_lightdir%i), normalize(toLight%i));\n", i, i, i);
+				WRITE(p, "  if (angle%i >= u_lightangle%i) {\n", i, i);
+				WRITE(p, "    float distance%i = length(toLight%i);\n", i, i);
+				WRITE(p, "    lightScale%i = clamp(1.0 / dot(u_lightatt%i, vec3(1.0, distance%i, distance%i*distance%i)), 0.0, 1.0) * pow(angle%i, u_lightspotCoef%i);\n", i, i, i, i, i, i, i);
+				WRITE(p, "  }\n");
+				break;
+			default:
+				// ILLEGAL
+				break;
 			}
+
 			WRITE(p, "  vec3 diffuse%i = (u_lightdiffuse%i * %s) * (max(dot%i, 0.0) * lightScale%i);\n", i, i, diffuse, i, i);
 			if (doSpecular) {
 				WRITE(p, "  vec3 halfVec%i = normalize(normalize(toLight%i) + vec3(0.0, 0.0, 1.0));\n", i, i);

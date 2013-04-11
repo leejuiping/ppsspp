@@ -32,10 +32,10 @@ int sceKernelDelayThreadCB(u32 usec);
 void sceKernelDelaySysClockThread();
 void sceKernelDelaySysClockThreadCB();
 int sceKernelDeleteThread(int threadHandle);
-void sceKernelExitDeleteThread();
-void sceKernelExitThread();
-void _sceKernelExitThread();
-void sceKernelGetThreadId();
+void sceKernelExitDeleteThread(int exitStatus);
+void sceKernelExitThread(int exitStatus);
+void _sceKernelExitThread(int exitStatus);
+SceUID sceKernelGetThreadId();
 void sceKernelGetThreadCurrentPriority();
 int sceKernelStartThread(SceUID threadToStartID, u32 argSize, u32 argBlockPtr);
 u32 sceKernelSuspendDispatchThread();
@@ -185,7 +185,7 @@ u32 __KernelNotifyCallbackType(RegisteredCallbackType type, SceUID cbId, int not
 SceUID __KernelGetCurThread();
 SceUID __KernelGetCurThreadModuleId();
 void __KernelSetupRootThread(SceUID moduleId, int args, const char *argp, int prio, int stacksize, int attr); //represents the real PSP elf loader, run before execution
-void __KernelStartIdleThreads();
+void __KernelStartIdleThreads(SceUID moduleId);
 void __KernelReturnFromThread();  // Called as HLE function
 u32 __KernelGetThreadPrio(SceUID id);
 bool __KernelThreadSortPriority(SceUID thread1, SceUID thread2);

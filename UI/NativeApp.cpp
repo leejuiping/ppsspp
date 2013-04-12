@@ -183,6 +183,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	std::string user_data_path = savegame_directory;
 	isMessagePending = false;
 	// We want this to be FIRST.
+#ifndef USING_QT_UI
 #ifdef BLACKBERRY
 	// Packed assets are included in app/native/ dir
 	VFSRegister("", new DirectoryAssetReader("app/native/assets/"));
@@ -202,6 +203,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	VFSRegister("", new DirectoryAssetReader("assets/"));
 #endif
 	VFSRegister("", new DirectoryAssetReader(user_data_path.c_str()));
+#endif
 
 	host = new NativeHost();
 
@@ -270,7 +272,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	if (g_Config.currentDirectory == "") {
 #if defined(ANDROID)
 		g_Config.currentDirectory = external_directory;
-#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS) || defined(_WIN32)
+#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(MEEGO_EDITION_HARMATTAN) || defined(IOS) || defined(_WIN32)
 		g_Config.currentDirectory = savegame_directory;
 #else
 		g_Config.currentDirectory = getenv("HOME");
@@ -283,12 +285,14 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	// most sense.
 	g_Config.memCardDirectory = std::string(external_directory) + "/";
 	g_Config.flashDirectory = std::string(external_directory)+"/flash/";
-#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(IOS) || defined(_WIN32)
+#elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(MEEGO_EDITION_HARMATTAN) || defined(IOS) || defined(_WIN32)
 	g_Config.memCardDirectory = user_data_path;
 #ifdef BLACKBERRY
 	g_Config.flashDirectory = "app/native/assets/flash/";
-#elif IOS
+#elif defined(IOS)
 	g_Config.flashDirectory = std::string(external_directory) + "flash0/";
+#elif defined(MEEGO_EDITION_HARMATTAN)
+	g_Config.flashDirectory = "/opt/PPSSPP/flash/";
 #else
 	g_Config.flashDirectory = user_data_path+"/flash/";
 #endif

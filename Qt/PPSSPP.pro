@@ -16,17 +16,18 @@ win32 {
 		LIBS += -L$$OUT_PWD/release
 	} else {
 		LIBS += -L$$OUT_PWD/debug
-    }
+	}
 	LIBS += -lCore -lCommon -lNative -lwinmm -lws2_32
 }
-linux: LIBS += -L. -lCore -lCommon -lNative
-
-linux:!mobile_platform {
+linux {
+	LIBS += -L. -lCore -lCommon -lNative
 	PRE_TARGETDEPS += ./libCommon.a ./libCore.a ./libNative.a
-	CONFIG += link_pkgconfig
-	packagesExist(sdl) {
-		DEFINES += QT_HAS_SDL
-		PKGCONFIG += sdl
+	!mobile_platform {
+		CONFIG += link_pkgconfig
+		packagesExist(sdl) {
+			DEFINES += QT_HAS_SDL
+			PKGCONFIG += sdl
+		}
 	}
 }
 
@@ -82,3 +83,16 @@ symbian {
 	TARGET.EPOCHEAPSIZE = 0x40000 0x10000000
 	TARGET.EPOCSTACKSIZE = 0x10000
 }
+
+contains(MEEGO_EDITION,harmattan) {
+	target.path = /opt/PPSSPP/bin
+	assets.files = ../assets/flash
+	assets.path = /opt/PPSSPP
+	desktopfile.files = PPSSPP.desktop
+	desktopfile.path = /usr/share/applications
+	icon.files = ../assets/icon-114.png
+	icon.path = /usr/share/icons/hicolor/114x114/apps
+	INSTALLS += target assets desktopfile icon
+	ICON = ../assets/icon-114.png
+}
+

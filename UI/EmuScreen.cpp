@@ -71,6 +71,10 @@ EmuScreen::EmuScreen(const std::string &filename) : invalid_(true) {
 	coreParam.pixelWidth = pixel_xres;
 	coreParam.pixelHeight = pixel_yres;
 	coreParam.useMediaEngine = false;
+	if (g_Config.SSAntiAliasing) {
+		coreParam.renderWidth *= 2;
+		coreParam.renderHeight *= 2;
+	}
 	std::string error_string;
 	if (PSP_Init(coreParam, &error_string)) {
 		invalid_ = false;
@@ -161,8 +165,9 @@ void EmuScreen::update(InputState &input) {
 		return;
 
 	// First translate touches into native pad input.
-	if (g_Config.bShowTouchControls)
-		UpdateGamepad(input);
+	// Do this no matter the value of g_Config.bShowTouchControls, some people
+	// like to use invisible controls...
+	UpdateGamepad(input);
 
 	UpdateInputState(&input);
 
@@ -266,6 +271,7 @@ void EmuScreen::render() {
 		if (statbuf[4095])
 			ERROR_LOG(HLE, "Statbuf too big");
 		ui_draw2d.SetFontScale(.7f, .7f);
+		ui_draw2d.DrawText(UBUNTU24, statbuf, 11, 11, 0xc0000000);
 		ui_draw2d.DrawText(UBUNTU24, statbuf, 10, 10, 0xFFFFFFFF);
 		ui_draw2d.SetFontScale(1.0f, 1.0f);
 	}
@@ -275,6 +281,7 @@ void EmuScreen::render() {
 		__DisplayGetFPS(&vps, &fps);
 		char fpsbuf[256];
 		sprintf(fpsbuf, "VPS: %0.1f", vps);
+		ui_draw2d.DrawText(UBUNTU24, fpsbuf, dp_xres - 8, 12, 0xc0000000, ALIGN_TOPRIGHT);
 		ui_draw2d.DrawText(UBUNTU24, fpsbuf, dp_xres - 10, 10, 0xFF3fFF3f, ALIGN_TOPRIGHT);
 	}
 	
@@ -283,12 +290,12 @@ void EmuScreen::render() {
 	ui_draw2d.End();
 	ui_draw2d.Flush();
 
-
 	// Tiled renderers like PowerVR should benefit greatly from this. However - seems I can't call it?
 #if defined(USING_GLES2)
-	bool hasDiscard = false;  // TODO
+	bool hasDiscard = gl_extensions.EXT_discard_framebuffer;  // TODO
 	if (hasDiscard) {
-		//glDiscardFramebuffer(GL_COLOR_EXT | GL_DEPTH_EXT | GL_STENCIL_EXT);
+		//const GLenum targets[3] = { GL_COLOR_EXT, GL_DEPTH_EXT, GL_STENCIL_EXT };
+		//glDiscardFramebufferEXT(GL_FRAMEBUFFER, 3, targets);
 	}
 #endif
 }

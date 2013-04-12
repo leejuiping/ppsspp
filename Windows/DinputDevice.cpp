@@ -20,7 +20,6 @@
 #include "input/input_state.h"
 #include "Core/Reporting.h"
 #include "Xinput.h"
-#pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dinput8.lib")
 
 static const unsigned int dinput_ctrl_map[] = {
@@ -150,8 +149,6 @@ int DinputDevice::UpdateState(InputState &input_state)
 		}
 	}
 
-	if (js.lX != 0.0f || js.lY != 0.0f)
-		return UPDATESTATE_SKIP_NEXT;
-	return 0;
+	return UPDATESTATE_SKIP_PAD;
 }
 

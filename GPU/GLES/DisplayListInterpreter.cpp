@@ -334,7 +334,8 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 				break;
 			}
 
-			cyclesExecuted += 10 * count;
+			// Rough estimate, not sure what's correct.
+			cyclesExecuted += 80 * count;
 
 			// TODO: Split this so that we can collect sequences of primitives, can greatly speed things up
 			// on platforms where draw calls are expensive like mobile and D3D
@@ -653,6 +654,29 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		}
 		break;
 
+	case GE_CMD_LKS0:
+	case GE_CMD_LKS1:
+	case GE_CMD_LKS2:
+	case GE_CMD_LKS3:
+		{
+			int l = cmd - GE_CMD_LKS0;
+			gstate_c.lightspotCoef[l] = getFloat24(data);
+			if (diff)
+				shaderManager_->DirtyUniform(DIRTY_LIGHT0 << l);
+		}
+		break;
+
+	case GE_CMD_LKO0:
+	case GE_CMD_LKO1:
+	case GE_CMD_LKO2:
+	case GE_CMD_LKO3:
+		{
+			int l = cmd - GE_CMD_LKO0;
+			gstate_c.lightangle[l] = getFloat24(data);
+			if (diff)
+				shaderManager_->DirtyUniform(DIRTY_LIGHT0 << l);
+		}
+		break;
 
 	case GE_CMD_LAC0:case GE_CMD_LAC1:case GE_CMD_LAC2:case GE_CMD_LAC3:
 	case GE_CMD_LDC0:case GE_CMD_LDC1:case GE_CMD_LDC2:case GE_CMD_LDC3:
@@ -901,7 +925,7 @@ void GLES_GPU::DoBlockTransfer() {
 	// Do the copy!
 	for (int y = 0; y < height; y++) {
 		const u8 *src = Memory::GetPointer(srcBasePtr + ((y + srcY) * srcStride + srcX) * bpp);
-		u8 *dst = Memory::GetPointer(dstBasePtr + ((y + dstY) * srcStride + dstX) * bpp);
+		u8 *dst = Memory::GetPointer(dstBasePtr + ((y + dstY) * dstStride + dstX) * bpp);
 		memcpy(dst, src, width * bpp);
 	}
 

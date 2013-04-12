@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #pragma once
+#include <InitGuid.h>
 #define DIRECTINPUT_VERSION 0x0800
 #include "InputDevice.h"
 #include "dinput.h"
@@ -27,6 +28,7 @@ public:
 	DinputDevice();
 	~DinputDevice();
 	virtual int UpdateState(InputState &input_state);
+	virtual bool IsPad() { return true; }
 private:
 	LPDIRECTINPUT8			pDI;
 	LPDIRECTINPUTDEVICE8    pJoystick;

@@ -41,7 +41,6 @@ namespace MainWindow {
 #include "ui/ui.h"
 #include "ui/ui_context.h"
 #include "ui_atlas.h"
-#include "util/random/rng.h"
 #include "util/text/utf8.h"
 #include "UIShader.h"
 
@@ -64,6 +63,10 @@ namespace MainWindow {
 #include <QFileDialog>
 #include <QFile>
 #include <QDir>
+#endif
+
+#if !defined(nullptr)
+#define nullptr NULL
 #endif
 
 // Ugly communication with NativeApp
@@ -200,10 +203,10 @@ void MenuScreen::render() {
 	ui_draw2d.DrawTextShadow(UBUNTU24, PPSSPP_GIT_VERSION, dp_xres + xoff, 85, 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_BOTTOM);
 	ui_draw2d.SetFontScale(1.0f, 1.0f);
 	VLinear vlinear(dp_xres + xoff, 100, 20);
-	VGrid vgrid_recent(-xoff + 40, 100, 480, 40, 20);
+	VGrid vgrid_recent(-xoff + 20, 100, 480, 40, 20);
 
 	if (UIButton(GEN_ID, vlinear, w, "Load...", ALIGN_RIGHT)) {
-#if defined(USING_QT_UI)
+#if defined(USING_QT_UI) && !defined(MEEGO_EDITION_HARMATTAN)
 		QString fileName = QFileDialog::getOpenFileName(NULL, "Load ROM", g_Config.currentDirectory.c_str(), "PSP ROMs (*.iso *.cso *.pbp *.elf)");
 		if (QFile::exists(fileName)) {
 			QDir newPath;
@@ -357,7 +360,8 @@ void PauseScreen::render() {
 			gpu->Resized();
 	}
 	bool fs = g_Config.iFrameSkip == 1;
-	UICheckBox(GEN_ID, x, y += stride, "Frameskip (beta)", ALIGN_TOPLEFT, &fs);
+	UICheckBox(GEN_ID, x, y += stride, "Frame Skipping", ALIGN_TOPLEFT, &fs);
+	UICheckBox(GEN_ID, x, y += stride, "Use Media Engine", ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 	g_Config.iFrameSkip = fs ? 1 : 0;
 
 	// TODO: Add UI for more than one slot.
@@ -432,14 +436,14 @@ void SettingsScreen::render() {
 	}
 #ifndef __SYMBIAN32__
 	UICheckBox(GEN_ID, x, y += stride, "Hardware Transform", ALIGN_TOPLEFT, &g_Config.bHardwareTransform);
-	UICheckBox(GEN_ID, x + columnw, y, "Draw using Stream VBO", ALIGN_TOPLEFT, &g_Config.bUseVBO);
+	UICheckBox(GEN_ID, x + columnw, y, "Use Stream VBO", ALIGN_TOPLEFT, &g_Config.bUseVBO);
 #endif
 	UICheckBox(GEN_ID, x, y += stride, "Vertex Cache", ALIGN_TOPLEFT, &g_Config.bVertexCache);
 	UICheckBox(GEN_ID, x + columnw, y, "Use Media Engine", ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 
 	UICheckBox(GEN_ID, x, y += stride, "JIT (Dynarec)", ALIGN_TOPLEFT, &g_Config.bJit);
 	if (g_Config.bJit)
-		UICheckBox(GEN_ID, x + columnw, y, "Fastmem (may be unstable)", ALIGN_TOPLEFT, &g_Config.bFastMemory);
+		UICheckBox(GEN_ID, x + columnw, y, "Fast Memory (unstable)", ALIGN_TOPLEFT, &g_Config.bFastMemory);
 
 	UICheckBox(GEN_ID, x, y += stride, "On-screen Touch Controls", ALIGN_TOPLEFT, &g_Config.bShowTouchControls);
 	if (g_Config.bShowTouchControls) {
@@ -458,7 +462,7 @@ void SettingsScreen::render() {
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
-	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH, "Developer Menu", ALIGN_BOTTOMLEFT)) {
+	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH + 20, "Developer Menu", ALIGN_BOTTOMLEFT)) {
 		screenManager()->push(new DeveloperScreen());
 	}
 
@@ -490,7 +494,7 @@ void DeveloperScreen::render() {
 	}
 
 
-	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH, "Dump frame to log", ALIGN_BOTTOMLEFT)) {
+	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH + 40, "Dump frame to log", ALIGN_BOTTOMLEFT)) {
 		gpu->DumpNextFrame();
 	}
 

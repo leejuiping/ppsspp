@@ -205,7 +205,7 @@ void MenuScreen::render() {
 	VLinear vlinear(dp_xres + xoff, 100, 20);
 	VGrid vgrid_recent(-xoff + 20, 100, 480, 40, 20);
 
-	if (UIButton(GEN_ID, vlinear, w, "Load...", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, w, 0, "Load...", ALIGN_RIGHT)) {
 #if defined(USING_QT_UI) && !defined(MEEGO_EDITION_HARMATTAN)
 		QString fileName = QFileDialog::getOpenFileName(NULL, "Load ROM", g_Config.currentDirectory.c_str(), "PSP ROMs (*.iso *.cso *.pbp *.elf)");
 		if (QFile::exists(fileName)) {
@@ -231,25 +231,25 @@ void MenuScreen::render() {
 	}
 
 #ifndef _WIN32
-	if (UIButton(GEN_ID, vlinear, w, "Settings", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, w, 0, "Settings", ALIGN_RIGHT)) {
 		screenManager()->push(new SettingsScreen(), 0);
 		UIReset();
 	}
 #endif
 
-	if (UIButton(GEN_ID, vlinear, w, "Credits", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, w, 0, "Credits", ALIGN_RIGHT)) {
 		screenManager()->switchScreen(new CreditsScreen());
 		UIReset();
 	}
 
-	if (UIButton(GEN_ID, vlinear, w, "Exit", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, w, 0, "Exit", ALIGN_RIGHT)) {
 		// TODO: Save when setting changes, rather than when we quit
 		NativeShutdown();
 		// TODO: Need a more elegant way to quit
 		exit(0);
 	}
 
-	if (UIButton(GEN_ID, vlinear, w, "www.ppsspp.org", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, w, 0, "www.ppsspp.org", ALIGN_RIGHT)) {
 		LaunchBrowser("http://www.ppsspp.org/");
 	}
 
@@ -268,13 +268,18 @@ void MenuScreen::render() {
 		// This might create a texture so we must flush first.
 		UIFlush();
 		GameInfo *ginfo = g_gameInfoCache.GetInfo(g_Config.recentIsos[i], false);
-
-		if (ginfo) {
-			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, 144, 80, ginfo->iconTexture, ALIGN_LEFT)) {
+		if (ginfo && ginfo->fileType != FILETYPE_PSP_ELF) {
+			u32 color;
+			if (ginfo->iconTexture == 0) {
+				color = 0;
+			} else {
+				color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
+			}
+			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, 144, 80, ginfo->iconTexture, ALIGN_LEFT, color)) {
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 			}
 		} else {
-			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, recentW, filename.c_str(), ALIGN_LEFT)) {
+			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, 144, 80, filename.c_str(), ALIGN_LEFT)) {
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 			}
 		}
@@ -366,30 +371,30 @@ void PauseScreen::render() {
 
 	// TODO: Add UI for more than one slot.
 	HLinear hlinear1(x, y + 80, 20);
-	if (UIButton(GEN_ID, hlinear1, LARGE_BUTTON_WIDTH, "Save State", ALIGN_LEFT)) {
+	if (UIButton(GEN_ID, hlinear1, LARGE_BUTTON_WIDTH, 0, "Save State", ALIGN_LEFT)) {
 		SaveState::SaveSlot(0, 0, 0);
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
-	if (UIButton(GEN_ID, hlinear1, LARGE_BUTTON_WIDTH, "Load State", ALIGN_LEFT)) {
+	if (UIButton(GEN_ID, hlinear1, LARGE_BUTTON_WIDTH, 0, "Load State", ALIGN_LEFT)) {
 		SaveState::LoadSlot(0, 0, 0);
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
 
 	VLinear vlinear(dp_xres - 10, 160, 20);
-	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Continue", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, 0, "Continue", ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
 #ifndef _WIN32
-	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Settings", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, 0, "Settings", ALIGN_RIGHT)) {
 		screenManager()->push(new SettingsScreen(), 0);
 	}
 #endif
-	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, "Return to Menu", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, 0, "Return to Menu", ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
 	/*
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH*2, "Debug: Dump Next Frame", ALIGN_BOTTOMRIGHT)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH*2, 0, "Debug: Dump Next Frame", ALIGN_BOTTOMRIGHT)) {
 		gpu->DumpNextFrame();
 	}
 	*/
@@ -459,10 +464,10 @@ void SettingsScreen::render() {
 
 	// UICheckBox(GEN_ID, x, y += stride, "Draw raw framebuffer (for some homebrew)", ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
-	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH + 20, "Developer Menu", ALIGN_BOTTOMLEFT)) {
+	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH + 20, 0, "Developer Menu", ALIGN_BOTTOMLEFT)) {
 		screenManager()->push(new DeveloperScreen());
 	}
 
@@ -483,18 +488,18 @@ void DeveloperScreen::render() {
 
 	ui_draw2d.DrawText(UBUNTU48, "Developer Tools", dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, "Back", ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
-	if (UIButton(GEN_ID, Pos(dp_xres / 2, 100), LARGE_BUTTON_WIDTH, "Run CPU tests", ALIGN_CENTER | ALIGN_TOP)) {
+	if (UIButton(GEN_ID, Pos(dp_xres / 2, 100), LARGE_BUTTON_WIDTH, 0, "Run CPU tests", ALIGN_CENTER | ALIGN_TOP)) {
 		// TODO: Run tests
 		RunTests();
 		// screenManager()->push(new EmuScreen())
 	}
 
 
-	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH + 40, "Dump frame to log", ALIGN_BOTTOMLEFT)) {
+	if (UIButton(GEN_ID, Pos(10, dp_yres-10), LARGE_BUTTON_WIDTH + 40, 0, "Dump frame to log", ALIGN_BOTTOMLEFT)) {
 		gpu->DumpNextFrame();
 	}
 
@@ -527,23 +532,31 @@ void FileListAdapter::drawItem(int item, int x, int y, int w, int h, bool select
 			icon = iter->second;
 	}
 
-	int iconSpace = this->itemHeight(item);
+	int iconSpace = 144;
 	ui_draw2d.DrawImage2GridH(selected ? I_BUTTON_SELECTED: I_BUTTON, x, y, x + w);
 	ui_draw2d.DrawTextShadow(UBUNTU24, (*items_)[item].name.c_str(), x + UI_SPACE + iconSpace, y + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
 
-#if 0
+#if 1
 	// This might create a texture so we must flush first.
 	UIFlush();
 	GameInfo *ginfo = 0;
-	if (!(*items_)[item].isDirectory)
+	if (!(*items_)[item].isDirectory) {
 		ginfo = g_gameInfoCache.GetInfo((*items_)[item].fullName, false);
-	if (ginfo && ginfo->iconTexture) {
-		float scaled_w = h * (144.f / 80.f);
-		UIFlush();
-		ginfo->iconTexture->Bind(0);
-		ui_draw2d.DrawTexRect(x + 10, y, x + 10 + scaled_w, y + h, 0, 0, 1, 1, 0xFFFFFFFF);
-		ui_draw2d.Flush();
-		ctx_->RebindTexture();
+		if (!ginfo) {
+			ELOG("No ginfo :( %s", (*items_)[item].fullName.c_str());
+		}
+	}
+	if (ginfo) {
+		float scaled_h = ui_atlas.images[I_BUTTON].h;
+		float scaled_w = scaled_h * (144.f / 80.f);
+		if (ginfo->iconTexture) {
+			uint32_t color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
+			UIFlush();
+			ginfo->iconTexture->Bind(0);
+			ui_draw2d.DrawTexRect(x + 10, y, x + 10 + scaled_w, y + scaled_h, 0, 0, 1, 1, color);
+			ui_draw2d.Flush();
+			ctx_->RebindTexture();
+		}
 	} else {
 		if (icon != -1)
 			ui_draw2d.DrawImage(icon, x + UI_SPACE, y + 25, 1.0f, 0xFFFFFFFF, ALIGN_VCENTER | ALIGN_LEFT);
@@ -602,13 +615,13 @@ void FileSelectScreen::render() {
 
 	ui_draw2d.DrawImageStretch(I_BUTTON, 0, 0, dp_xres, 70);
 
-	if (UIButton(GEN_ID, Pos(10,10), SMALL_BUTTON_WIDTH, "Up", ALIGN_TOPLEFT)) {
+	if (UIButton(GEN_ID, Pos(10,10), SMALL_BUTTON_WIDTH, 0, "Up", ALIGN_TOPLEFT)) {
 		currentDirectory_ = getDir(currentDirectory_);
 		updateListing();
 	}
 	ui_draw2d.DrawTextShadow(UBUNTU24, currentDirectory_.c_str(), 20 + SMALL_BUTTON_WIDTH, 10 + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
 #ifndef ANDROID
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, 10), SMALL_BUTTON_WIDTH, "Back", ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, 10), SMALL_BUTTON_WIDTH, 0, "Back", ALIGN_RIGHT)) {
 		g_Config.Save();
 		screenManager()->switchScreen(new MenuScreen());
 	}
@@ -634,14 +647,18 @@ static const char * credits[] = {
 	"",
 	"Contributors:",
 	"unknownbrackets",
-	"orphis",
 	"xsacha",
+	"raven02",
+	"oioitff",
+	"tpunix",
+	"orphis",
+	"sum2012",
+	"mikusp",
 	"artart78",
 	"tmaul",
 	"ced2911",
 	"soywiz",
 	"kovensky",
-	"raven02",
 	"xele",
 	"",
 	"Written in C++ for speed and portability",
@@ -705,7 +722,7 @@ void CreditsScreen::render() {
 		y += itemHeight;
 	}
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), 200, "Back", ALIGN_BOTTOMRIGHT)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), 200, 0, "Back", ALIGN_BOTTOMRIGHT)) {
 		screenManager()->switchScreen(new MenuScreen());
 	}
 
@@ -727,7 +744,7 @@ void ErrorScreen::render()
 	ui_draw2d.DrawText(UBUNTU48, errorTitle_.c_str(), dp_xres / 2, 30, 0xFFFFFFFF, ALIGN_HCENTER);
 	ui_draw2d.DrawText(UBUNTU24, errorMessage_.c_str(), 40, 120, 0xFFFFFFFF, ALIGN_LEFT);
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), 200, "Back", ALIGN_BOTTOMRIGHT)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), 200, 0, "Back", ALIGN_BOTTOMRIGHT)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 

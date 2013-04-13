@@ -441,6 +441,15 @@ u32 sceAtracResetPlayPosition(int atracID, int sample, int bytesWrittenFirstBuf,
 u32 sceAtracSetHalfwayBuffer(int atracID, u32 halfBuffer, u32 readSize, u32 halfBufferSize)
 {
 	ERROR_LOG(HLE, "UNIMPL sceAtracSetHalfwayBuffer(%i, %08x, %8x, %8x)", atracID, halfBuffer, readSize, halfBufferSize);
+	if (readSize > halfBufferSize)
+		return ATRAC_ERROR_INCORRECT_READ_SIZE;
+
+	Atrac *atrac = getAtrac(atracID);
+	if (atrac) {
+		atrac->first.addr = halfBuffer;
+		atrac->first.size = halfBufferSize;
+		atrac->Analyze();
+	}
 	return 0;
 }
 
@@ -573,6 +582,8 @@ int sceAtracLowLevelInitDecoder(int atracID, u32 paramsAddr)
 int sceAtracLowLevelDecode(int atracID, u32 sourceAddr, u32 sourceBytesConsumedAddr, u32 samplesAddr, u32 sampleBytesAddr)
 {
 	ERROR_LOG(HLE, "UNIMPL sceAtracLowLevelDecode(%i, %08x, %08x, %08x, %08x)", atracID, sourceAddr, sourceBytesConsumedAddr, samplesAddr, sampleBytesAddr);
+	if (Memory::IsValidAddress(sampleBytesAddr))
+		Memory::Write_U32(0, sampleBytesAddr);
 	return 0;
 }
 

@@ -405,7 +405,11 @@ public:
 		u32 numCallbacks = THREAD_CALLBACK_NUM_TYPES;
 		p.Do(numCallbacks);
 		if (numCallbacks != THREAD_CALLBACK_NUM_TYPES)
-			ERROR_LOG(HLE, "Unable to load state: different kernel object storage.");
+		{
+			p.SetError(p.ERROR_FAILURE);
+			ERROR_LOG(HLE, "Unable to load state: different thread callback storage.");
+			return;
+		}
 
 		for (size_t i = 0; i < THREAD_CALLBACK_NUM_TYPES; ++i)
 		{
@@ -581,6 +585,7 @@ struct ThreadQueueList
 		p.Do(numQueues);
 		if (numQueues != NUM_QUEUES)
 		{
+			p.SetError(p.ERROR_FAILURE);
 			ERROR_LOG(HLE, "Savestate loading error: invalid data");
 			return;
 		}
@@ -2238,11 +2243,12 @@ void sceKernelWakeupThread()
 	Thread *t = kernelObjects.Get<Thread>(uid, error);
 	if (t)
 	{
-		if (t->nt.waitType != WAITTYPE_SLEEP) {
+		if (!t->isWaitingFor(WAITTYPE_SLEEP, 1)) {
 			t->nt.wakeupCount++;
 			DEBUG_LOG(HLE,"sceKernelWakeupThread(%i) - wakeupCount incremented to %i", uid, t->nt.wakeupCount);
 			RETURN(0);
 		} else {
+			VERBOSE_LOG(HLE,"sceKernelWakeupThread(%i) - woke thread at %i", uid, t->nt.wakeupCount);
 			__KernelResumeThreadFromWait(uid);
 		}
 	} 
@@ -2286,7 +2292,7 @@ static void __KernelSleepThread(bool doCallbacks) {
 	} else {
 		VERBOSE_LOG(HLE, "sceKernelSleepThread()");
 		RETURN(0);
-		__KernelWaitCurThread(WAITTYPE_SLEEP, 0, 0, 0, doCallbacks, "thread slept");
+		__KernelWaitCurThread(WAITTYPE_SLEEP, 1, 0, 0, doCallbacks, "thread slept");
 	}
 }
 

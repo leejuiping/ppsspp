@@ -203,7 +203,6 @@ void MenuScreen::render() {
 	ui_draw2d.DrawTextShadow(UBUNTU24, PPSSPP_GIT_VERSION, dp_xres + xoff, 85, 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_BOTTOM);
 	ui_draw2d.SetFontScale(1.0f, 1.0f);
 	VLinear vlinear(dp_xres + xoff, 100, 20);
-	VGrid vgrid_recent(-xoff + 20, 100, 480, 40, 20);
 
 	if (UIButton(GEN_ID, vlinear, w, 0, "Load...", ALIGN_RIGHT)) {
 #if defined(USING_QT_UI) && !defined(MEEGO_EDITION_HARMATTAN)
@@ -246,7 +245,11 @@ void MenuScreen::render() {
 		// TODO: Save when setting changes, rather than when we quit
 		NativeShutdown();
 		// TODO: Need a more elegant way to quit
+#ifdef _WIN32
+		ExitProcess(0);
+#else
 		exit(0);
+#endif
 	}
 
 	if (UIButton(GEN_ID, vlinear, w, 0, "www.ppsspp.org", ALIGN_RIGHT)) {
@@ -257,6 +260,22 @@ void MenuScreen::render() {
 	if (g_Config.recentIsos.size()) {
 		ui_draw2d.DrawText(UBUNTU24, "Recent", -xoff + 20, 80, 0xFFFFFFFF, ALIGN_BOTTOMLEFT);
 	}
+
+	int spacing = 15;
+
+	float textureButtonWidth = 144;
+	float textureButtonHeight = 80;
+
+	if (dp_yres < 480)
+		spacing = 8;
+	// On small screens, we can't fit four vertically.
+	if (100 + spacing * 6 + textureButtonHeight * 4 > dp_yres) {
+		textureButtonHeight = (dp_yres - 100 - spacing * 6) / 4;
+		textureButtonWidth = (textureButtonHeight / 80) * 144;
+	}
+
+	VGrid vgrid_recent(-xoff + 20, 100, std::min(dp_yres-spacing*2, 480), spacing, spacing);
+
 	for (size_t i = 0; i < g_Config.recentIsos.size(); i++) {
 		std::string filename;
 		std::string rec = g_Config.recentIsos[i];
@@ -275,15 +294,26 @@ void MenuScreen::render() {
 			} else {
 				color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
 			}
-			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, 144, 80, ginfo->iconTexture, ALIGN_LEFT, color)) {
+			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, textureButtonWidth, textureButtonHeight, ginfo->iconTexture, ALIGN_LEFT, color)) {
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 			}
 		} else {
-			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, 144, 80, filename.c_str(), ALIGN_LEFT)) {
+			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, textureButtonWidth, textureButtonHeight, filename.c_str(), ALIGN_LEFT)) {
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 			}
 		}
 	}
+
+#if defined(_DEBUG) & defined(_WIN32)
+	// Print the current dp_xres/yres in the corner. For UI scaling testing - just
+	// resize to 800x480 to get an idea of what it will look like on a Nexus S.
+	ui_draw2d.SetFontScale(0.4, 0.4);
+	char temptext[64];
+	sprintf(temptext, "%ix%i", dp_xres, dp_yres);
+	ui_draw2d.DrawTextShadow(UBUNTU24, temptext, 5, dp_yres-5, 0xFFFFFFFF, ALIGN_BOTTOMLEFT);
+	ui_draw2d.SetFontScale(1.0, 1.0);
+#endif
+
 	DrawWatermark();
 
 	UIEnd();
@@ -359,7 +389,6 @@ void PauseScreen::render() {
 	UICheckBox(GEN_ID, x, y += stride, "Stretch to display", ALIGN_TOPLEFT, &g_Config.bStretchToDisplay);
 
 	UICheckBox(GEN_ID, x, y += stride, "Hardware Transform", ALIGN_TOPLEFT, &g_Config.bHardwareTransform);
-	UICheckBox(GEN_ID, x, y += stride, "Linear Filtering", ALIGN_TOPLEFT, &g_Config.bLinearFiltering);
 	if (UICheckBox(GEN_ID, x, y += stride, "Buffered Rendering", ALIGN_TOPLEFT, &g_Config.bBufferedRendering)) {
 		if (gpu)
 			gpu->Resized();
@@ -532,11 +561,13 @@ void FileListAdapter::drawItem(int item, int x, int y, int w, int h, bool select
 			icon = iter->second;
 	}
 
-	int iconSpace = 144;
+	float scaled_h = ui_atlas.images[I_BUTTON].h;
+	float scaled_w = scaled_h * (144.f / 80.f);
+
+	int iconSpace = scaled_w + 10;
 	ui_draw2d.DrawImage2GridH(selected ? I_BUTTON_SELECTED: I_BUTTON, x, y, x + w);
 	ui_draw2d.DrawTextShadow(UBUNTU24, (*items_)[item].name.c_str(), x + UI_SPACE + iconSpace, y + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
 
-#if 1
 	// This might create a texture so we must flush first.
 	UIFlush();
 	GameInfo *ginfo = 0;
@@ -547,8 +578,6 @@ void FileListAdapter::drawItem(int item, int x, int y, int w, int h, bool select
 		}
 	}
 	if (ginfo) {
-		float scaled_h = ui_atlas.images[I_BUTTON].h;
-		float scaled_w = scaled_h * (144.f / 80.f);
 		if (ginfo->iconTexture) {
 			uint32_t color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
 			UIFlush();
@@ -561,10 +590,6 @@ void FileListAdapter::drawItem(int item, int x, int y, int w, int h, bool select
 		if (icon != -1)
 			ui_draw2d.DrawImage(icon, x + UI_SPACE, y + 25, 1.0f, 0xFFFFFFFF, ALIGN_VCENTER | ALIGN_LEFT);
 	}
-#else
-	if (icon != -1)
-		ui_draw2d.DrawImage(icon, x + UI_SPACE, y + 25, 1.0f, 0xFFFFFFFF, ALIGN_VCENTER | ALIGN_LEFT);
-#endif
 }
 
 FileSelectScreen::FileSelectScreen(const FileSelectScreenOptions &options) : options_(options) {

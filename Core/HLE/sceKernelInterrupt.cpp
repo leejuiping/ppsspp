@@ -227,6 +227,7 @@ void __InterruptsDoState(PointerWrap &p)
 	p.Do(numInterrupts);
 	if (numInterrupts != PSP_NUMBER_INTERRUPTS)
 	{
+		p.SetError(p.ERROR_FAILURE);
 		ERROR_LOG(HLE, "Savestate failure: wrong number of interrupts, can't load.");
 		return;
 	}
@@ -574,7 +575,8 @@ const HLEFunction Kernel_Library[] =
 	{0x293b45b8,WrapI_V<sceKernelGetThreadId>, "sceKernelGetThreadId"},
 	{0xD13BDE95,WrapI_V<sceKernelCheckThreadStack>, "sceKernelCheckThreadStack"},
 	{0x1839852A,WrapU_UUU<sceKernelMemcpy>, "sce_paf_private_memcpy"},
-	{0xfa835cde,WrapI_I<Kernel_Library_FA835CDE>, "Kernel_Library_FA835CDE"},
+	// Name is only a guess.
+	{0xfa835cde,WrapI_I<sceKernelAllocateTls>, "sceKernelAllocateTls"},
 };
 
 void Register_Kernel_Library()

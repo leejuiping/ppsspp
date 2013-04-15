@@ -74,7 +74,7 @@ PRE_TARGETDEPS += compiler_lang_make_all
 
 # Packaging
 symbian {
-	deploy.pkg_prerules = "$${LITERAL_HASH}{\"PPSSPP\"}, (0xE0095B1D), 0, 7, 0, TYPE=SA" "%{\"Qtness\"}" ":\"Qtness\""
+	deploy.pkg_prerules = "$${LITERAL_HASH}{\"PPSSPP\"}, (0xE0095B1D), 0, 7, 5, TYPE=SA" "%{\"Qtness\"}" ":\"Qtness\""
 	assets.sources = ../assets/flash
 	assets.path = E:/PPSSPP
 	DEPLOYMENT += deploy assets
@@ -93,6 +93,9 @@ contains(MEEGO_EDITION,harmattan) {
 	icon.files = ../assets/icon-114.png
 	icon.path = /usr/share/icons/hicolor/114x114/apps
 	INSTALLS += target assets desktopfile icon
-	ICON = ../assets/icon-114.png
+	# Booster
+	QMAKE_CXXFLAGS += -fPIC -fvisibility=hidden -fvisibility-inlines-hidden
+	QMAKE_LFLAGS += -pie -rdynamic
+	CONFIG += qt-boostable
 }
 

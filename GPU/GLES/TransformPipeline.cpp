@@ -315,7 +315,7 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 			break;
 		case GE_LIGHTTYPE_SPOT:
 			lightDir = gstate_c.lightdir[l];
-			angle = toLight.Normalize() * lightDir.Normalize();
+			angle = toLight.Normalized() * lightDir.Normalized();
 			if (angle >= gstate_c.lightangle[l])
 				lightScale = clamp(1.0f / (gstate_c.lightatt[l][0] + gstate_c.lightatt[l][1]*distanceToLight + gstate_c.lightatt[l][2]*distanceToLight*distanceToLight), 0.0f, 1.0f) * powf(angle, gstate_c.lightspotCoef[l]);
 			break;
@@ -325,7 +325,7 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 		}
 
 		Color4 lightDiff(gstate_c.lightColor[1][l], 0.0f);
-		Color4 diff = (lightDiff * *diffuse) * (dot * lightScale);
+		Color4 diff = (lightDiff * *diffuse) * dot;
 
 		// Real PSP specular
 		Vec3 toViewer(0,0,1);
@@ -348,7 +348,7 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 		if (gstate.lightEnable[l] & 1)
 		{
 			Color4 lightAmbient(gstate_c.lightColor[0][l], 0.0f);
-			lightSum0 += lightAmbient + diff;
+			lightSum0 += (lightAmbient + diff) * lightScale;
 		}
 	}
 
@@ -907,6 +907,8 @@ u32 TransformDrawEngine::ComputeHash() {
 		if (!drawCalls[i].inds) {
 			fullhash += CityHash32((const char *)drawCalls[i].verts, vertexSize * drawCalls[i].vertexCount);
 		} else {
+			// This could get seriously expensive with sparse indices. Need to combine hashing ranges the same way
+			// we do when drawing.
 			fullhash += CityHash32((const char *)drawCalls[i].verts + vertexSize * drawCalls[i].indexLowerBound,
 				vertexSize * (drawCalls[i].indexUpperBound - drawCalls[i].indexLowerBound));
 			int indexSize = (dec_->VertexType() & GE_VTYPE_IDX_MASK) == GE_VTYPE_IDX_16BIT ? 2 : 1;

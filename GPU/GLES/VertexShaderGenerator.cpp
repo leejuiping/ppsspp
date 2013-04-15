@@ -36,16 +36,14 @@
 
 #define WRITE p+=sprintf
 
-bool CanUseHardwareTransform(int prim)
-{
+bool CanUseHardwareTransform(int prim) {
 	if (!g_Config.bHardwareTransform)
 		return false;
 	return !gstate.isModeThrough() && prim != GE_PRIM_RECTANGLES;
 }
 
 // prim so we can special case for RECTANGLES :(
-void ComputeVertexShaderID(VertexShaderID *id, int prim)
-{
+void ComputeVertexShaderID(VertexShaderID *id, int prim) {
 	int doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 
 	bool hasColor = (gstate.vertType & GE_VTYPE_COL_MASK) != 0;
@@ -84,8 +82,8 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim)
 
 		// Okay, d[1] coming up. ==============
 
-		id->d[1] |= gstate.isLightingEnabled() << 19;
-		if ((gstate.lightingEnable & 1) || gstate.getUVGenMode() == 2) {
+		id->d[1] |= gstate.isLightingEnabled() << 24;
+		if (gstate.isLightingEnabled() || gstate.getUVGenMode() == 2) {
 			// Light bits
 			for (int i = 0; i < 4; i++) {
 				id->d[1] |= (gstate.ltype[i] & 3) << (i * 4);
@@ -99,7 +97,7 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim)
 	}
 }
 
-const char *boneWeightAttrDecl[8] = {
+static const char * const boneWeightAttrDecl[8] = {
 	"attribute float a_weight0123;\n",
 	"attribute vec2 a_weight0123;\n",
 	"attribute vec3 a_weight0123;\n",
@@ -110,7 +108,7 @@ const char *boneWeightAttrDecl[8] = {
 	"attribute vec4 a_weight0123;\nattribute vec4 a_weight4567;\n",
 };
 
-const char *boneWeightAttr[8] = {
+static const char * const boneWeightAttr[8] = {
 	"a_weight0123.x",
 	"a_weight0123.y",
 	"a_weight0123.z",
@@ -361,14 +359,14 @@ void GenerateVertexShader(int prim, char *buffer) {
 				break;
 			}
 
-			WRITE(p, "  vec3 diffuse%i = (u_lightdiffuse%i * %s) * (max(dot%i, 0.0) * lightScale%i);\n", i, i, diffuse, i, i);
+			WRITE(p, "  vec3 diffuse%i = (u_lightdiffuse%i * %s) * max(dot%i, 0.0);\n", i, i, diffuse, i);
 			if (doSpecular) {
 				WRITE(p, "  vec3 halfVec%i = normalize(normalize(toLight%i) + vec3(0.0, 0.0, 1.0));\n", i, i);
 				WRITE(p, "  dot%i = dot(halfVec%i, worldnormal);\n", i, i);
 				WRITE(p, "  if (dot%i > 0.0)\n", i);
 				WRITE(p, "    lightSum1 += u_lightspecular%i * %s * (pow(dot%i, u_matspecular.a) * (dot%i * lightScale%i));\n", i, specular, i, i, i);
 			}
-			WRITE(p, "  lightSum0 += vec4(u_lightambient%i + diffuse%i, 0.0);\n", i, i);
+			WRITE(p, "  lightSum0 += vec4((u_lightambient%i + diffuse%i)*lightScale%i, 0.0);\n", i, i, i);
 		}
 
 		if (gstate.isLightingEnabled()) {

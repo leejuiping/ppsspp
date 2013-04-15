@@ -22,6 +22,7 @@ GPUCommon::GPUCommon() :
 	dumpThisFrame_(false),
 	interruptsEnabled_(true)
 {
+	memset(dls, 0, sizeof(dls));
 	for (int i = 0; i < DisplayListMaxCount; ++i) {
 		dls[i].state = PSP_GE_DL_STATE_NONE;
 		dls[i].waitTicks = 0;
@@ -484,7 +485,6 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 
 	case GE_CMD_OFFSETADDR:
 		gstate_c.offsetAddr = data << 8;
-		// ???
 		break;
 
 	case GE_CMD_ORIGIN:
@@ -533,6 +533,9 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 					ERROR_LOG_REPORT(G3D, "Invalid DL PC %08x on return", currentList->pc);
 					gpuState = GPUSTATE_ERROR;
 				}
+
+				// Reset gstate_c.offsetAddr, Flatout seems to expect this.
+				gstate_c.offsetAddr = 0;
 			}
 		}
 		break;
@@ -583,6 +586,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 						if (!Memory::IsValidAddress(target)) {
 							ERROR_LOG_REPORT(G3D, "Signal with Jump: bad address. signal/end: %04x %04x", signal, enddata);
 						} else {
+							UpdateCycles(currentList->pc, target);
 							currentList->pc = target;
 							DEBUG_LOG(G3D, "Signal with Jump. signal/end: %04x %04x", signal, enddata);
 						}
@@ -601,6 +605,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 						} else {
 							// TODO: This might save/restore other state...
 							currentList->stack[currentList->stackptr++] = currentList->pc;
+							UpdateCycles(currentList->pc, target);
 							currentList->pc = target;
 							DEBUG_LOG(G3D, "Signal with Call. signal/end: %04x %04x", signal, enddata);
 						}
@@ -614,7 +619,9 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 							ERROR_LOG_REPORT(G3D, "Signal with Return: stack empty. signal/end: %04x %04x", signal, enddata);
 						} else {
 							// TODO: This might save/restore other state...
-							currentList->pc = currentList->stack[--currentList->stackptr];
+							u32 target = currentList->stack[--currentList->stackptr];
+							UpdateCycles(currentList->pc, target);
+							currentList->pc = target;
 							DEBUG_LOG(G3D, "Signal with Return. signal/end: %04x %04x", signal, enddata);
 						}
 					}

@@ -16,17 +16,14 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 
+#include "Common/FileUtil.h"
 #include "Config.h"
 #include "IniFile.h"
 #include "HLE/sceUtility.h"
 
 Config g_Config;
 
-#ifdef _WIN32
 #define MAX_RECENT 12
-#else
-#define MAX_RECENT 8
-#endif
 
 Config::Config()
 {
@@ -122,6 +119,7 @@ void Config::Load(const char *iniFileName)
 	pspConfig->Get("TimeFormat", &itimeformat, PSP_SYSTEMPARAM_TIME_FORMAT_24HR);
 	pspConfig->Get("EncryptSave", &bEncryptSave, true);
 
+	CleanRecent();
 	// Ephemeral settings
 	bDrawWireframe = false;
 }
@@ -129,6 +127,7 @@ void Config::Load(const char *iniFileName)
 void Config::Save()
 {
 	if (iniFilename_.size() && g_Config.bSaveSettings) {
+		CleanRecent();
 		IniFile iniFile;
 		if (!iniFile.Load(iniFilename_.c_str())) {
 			ERROR_LOG(LOADER, "Error saving config - can't read ini %s", iniFilename_.c_str());
@@ -209,4 +208,14 @@ void Config::AddRecent(const std::string &file) {
 	recentIsos.insert(recentIsos.begin(), file);
 	if (recentIsos.size() > MAX_RECENT)
 		recentIsos.resize(MAX_RECENT);
+}
+
+void Config::CleanRecent() {
+	std::vector<std::string> cleanedRecent;
+	for (size_t i = 0; i < recentIsos.size(); i++) {
+		if (File::Exists(recentIsos[i]))
+			cleanedRecent.push_back(recentIsos[i]);
+	}
+	recentIsos = cleanedRecent;
+
 }

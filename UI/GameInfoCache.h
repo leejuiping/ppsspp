@@ -21,11 +21,15 @@
 #include <map>
 
 #include "base/mutex.h"
+#include "thread/prioritizedworkqueue.h"
 #include "gfx/texture.h"
 #include "Core/ELF/ParamSFO.h"
+#include "Core/Loaders.h"
 
-struct GameInfo {
-	GameInfo() : iconTexture(NULL), pic0Texture(NULL), pic1Texture(NULL) {}
+
+class GameInfo {
+public:
+	GameInfo() : fileType(FILETYPE_UNKNOWN), iconTexture(NULL), pic0Texture(NULL), pic1Texture(NULL) {}
 	// Hold this when reading or writing from the GameInfo.
 	// Don't need to hold it when just passing around the pointer,
 	// and obviously also not when creating it and holding the only pointer
@@ -33,8 +37,9 @@ struct GameInfo {
 	recursive_mutex lock;
 
 	std::string title;  // for easy access, also available in paramSFO.
+	EmuFileType fileType;
 	ParamSFOData paramSFO;
-
+	
 	// Pre read the data, create a texture the next time (GL thread..)
 	std::string iconTextureData;
 	Texture *iconTexture;
@@ -56,7 +61,13 @@ struct GameInfo {
 
 class GameInfoCache {
 public:
+	GameInfoCache() : gameInfoWQ_(0) {}
 	~GameInfoCache();
+
+	// This creates a background worker thread!
+	void Init();
+	void Shutdown();
+	void Clear();
 
 	// All data in GameInfo including iconTexture may be zero the first time you call this
 	// but filled in later asynchronously in the background. So keep calling this,
@@ -70,9 +81,14 @@ public:
 	void Save();
 	void Load();
 
+	void Add(const std::string &key, GameInfo *info_);
+
 private:
 	// Maps ISO path to info.
 	std::map<std::string, GameInfo *> info_;
+
+	// Work queue and management
+	PrioritizedWorkQueue *gameInfoWQ_;
 };
 
 // This one can be global, no good reason not to.

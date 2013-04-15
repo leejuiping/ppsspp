@@ -98,8 +98,8 @@ int ashmem_unpin_region(int fd, size_t offset, size_t len)
 
 #ifndef _WIN32
 // do not make this "static"
-#ifdef MAEMO
-std::string ram_temp_file = "/home/user/.ppsspp/tmp_gc_mem.tmp";
+#if defined(MAEMO) || defined(MEEGO_EDITION_HARMATTAN)
+std::string ram_temp_file = "/home/user/gc_mem.tmp";
 #else
 std::string ram_temp_file = "/tmp/gc_mem.tmp";
 #endif

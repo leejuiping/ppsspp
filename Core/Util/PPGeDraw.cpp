@@ -53,7 +53,7 @@ static u32 dataWritePtr;
 static u32 dataSize = 0x10000; // should be enough for a frame of gui...
 
 static u32 palettePtr;
-static u32 paletteSize = 4 * 16; // should be enough for a frame of gui...
+static u32 paletteSize = 2 * 16;
 
 
 // Vertex collector
@@ -138,10 +138,10 @@ void __PPGeInit()
 	palettePtr = __PPGeDoAlloc(paletteSize, false, "PPGe Texture Palette");
 
 	// Generate 16-greyscale palette. All PPGe graphics are greyscale so we can use a tiny paletted texture.
-	u32 *palette = (u32 *)Memory::GetPointer(palettePtr);
+	u16 *palette = (u16 *)Memory::GetPointer(palettePtr);
 	for (int i = 0; i < 16; i++) {
-		int val = i | (i << 4);
-		palette[i] = (val << 24) | 0xFFFFFF;
+		int val = i;
+		palette[i] = (val << 12) | 0xFFF;
 	}
 
 	u16 *imagePtr = (u16 *)imageData;
@@ -263,6 +263,16 @@ void PPGeEnd()
 	}
 }
 
+static const AtlasChar *PPGeGetChar(const AtlasFont &atlasfont, unsigned int cval)
+{
+	const AtlasChar *c = atlasfont.getChar(cval);
+	if (c == NULL)
+		c = atlasfont.getChar(0xFFFD);
+	if (c == NULL)
+		c = atlasfont.getChar('?');
+	return c;
+}
+
 static void PPGeMeasureText(const char *text, float scale, float *w, float *h) {
 	const AtlasFont &atlasfont = *ppge_atlas.fonts[0];
 	unsigned int cval;
@@ -279,7 +289,7 @@ static void PPGeMeasureText(const char *text, float scale, float *w, float *h) {
 			wacc = 0;
 			lines++;
 		}
-		const AtlasChar *c = atlasfont.getChar(cval);
+		const AtlasChar *c = PPGeGetChar(atlasfont, cval);
 		if (c) {
 			wacc += c->wx * scale;
 		}
@@ -322,7 +332,7 @@ void PPGeDrawText(const char *text, float x, float y, int align, float scale, u3
 			x = sx;
 			continue;
 		}
-		const AtlasChar *ch = atlasfont.getChar(cval);
+		const AtlasChar *ch = PPGeGetChar(atlasfont, cval);
 		if (ch) {
 			const AtlasChar &c = *ch;
 			float cx1 = x + c.ox * scale;
@@ -437,7 +447,7 @@ void PPGeSetDefaultTexture()
 	int hp2 = GetPow2(atlasHeight);
 	WriteCmd(GE_CMD_CLUTADDR, palettePtr & 0xFFFFF0);
 	WriteCmd(GE_CMD_CLUTADDRUPPER, (palettePtr & 0xFF000000) >> 8);
-	WriteCmd(GE_CMD_CLUTFORMAT, 0x00FF03);
+	WriteCmd(GE_CMD_CLUTFORMAT, 0x00FF02);
 	WriteCmd(GE_CMD_LOADCLUT, 2);
 	WriteCmd(GE_CMD_TEXSIZE0, wp2 | (hp2 << 8));
 	WriteCmd(GE_CMD_TEXMAPMODE, 0 | (1 << 8));

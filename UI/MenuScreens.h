@@ -77,7 +77,36 @@ public:
 	void render();
 };
 
+class AudioScreen : public Screen
+{
+public:
+	void update(InputState &input);
+	void render();
+};
 
+class GraphicsScreen : public Screen
+{
+public:
+	void update(InputState &input);
+	void render();
+};
+
+class SystemScreen : public Screen
+{
+public:
+	SystemScreen();
+	void update(InputState &input);
+	void render();
+private:
+	std::vector<FileInfo> langs_;
+};
+
+class ControlsScreen : public Screen
+{
+public:
+	void update(InputState &input);
+	void render();
+};
 struct FileSelectScreenOptions {
 	const char* filter;  // Enforced extension filter. Case insensitive, extensions separated by ":".
 	bool allowChooseDirectory;

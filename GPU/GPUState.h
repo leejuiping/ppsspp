@@ -101,7 +101,7 @@ struct GPUgstate
 				offsetx,
 				offsety,
 				pad111[2],
-				lmode,
+				shademodel,
 				reversenormals,
 				pad222,
 				materialupdate,
@@ -114,7 +114,7 @@ struct GPUgstate
 				materialspecularcoef,
 				ambientcolor,
 				ambientalpha,
-				colormodel,
+				lmode,
 				ltype[4],
 				lpos[12],
 				ldir[12],
@@ -354,6 +354,6 @@ extern GPUInterface *gpu;
 extern GPUStatistics gpuStats;
 
 inline u32 GPUStateCache::getRelativeAddress(u32 data) const {
-	u32 baseExtended = ((gstate.base & 0x0F0000) << 8) | (data & 0xFFFFFF);
+	u32 baseExtended = ((gstate.base & 0x0F0000) << 8) | data;
 	return (gstate_c.offsetAddr + baseExtended) & 0x0FFFFFFF;
 }

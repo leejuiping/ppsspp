@@ -18,16 +18,12 @@
 
 #include "Common/FileUtil.h"
 #include "Config.h"
-#include "IniFile.h"
+#include "file/ini_file.h"
 #include "HLE/sceUtility.h"
 
 Config g_Config;
 
-#ifdef _WIN32
 #define MAX_RECENT 12
-#else
-#define MAX_RECENT 8
-#endif
 
 Config::Config()
 {
@@ -60,6 +56,8 @@ void Config::Load(const char *iniFileName)
 	general->Get("IgnoreBadMemAccess", &bIgnoreBadMemAccess, true);
 	general->Get("CurrentDirectory", &currentDirectory, "");
 	general->Get("ShowDebuggerOnLoad", &bShowDebuggerOnLoad, false);
+	general->Get("Language", &languageIni, "en_US");
+
 	// "default" means let emulator decide, "" means disable.
 	general->Get("ReportHost", &sReportHost, "default");
 	general->Get("Recent", recentIsos);
@@ -117,6 +115,7 @@ void Config::Load(const char *iniFileName)
 	control->Get("LargeControls", &bLargeControls, false);
 	control->Get("KeyMapping",iMappingMap);
 	control->Get("AccelerometerToAnalogHoriz", &bAccelerometerToAnalogHoriz, false);
+	control->Get("ForceInputDevice", &iForceInputDevice, -1);
 
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 	pspConfig->Get("Language", &ilanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
@@ -151,6 +150,7 @@ void Config::Save()
 		general->Set("WindowX", iWindowX);
 		general->Set("WindowY", iWindowY);
 		general->Set("AutoSaveSymbolMap", bAutoSaveSymbolMap);
+		general->Set("Language", languageIni);
 
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 		cpu->Set("Jit", bJit);
@@ -183,6 +183,8 @@ void Config::Save()
 		control->Set("LargeControls", bLargeControls);
 		control->Set("KeyMapping",iMappingMap);
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
+		control->Set("ForceInputDevice", iForceInputDevice);
+		
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("Language", ilanguage);

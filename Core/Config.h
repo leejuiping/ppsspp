@@ -47,6 +47,7 @@ public:
 	bool bAutoSaveSymbolMap;
 	std::string sReportHost;
 	std::vector<std::string> recentIsos;
+	std::string languageIni;
 
 	// GFX
 	bool bDisplayFramebuffer;
@@ -83,6 +84,7 @@ public:
 
 	// Control
 	std::map<int,int> iMappingMap; // Can be used differently depending on systems
+	int iForceInputDevice;
 
 	// SystemParam
 	int ilanguage;

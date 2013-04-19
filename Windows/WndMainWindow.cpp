@@ -33,15 +33,24 @@
 #include "Windows/W32Util/Misc.h"
 #include "GPU/GPUInterface.h"
 #include "GPU/GPUState.h"
+#include "native/image/png_load.h"
 
 #ifdef THEMES
 #include "XPTheme.h"
 #endif
 
+#define ENABLE_TOUCH 0
+
 static BOOL g_bFullScreen = FALSE;
 static RECT g_normalRC = {0};
 
 extern InputState input_state;
+
+extern unsigned short analog_ctrl_map[];
+extern unsigned int key_pad_map[];
+extern const char * getVirtualKeyName(unsigned char key);
+extern bool saveControlsToFile();
+extern bool loadControlsFromFile();
 
 namespace MainWindow
 {
@@ -209,6 +218,10 @@ namespace MainWindow
 		//accept dragged files
 		DragAcceptFiles(hwndMain, TRUE);
 
+#if ENABLE_TOUCH
+		RegisterTouchWindow(hwndDisplay, TWF_WANTPALM);
+#endif
+
 		SetFocus(hwndMain);
 
 		return TRUE;
@@ -304,6 +317,38 @@ namespace MainWindow
 			}
 			break;
 
+		case WM_TOUCH:
+			{
+				// TODO: Enabling this section will probably break things on Windows XP.
+				// We probably need to manually fetch pointers to GetTouchInputInfo and CloseTouchInputHandle.
+#if ENABLE_TOUCH
+				UINT inputCount = LOWORD(wParam);
+				TOUCHINPUT *inputs = new TOUCHINPUT[inputCount];
+				if (GetTouchInputInfo((HTOUCHINPUT)lParam,
+					inputCount,
+					inputs,
+					sizeof(TOUCHINPUT)))
+				{
+					for (int i = 0; i < inputCount; i++) {
+						// TODO: process inputs here!
+
+					}
+
+					if (!CloseTouchInputHandle((HTOUCHINPUT)lParam))
+					{
+						// error handling
+					}
+				}
+				else
+				{
+					// GetLastError() and error handling
+				}
+				delete [] inputs;
+				return DefWindowProc(hWnd, message, wParam, lParam);
+#endif
+			}
+
+
 		case WM_PAINT:
 			return DefWindowProc(hWnd, message, wParam, lParam);
 		default:
@@ -320,6 +365,7 @@ namespace MainWindow
 		switch (message) 
 		{
 		case WM_CREATE:
+			loadControlsFromFile();
 			break;
 
 		case WM_MOVE:
@@ -438,6 +484,10 @@ namespace MainWindow
 				break;
 			case ID_OPTIONS_SCREEN4X:
 				SetZoom(4);
+				break;
+
+			case ID_OPTIONS_MIPMAP:
+				g_Config.bMipMap = !g_Config.bMipMap;
 				break;
 
 			case ID_OPTIONS_BUFFEREDRENDERING:
@@ -568,12 +618,14 @@ namespace MainWindow
 				DialogBox(hInst, (LPCTSTR)IDD_CONTROLS, hWnd, (DLGPROC)Controls);
 				DialogManager::EnableAll(TRUE);
 				break;
-
-      case ID_HELP_OPENWEBSITE:
+			case ID_EMULATION_SOUND:
+				g_Config.bEnableSound = !g_Config.bEnableSound;
+				break;
+      			case ID_HELP_OPENWEBSITE:
 				ShellExecute(NULL, "open", "http://www.ppsspp.org/", NULL, NULL, SW_SHOWNORMAL);
-        break;
+        			break;
 
-      case ID_HELP_ABOUT:
+      			case ID_HELP_ABOUT:
 				DialogManager::EnableAll(FALSE);
 				DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, (DLGPROC)About);
 				DialogManager::EnableAll(TRUE);
@@ -700,6 +752,8 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_SHOWFPS, g_Config.bShowFPSCounter);
 		CHECKITEM(ID_OPTIONS_FRAMESKIP, g_Config.iFrameSkip != 0);
 		CHECKITEM(ID_OPTIONS_USEMEDIAENGINE, g_Config.bUseMediaEngine);
+		CHECKITEM(ID_OPTIONS_MIPMAP, g_Config.bMipMap);
+		CHECKITEM(ID_EMULATION_SOUND, g_Config.bEnableSound); 
 
 		EnableMenuItem(menu,ID_EMULATION_RUN, (Core_IsStepping() || globalUIState == UISTATE_PAUSEMENU) ? MF_ENABLED : MF_GRAYED);
 		EnableMenuItem(menu,ID_EMULATION_PAUSE, globalUIState == UISTATE_INGAME ? MF_ENABLED : MF_GRAYED);
@@ -716,7 +770,7 @@ namespace MainWindow
 		EnableMenuItem(menu,ID_CPU_DYNAREC,enable);
 		EnableMenuItem(menu,ID_CPU_INTERPRETER,enable);
 		EnableMenuItem(menu,ID_EMULATION_STOP,!enable);
-
+		
 		static const int zoomitems[4] = {
 			ID_OPTIONS_SCREEN1X,
 			ID_OPTIONS_SCREEN2X,
@@ -776,28 +830,165 @@ namespace MainWindow
 		"Rapid Fire\tShift",
 	};
 
-	// Message handler for about box.
+	static HHOOK pKeydownHook;
+	static const int control_map_size = IDC_EDIT_KEY_ANALOG_RIGHT - IDC_EDIT_KEY_TURBO + 1;
+	static u8 control_map[control_map_size];
+	RECT getRedrawRect(HWND hWnd) {
+		RECT rc;
+		HWND hDlg = GetParent(hWnd);
+		GetWindowRect(hWnd, &rc);
+		POINT pt = {0, 0};
+		ScreenToClient(hDlg, &pt);
+		rc.left += pt.x;
+		rc.right += pt.x;
+		rc.top += pt.y;
+		rc.bottom += pt.y;
+		
+		return rc;
+	}
+
+	LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+	{
+		HWND hEdit = GetFocus();
+		UINT nCtrlID = GetDlgCtrlID(hEdit);
+		if (nCtrlID < IDC_EDIT_KEY_TURBO || nCtrlID > IDC_EDIT_KEY_ANALOG_RIGHT) {
+			return CallNextHookEx(pKeydownHook, nCode, wParam, lParam);
+		}
+		if (!(lParam&(1<<31))) {
+			// key down
+			HWND hDlg = GetParent(hEdit);
+			const char *str = getVirtualKeyName(wParam);
+			if (str) {
+				control_map[nCtrlID - IDC_EDIT_KEY_TURBO] = wParam;
+				SetWindowTextA(hEdit, str);
+				RECT rc = getRedrawRect(hEdit);
+				InvalidateRect(hDlg, &rc, false);
+			}
+			else
+				MessageBoxA(hDlg, "Not supported!", "controller", MB_OK);
+		}
+		return 1;
+	}
+
+	HBITMAP LoadImageFromResource(HINSTANCE hInstance,LPCTSTR pszResourceName, LPCTSTR lpType)
+	{
+		HRSRC hrsrc = FindResource(hInstance, pszResourceName, lpType);
+		if (!hrsrc)
+			return FALSE;
+		DWORD dwlen = SizeofResource(hInstance, hrsrc);
+		BYTE *lpRsrc = (BYTE*)LoadResource(hInstance, hrsrc);
+		if (!lpRsrc)
+			return FALSE;
+		int width, height;
+		unsigned char *image_data = 0;
+		bool bResult = pngLoadPtr(lpRsrc, dwlen, &width, &height, &image_data, false) != 0;
+		FreeResource(lpRsrc);
+		if (!bResult)
+			return 0;
+		HBITMAP hbm = CreateBitmap(width, height, 1, 32, image_data);
+		free(image_data);
+		return hbm;
+	}
+	void BitBlt(HBITMAP hbm, HDC dstDC, int dstX, int dstY, int width, int height, int srcX, int srcY)
+	{
+		HDC hCompDC = CreateCompatibleDC(dstDC);
+		HBITMAP oldbm = (HBITMAP)SelectObject(hCompDC, hbm);
+		BitBlt(dstDC, dstX, dstY, width, height, hCompDC, srcX, srcY, SRCCOPY);
+		SelectObject(hCompDC, oldbm);
+		DeleteObject(hCompDC);
+	}
+
+	// Message handler for control box.
 	LRESULT CALLBACK Controls(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	{
+		static HBITMAP hbm = 0;
 		switch (message)
 		{
 		case WM_INITDIALOG:
 			W32Util::CenterWindow(hDlg);
 			{
 				// TODO: connect to keyboard device instead
-				HWND list = GetDlgItem(hDlg, IDC_LISTCONTROLS);
-				int stops[1] = {80};
-				SendMessage(list, LB_SETTABSTOPS, 1, (LPARAM)stops);
-				for (int i = 0; i < sizeof(controllist)/sizeof(controllist[0]); i++) {
-					SendMessage(list, LB_INSERTSTRING, -1, (LPARAM)controllist[i]);
+				if (!hbm)
+					hbm = LoadImageFromResource(hInst, MAKEINTRESOURCE(IDB_IMAGE_PSP), "IMAGE");
+				int key_pad_size = (IDC_EDIT_KEYRIGHT - IDC_EDIT_KEY_TURBO + 1);
+				for (u32 i = 0; i <= IDC_EDIT_KEY_ANALOG_RIGHT - IDC_EDIT_KEY_TURBO; i++) {
+					HWND hEdit = GetDlgItem(hDlg, IDC_EDIT_KEY_TURBO + i);
+					if (IDC_EDIT_KEY_TURBO + i <= IDC_EDIT_KEYRIGHT)
+						control_map[i] = key_pad_map[i * 2];
+					else
+						control_map[i] = analog_ctrl_map[(i - key_pad_size) * 2];
+					SetWindowTextA(hEdit, getVirtualKeyName(control_map[i]));
 				}
+				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "None");
+				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "XInput");
+				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "DirectInput");
+				if ((g_Config.iForceInputDevice < 0) || (g_Config.iForceInputDevice > 1))
+				{
+					ComboBox_SetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), 0);
+				}
+				else
+				{
+					ComboBox_SetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), (g_Config.iForceInputDevice + 1));
+				}
+				DWORD dwThreadID = GetWindowThreadProcessId(hDlg,NULL);
+				pKeydownHook = SetWindowsHookEx(WH_KEYBOARD,KeyboardProc, NULL, dwThreadID);
 			}
 			return TRUE;
-
+		case WM_PAINT:
+			{
+				PAINTSTRUCT pst;
+				HDC hdc = BeginPaint(hDlg, &pst);
+				BITMAP bm;
+				GetObject(hbm, sizeof(BITMAP), &bm);
+				int width = bm.bmWidth;
+				int height = bm.bmHeight;
+				BitBlt(hbm, hdc, 0, 0, width, height, 0 , 0);
+				EndPaint(hDlg, &pst);
+				return TRUE;
+			}
+		case WM_CTLCOLORSTATIC:
+			{
+				HDC hdc=(HDC)wParam;
+				SetBkMode(hdc, TRANSPARENT);
+				return (LRESULT)GetStockObject(NULL_BRUSH); 
+			}
+		case WM_CTLCOLOREDIT:
+			{
+				if ((HWND)lParam == GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE))
+					return FALSE;
+				HDC hdc = (HDC)wParam;
+				SetBkMode(hdc, TRANSPARENT);
+				SetTextColor(hdc, RGB(255, 0, 0));
+				HWND hEdit = (HWND)lParam;
+				RECT rc = getRedrawRect(hEdit);
+				RECT clientrc;
+				GetClientRect(hEdit, &clientrc);
+				BitBlt(hbm, hdc, 0, 0, rc.right - rc.left, rc.bottom - rc.top, rc.left, rc.top);
+				char str[11];
+				GetWindowTextA(hEdit, str, 10);
+				DrawTextA(hdc, str, (int)strlen(str), &clientrc, DT_CENTER|DT_SINGLELINE);
+				return (LRESULT)GetStockObject(NULL_BRUSH);
+			}
 		case WM_COMMAND:
 			if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) 
 			{
+				if (LOWORD(wParam) == IDOK) {
+					g_Config.iForceInputDevice = (ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE)) - 1);
+					int key_pad_size = (IDC_EDIT_KEYRIGHT - IDC_EDIT_KEY_TURBO + 1);
+					for (u32 i = 0; i <= IDC_EDIT_KEY_ANALOG_RIGHT - IDC_EDIT_KEY_TURBO; i++) {
+						if (IDC_EDIT_KEY_TURBO + i <= IDC_EDIT_KEYRIGHT)
+							key_pad_map[i * 2] = control_map[i];
+					else
+						analog_ctrl_map[(i - key_pad_size) * 2] = control_map[i];
+					}
+					saveControlsToFile();
+				}
+				UnhookWindowsHookEx(pKeydownHook);
 				EndDialog(hDlg, LOWORD(wParam));
+				if (hbm) {
+					DeleteObject(hbm);
+					hbm = 0;
+				}
 				return TRUE;
 			}
 			break;

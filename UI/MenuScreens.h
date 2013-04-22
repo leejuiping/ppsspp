@@ -94,11 +94,19 @@ public:
 class SystemScreen : public Screen
 {
 public:
-	SystemScreen();
+	void update(InputState &input);
+	void render();
+};
+
+class LanguageScreen : public Screen
+{
+public:
+	LanguageScreen();
 	void update(InputState &input);
 	void render();
 private:
 	std::vector<FileInfo> langs_;
+	std::map<std::string, int> langValuesMapping;
 };
 
 class ControlsScreen : public Screen
@@ -107,6 +115,7 @@ public:
 	void update(InputState &input);
 	void render();
 };
+
 struct FileSelectScreenOptions {
 	const char* filter;  // Enforced extension filter. Case insensitive, extensions separated by ":".
 	bool allowChooseDirectory;

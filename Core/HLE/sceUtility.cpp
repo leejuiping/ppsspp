@@ -15,6 +15,8 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <set>
+
 #include "HLE.h"
 #include "../MIPS/MIPS.h"
 #include "Core/Reporting.h"
@@ -31,6 +33,8 @@
 #include "../Dialog/PSPOskDialog.h"
 
 const int SCE_ERROR_MODULE_BAD_ID = 0x80111101;
+const int SCE_ERROR_MODULE_ALREADY_LOADED = 0x80111102;
+const int SCE_ERROR_MODULE_NOT_LOADED = 0x80111103;
 const int SCE_ERROR_AV_MODULE_BAD_ID = 0x80110F01;
 
 enum UtilityDialogType {
@@ -49,11 +53,14 @@ static PSPMsgDialog msgDialog;
 static PSPOskDialog oskDialog;
 static PSPPlaceholderDialog netDialog;
 
+static std::set<int> currentlyLoadedModules;
+
 void __UtilityInit()
 {
 	currentDialogType = UTILITY_DIALOG_NONE;
 	currentDialogActive = false;
 	SavedataParam::Init();
+	currentlyLoadedModules.clear();
 }
 
 void __UtilityDoState(PointerWrap &p)
@@ -64,6 +71,7 @@ void __UtilityDoState(PointerWrap &p)
 	msgDialog.DoState(p);
 	oskDialog.DoState(p);
 	netDialog.DoState(p);
+	p.Do(currentlyLoadedModules);
 	p.DoMarker("sceUtility");
 }
 
@@ -166,6 +174,13 @@ u32 sceUtilityLoadModule(u32 module)
 		return SCE_ERROR_MODULE_BAD_ID;
 	}
 
+	if (currentlyLoadedModules.find(module) != currentlyLoadedModules.end())
+	{
+		DEBUG_LOG(HLE, "sceUtilityLoadModule(%i): already loaded", module);
+		return SCE_ERROR_MODULE_ALREADY_LOADED;
+	}
+	currentlyLoadedModules.insert(module);
+
 	DEBUG_LOG(HLE, "sceUtilityLoadModule(%i)", module);
 	// TODO: Each module has its own timing, technically, but this is a low-end.
 	// Note: Some modules have dependencies, but they still resched.
@@ -183,6 +198,13 @@ u32 sceUtilityUnloadModule(u32 module)
 		ERROR_LOG_REPORT(HLE, "sceUtilityUnloadModule(%i): invalid module id", module);
 		return SCE_ERROR_MODULE_BAD_ID;
 	}
+
+	if (currentlyLoadedModules.find(module) == currentlyLoadedModules.end())
+	{
+		WARN_LOG(HLE, "sceUtilityLoadModule(%i): not yet loaded", module);
+		return SCE_ERROR_MODULE_NOT_LOADED;
+	}
+	currentlyLoadedModules.erase(module);
 
 	DEBUG_LOG(HLE, "sceUtilityUnloadModule(%i)", module);
 	// TODO: Each module has its own timing, technically, but this is a low-end.
@@ -364,73 +386,23 @@ int sceUtilityGamedataInstallGetStatus()
 	return retval;
 }
 
-#define PSP_SYSTEMPARAM_ID_STRING_NICKNAME			1
-#define PSP_SYSTEMPARAM_ID_INT_ADHOC_CHANNEL			2
-#define PSP_SYSTEMPARAM_ID_INT_WLAN_POWERSAVE			3
-#define PSP_SYSTEMPARAM_ID_INT_DATE_FORMAT			4
-#define PSP_SYSTEMPARAM_ID_INT_TIME_FORMAT			5
-//Timezone offset from UTC in minutes, (EST = -300 = -5 * 60)
-#define PSP_SYSTEMPARAM_ID_INT_TIMEZONE				6
-#define PSP_SYSTEMPARAM_ID_INT_DAYLIGHTSAVINGS			7
-#define PSP_SYSTEMPARAM_ID_INT_LANGUAGE				8
-#define PSP_SYSTEMPARAM_ID_INT_BUTTON_PREFERENCE		9
-#define PSP_SYSTEMPARAM_ID_INT_LOCK_PARENTAL_LEVEL		10
-
-/**
-* Return values for the SystemParam functions
-*/
-#define PSP_SYSTEMPARAM_RETVAL_OK	0
-#define PSP_SYSTEMPARAM_RETVAL_FAIL	0x80110103
-
-
-/**
-* Valid values for PSP_SYSTEMPARAM_ID_INT_ADHOC_CHANNEL
-*/
-#define PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC 	0
-#define PSP_SYSTEMPARAM_ADHOC_CHANNEL_1			1
-#define PSP_SYSTEMPARAM_ADHOC_CHANNEL_6			6
-#define PSP_SYSTEMPARAM_ADHOC_CHANNEL_11		11
-
-/**
-* Valid values for PSP_SYSTEMPARAM_ID_INT_WLAN_POWERSAVE
-*/
-#define PSP_SYSTEMPARAM_WLAN_POWERSAVE_OFF	0
-#define PSP_SYSTEMPARAM_WLAN_POWERSAVE_ON	1
-
-/**
-* Valid values for PSP_SYSTEMPARAM_ID_INT_DATE_FORMAT
-*/
-#define PSP_SYSTEMPARAM_DATE_FORMAT_YYYYMMDD	0
-#define PSP_SYSTEMPARAM_DATE_FORMAT_MMDDYYYY	1
-#define PSP_SYSTEMPARAM_DATE_FORMAT_DDMMYYYY	2
-
-/**
-* Valid values for PSP_SYSTEMPARAM_ID_INT_DAYLIGHTSAVINGS
-*/
-#define PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_STD	0
-#define PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_SAVING	1
-
-/**
-* Valid values for PSP_SYSTEMPARAM_ID_INT_BUTTON_PREFERENCE
-*/
-#define PSP_SYSTEMPARAM_BUTTON_CIRCLE	0
-#define PSP_SYSTEMPARAM_BUTTON_CROSS	1
-
 //TODO: should save to config file
 u32 sceUtilitySetSystemParamString(u32 id, u32 strPtr)
 {
-	DEBUG_LOG(HLE,"sceUtilitySetSystemParamString(%i, %08x)", id,strPtr);
+	WARN_LOG(HLE, "sceUtilitySetSystemParamString(%i, %08x)", id, strPtr);
 	return 0;
 }
 
-//TODO: Should load from config file
-u32 sceUtilityGetSystemParamString(u32 id, u32 destaddr, u32 unknownparam)
+u32 sceUtilityGetSystemParamString(u32 id, u32 destaddr, int destSize)
 {
-	DEBUG_LOG(HLE,"sceUtilityGetSystemParamString(%i, %08x, %i)", id,destaddr,unknownparam);
+	DEBUG_LOG(HLE, "sceUtilityGetSystemParamString(%i, %08x, %i)", id, destaddr, destSize);
 	char *buf = (char *)Memory::GetPointer(destaddr);
 	switch (id) {
 	case PSP_SYSTEMPARAM_ID_STRING_NICKNAME:
-		strcpy(buf, "shadow");
+		// If there's not enough space for the string and null terminator, fail.
+		if (destSize <= (int)g_Config.sNickName.length())
+			return PSP_SYSTEMPARAM_RETVAL_STRING_TOO_LONG;
+		strncpy(buf, g_Config.sNickName.c_str(), destSize);
 		break;
 
 	default:
@@ -440,38 +412,37 @@ u32 sceUtilityGetSystemParamString(u32 id, u32 destaddr, u32 unknownparam)
 	return 0;
 }
 
-//TODO: Should load from config file
 u32 sceUtilityGetSystemParamInt(u32 id, u32 destaddr)
 {
 	DEBUG_LOG(HLE,"sceUtilityGetSystemParamInt(%i, %08x)", id,destaddr);
 	u32 param = 0;
 	switch (id) {
 	case PSP_SYSTEMPARAM_ID_INT_ADHOC_CHANNEL:
-		param = PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC;
+		param = g_Config.iWlanAdhocChannel;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_WLAN_POWERSAVE:
-		param = PSP_SYSTEMPARAM_WLAN_POWERSAVE_OFF;
+		param = g_Config.bWlanPowerSave?PSP_SYSTEMPARAM_WLAN_POWERSAVE_ON:PSP_SYSTEMPARAM_WLAN_POWERSAVE_OFF;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_DATE_FORMAT:
-		param = PSP_SYSTEMPARAM_DATE_FORMAT_DDMMYYYY;
+		param = g_Config.iDateFormat;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_TIME_FORMAT:
-		param = g_Config.itimeformat;
+		param = g_Config.itimeformat?PSP_SYSTEMPARAM_TIME_FORMAT_12HR:PSP_SYSTEMPARAM_TIME_FORMAT_24HR;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_TIMEZONE:
-		param = 60;
+		param = g_Config.iTimeZone;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_DAYLIGHTSAVINGS:
-		param = PSP_SYSTEMPARAM_TIME_FORMAT_24HR;
+		param = g_Config.bDayLightSavings?PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_SAVING:PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_STD;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_LANGUAGE:
 		param = g_Config.ilanguage;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_BUTTON_PREFERENCE:
-		param = PSP_SYSTEMPARAM_BUTTON_CROSS;
+		param = g_Config.bButtonPreference?PSP_SYSTEMPARAM_BUTTON_CROSS:PSP_SYSTEMPARAM_BUTTON_CIRCLE;
 		break;
 	case PSP_SYSTEMPARAM_ID_INT_LOCK_PARENTAL_LEVEL:
-		param = 0;
+		param = g_Config.iLockParentalLevel;
 		break;
 	default:
 		return PSP_SYSTEMPARAM_RETVAL_FAIL;
@@ -531,7 +502,7 @@ const HLEFunction sceUtility[] =
 
 	{0x41e30674, &WrapU_UU<sceUtilitySetSystemParamString>, "sceUtilitySetSystemParamString"},
 	{0x45c18506, 0, "sceUtilitySetSystemParamInt"}, 
-	{0x34b78343, &WrapU_UUU<sceUtilityGetSystemParamString>, "sceUtilityGetSystemParamString"},
+	{0x34b78343, &WrapU_UUI<sceUtilityGetSystemParamString>, "sceUtilityGetSystemParamString"},
 	{0xA5DA2406, &WrapU_UU<sceUtilityGetSystemParamInt>, "sceUtilityGetSystemParamInt"},
 
 

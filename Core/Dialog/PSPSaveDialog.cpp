@@ -22,6 +22,7 @@
 #include "../Config.h"
 #include "Core/Reporting.h"
 #include "Core/HW/MemoryStick.h"
+#include "i18n/i18n.h"
 
 PSPSaveDialog::PSPSaveDialog()
 	: PSPDialog()
@@ -89,11 +90,11 @@ int PSPSaveDialog::Init(int paramAddr)
 		case SCE_UTILITY_SAVEDATA_TYPE_FILES:
 		case SCE_UTILITY_SAVEDATA_TYPE_GETSIZE:
 		case SCE_UTILITY_SAVEDATA_TYPE_MAKEDATASECURE:
-		//case SCE_UTILITY_SAVEDATA_TYPE_MAKEDATA:
+		case SCE_UTILITY_SAVEDATA_TYPE_MAKEDATA:
 		case SCE_UTILITY_SAVEDATA_TYPE_WRITEDATASECURE:
-		//case SCE_UTILITY_SAVEDATA_TYPE_WRITEDATA:
+		case SCE_UTILITY_SAVEDATA_TYPE_WRITEDATA:
 		case SCE_UTILITY_SAVEDATA_TYPE_READDATASECURE:
-		//case SCE_UTILITY_SAVEDATA_TYPE_READDATA:
+		case SCE_UTILITY_SAVEDATA_TYPE_READDATA:
 		case SCE_UTILITY_SAVEDATA_TYPE_SINGLEDELETE:
 		case SCE_UTILITY_SAVEDATA_TYPE_DELETEDATA:
 			display = DS_NONE;
@@ -250,7 +251,8 @@ void PSPSaveDialog::DisplaySaveDataInfo1()
 {
 	if(param.GetFileInfo(currentSelectedSave).size == 0)
 	{
-		PPGeDrawText("New Save", 180, 100, PPGE_ALIGN_LEFT, 0.5f, CalcFadedColor(0xFFFFFFFF));
+		I18NCategory *d = GetI18NCategory("Dialog");
+		PPGeDrawText(d->T("New Save"), 180, 100, PPGE_ALIGN_LEFT, 0.5f, CalcFadedColor(0xFFFFFFFF));
 	}
 	else
 	{
@@ -333,11 +335,12 @@ void PSPSaveDialog::DisplaySaveDataInfo2()
 
 void PSPSaveDialog::DisplayConfirmationYesNo(std::string text)
 {
+	I18NCategory *d = GetI18NCategory("Dialog");
 	PPGeDrawRect(180, 105, 460, 106, CalcFadedColor(0xFFFFFFFF));
 	PPGeDrawRect(180, 160, 460, 161, CalcFadedColor(0xFFFFFFFF));
 	PPGeDrawText(text.c_str(), 220, 110, PPGE_ALIGN_LEFT, 0.45f, 0xFFFFFFFF);
-	PPGeDrawText("Yes", 250, 140, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(yesnoChoice == 1?0xFF0000FF:0xFFFFFFFF));
-	PPGeDrawText("No", 350, 140, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(yesnoChoice == 0?0xFF0000FF:0xFFFFFFFF));
+	PPGeDrawText(d->T("Yes"), 250, 140, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(yesnoChoice == 1?0xFF0000FF:0xFFFFFFFF));
+	PPGeDrawText(d->T("No"), 350, 140, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(yesnoChoice == 0?0xFF0000FF:0xFFFFFFFF));
 	if (IsButtonPressed(CTRL_LEFT) && yesnoChoice == 0)
 	{
 		yesnoChoice = 1;
@@ -360,15 +363,17 @@ void PSPSaveDialog::DisplayTitle(std::string name)
 }
 void PSPSaveDialog::DisplayEnterBack()
 {
+	I18NCategory *d = GetI18NCategory("Dialog");
 	PPGeDrawImage(okButtonImg, 180, 257, 11, 11, 0, CalcFadedColor(0xFFFFFFFF));
 	PPGeDrawImage(cancelButtonImg, 270, 257, 11, 11, 0, CalcFadedColor(0xFFFFFFFF));
-	PPGeDrawText("Enter", 195, 255, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(0xFFFFFFFF));
-	PPGeDrawText("Back", 285, 255, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(0xFFFFFFFF));
+	PPGeDrawText(d->T("Enter"), 195, 255, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(0xFFFFFFFF));
+	PPGeDrawText(d->T("Back"), 285, 255, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(0xFFFFFFFF));
 }
 void PSPSaveDialog::DisplayBack()
 {
+	I18NCategory *d = GetI18NCategory("Dialog");
 	PPGeDrawImage(cancelButtonImg, 180, 257, 11, 11, 0, CalcFadedColor(0xFFFFFFFF));
-	PPGeDrawText("Back", 195, 255, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(0xFFFFFFFF));
+	PPGeDrawText(d->T("Back"), 195, 255, PPGE_ALIGN_LEFT, 0.45f, CalcFadedColor(0xFFFFFFFF));
 }
 
 int PSPSaveDialog::Update()
@@ -405,6 +410,8 @@ int PSPSaveDialog::Update()
 		okButtonFlag = CTRL_CROSS;
 		cancelButtonFlag = CTRL_CIRCLE;
 	}
+
+	I18NCategory *d = GetI18NCategory("Dialog");
 
 	switch(display)
 	{
@@ -452,7 +459,7 @@ int PSPSaveDialog::Update()
 			DisplaySaveIcon();
 			DisplaySaveDataInfo2();
 
-			DisplayConfirmationYesNo("Do you want to overwrite the data ?");
+			DisplayConfirmationYesNo(d->T("Do you want to overwrite the data?"));
 
 			DisplayEnterBack();
 			if (IsButtonPressed(cancelButtonFlag))
@@ -489,7 +496,7 @@ int PSPSaveDialog::Update()
 			DisplaySaveIcon();
 			DisplaySaveDataInfo2();
 
-			DisplayInfo("Saving\nPlease Wait...");
+			DisplayInfo(d->T("Saving","Saving\nPlease Wait..."));
 
 			EndDraw();
 		break;
@@ -501,7 +508,7 @@ int PSPSaveDialog::Update()
 			DisplaySaveDataInfo2();
 			DisplayBack();
 
-			DisplayInfo("Save completed");
+			DisplayInfo(d->T("Save completed"));
 
 			if (IsButtonPressed(cancelButtonFlag))
 			{
@@ -544,7 +551,7 @@ int PSPSaveDialog::Update()
 			DisplaySaveIcon();
 			DisplaySaveDataInfo2();
 
-			DisplayInfo("Loading\nPlease Wait...");
+			DisplayInfo(d->T("Loading","Loading\nPlease Wait..."));
 
 			EndDraw();
 		break;
@@ -556,7 +563,7 @@ int PSPSaveDialog::Update()
 			DisplaySaveDataInfo2();
 			DisplayBack();
 
-			DisplayInfo("Load completed");
+			DisplayInfo(d->T("Load completed"));
 
 			if (IsButtonPressed(cancelButtonFlag))
 			{
@@ -574,7 +581,7 @@ int PSPSaveDialog::Update()
 
 			DisplayBack();
 
-			DisplayInfo("There is no data");
+			DisplayInfo(d->T("There is no data"));
 
 			if (IsButtonPressed(cancelButtonFlag))
 			{
@@ -612,7 +619,7 @@ int PSPSaveDialog::Update()
 			DisplaySaveIcon();
 			DisplaySaveDataInfo2();
 
-			DisplayConfirmationYesNo("    This save data will be deleted.\nAre you sure you want to continue?");
+			DisplayConfirmationYesNo(d->T("DeleteConfirm", "    This save data will be deleted.\nAre you sure you want to continue?"));
 
 
 			DisplayEnterBack();
@@ -647,7 +654,7 @@ int PSPSaveDialog::Update()
 			StartDraw();
 			
 
-			DisplayInfo("Deleting\nPlease Wait...");
+			DisplayInfo(d->T("Deleting","Deleting\nPlease Wait..."));
 
 			EndDraw();
 		break;
@@ -657,7 +664,7 @@ int PSPSaveDialog::Update()
 
 			DisplayBack();
 
-			DisplayInfo("Delete completed");
+			DisplayInfo(d->T("Delete completed"));
 
 			if (IsButtonPressed(cancelButtonFlag))
 			{
@@ -675,7 +682,7 @@ int PSPSaveDialog::Update()
 
 			DisplayBack();
 
-			DisplayInfo("There is no data");
+			DisplayInfo(d->T("There is no data"));
 
 			if (IsButtonPressed(cancelButtonFlag))
 			{
@@ -748,7 +755,7 @@ int PSPSaveDialog::Update()
 				break;
 				case SCE_UTILITY_SAVEDATA_TYPE_DELETEDATA:
 					// TODO: This should probably actually delete something.
-					// For now, since MAKEDATA doesn't work anyway, always say it couldn't be deleted.
+					// For now, always say it couldn't be deleted.
 					WARN_LOG(HLE, "FAKE sceUtilitySavedata DELETEDATA: %s", param.GetPspParam()->saveName);
 					param.GetPspParam()->result = SCE_UTILITY_SAVEDATA_ERROR_RW_BAD_STATUS;
 					status = SCE_UTILITY_STATUS_FINISHED;
@@ -765,25 +772,25 @@ int PSPSaveDialog::Update()
 					}
 					status = SCE_UTILITY_STATUS_FINISHED;
 				break;
-				//case SCE_UTILITY_SAVEDATA_TYPE_MAKEDATA:
+				case SCE_UTILITY_SAVEDATA_TYPE_MAKEDATA:
 				case SCE_UTILITY_SAVEDATA_TYPE_MAKEDATASECURE:
-					if(param.Save(param.GetPspParam(),param.GetSelectedSave()))
+					if (param.Save(param.GetPspParam(), param.GetSelectedSave(), param.GetPspParam()->mode == SCE_UTILITY_SAVEDATA_TYPE_MAKEDATASECURE))
 						param.GetPspParam()->result = 0;
 					else
 						param.GetPspParam()->result = SCE_UTILITY_SAVEDATA_ERROR_RW_NO_DATA;
 					status = SCE_UTILITY_STATUS_FINISHED;
 				break;
-				//case SCE_UTILITY_SAVEDATA_TYPE_WRITEDATA:
+				case SCE_UTILITY_SAVEDATA_TYPE_WRITEDATA:
 				case SCE_UTILITY_SAVEDATA_TYPE_WRITEDATASECURE:
-					if(param.Save(param.GetPspParam(),param.GetSelectedSave()))
+					if (param.Save(param.GetPspParam(), param.GetSelectedSave(), param.GetPspParam()->mode == SCE_UTILITY_SAVEDATA_TYPE_WRITEDATASECURE))
 						param.GetPspParam()->result = 0;
 					else
 						param.GetPspParam()->result = SCE_UTILITY_SAVEDATA_ERROR_RW_NO_DATA;
 					status = SCE_UTILITY_STATUS_FINISHED;
 				break;
-				//case SCE_UTILITY_SAVEDATA_TYPE_READDATA:
+				case SCE_UTILITY_SAVEDATA_TYPE_READDATA:
 				case SCE_UTILITY_SAVEDATA_TYPE_READDATASECURE:
-					if(param.Load(param.GetPspParam(),param.GetSelectedSave()))
+					if (param.Load(param.GetPspParam(), param.GetSelectedSave(), param.GetPspParam()->mode == SCE_UTILITY_SAVEDATA_TYPE_READDATASECURE))
 						param.GetPspParam()->result = 0;
 					else
 						param.GetPspParam()->result = SCE_UTILITY_SAVEDATA_ERROR_RW_NO_DATA; // not sure if correct code

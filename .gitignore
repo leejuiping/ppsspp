@@ -27,7 +27,7 @@ Windows/ipch
 .DS_Store
 
 # For ppsspp.ini, etc.
-*.ini
+ppsspp.ini
 
 # Qt Linguist files
 *.qm
@@ -50,6 +50,7 @@ __testfailure.bmp
 GameLogNotes.txt
 
 android/ui_atlas.zim
+android/assets/lang
 android/assets/flash0
 ppge_atlas.zim.png
 local.properties

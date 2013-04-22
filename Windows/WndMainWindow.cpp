@@ -2,7 +2,6 @@
 
 #include <windows.h>
 #include <tchar.h>
-#include <atlimage.h>
 
 #include "base/NativeApp.h"
 #include "Globals.h"
@@ -34,6 +33,7 @@
 #include "Windows/W32Util/Misc.h"
 #include "GPU/GPUInterface.h"
 #include "GPU/GPUState.h"
+#include "native/image/png_load.h"
 
 #ifdef THEMES
 #include "XPTheme.h"
@@ -419,11 +419,16 @@ namespace MainWindow
 				break;
 
 			case ID_EMULATION_STOP:
-				if (memoryWindow[0])
+				if (memoryWindow[0]) {
 					SendMessage(memoryWindow[0]->GetDlgHandle(), WM_CLOSE, 0, 0);
-
+				}
+				if (disasmWindow[0]) {
+					SendMessage(disasmWindow[0]->GetDlgHandle(), WM_CLOSE, 0, 0);
+				}
+				if (Core_IsStepping()) {
+					Core_EnableStepping(false);
+				}
 				NativeMessageReceived("stop", "");
-
 				SetPlaying(0);
 				Update();
 				break;
@@ -697,7 +702,7 @@ namespace MainWindow
 			if (disasmWindow[0])
 				SendMessage(disasmWindow[0]->GetDlgHandle(), WM_CLOSE, 0, 0);
 			if (memoryWindow[0])
-				SendMessage(memoryWindow[0]->GetDlgHandle(), WM_CLOSE, 0, 0); 
+				SendMessage(memoryWindow[0]->GetDlgHandle(), WM_CLOSE, 0, 0);
 
 			disasmWindow[0] = new CDisasm(MainWindow::GetHInstance(), MainWindow::GetHWND(), currentDebugMIPS);
 			DialogManager::AddDlg(disasmWindow[0]);
@@ -870,7 +875,7 @@ namespace MainWindow
 		return 1;
 	}
 
-	BOOL LoadImageFromResource(CImage *image, HINSTANCE hInstance, LPCTSTR pszResourceName, LPCTSTR lpType)
+	HBITMAP LoadImageFromResource(HINSTANCE hInstance,LPCTSTR pszResourceName, LPCTSTR lpType)
 	{
 		HRSRC hrsrc = FindResource(hInstance, pszResourceName, lpType);
 		if (!hrsrc)
@@ -879,31 +884,37 @@ namespace MainWindow
 		BYTE *lpRsrc = (BYTE*)LoadResource(hInstance, hrsrc);
 		if (!lpRsrc)
 			return FALSE;
-		HGLOBAL hMem = GlobalAlloc(GMEM_FIXED, dwlen);
-		BYTE* pmem = (BYTE*)GlobalLock(hMem);
-		memcpy(pmem, lpRsrc, dwlen);
-		GlobalUnlock(hMem);
-		IStream* pstm;
-		CreateStreamOnHGlobal(hMem, FALSE, &pstm);
-		BOOL bResult = (image->Load(pstm) == S_OK);
-		pstm->Release();
-		GlobalFree(hMem);
+		int width, height;
+		unsigned char *image_data = 0;
+		bool bResult = pngLoadPtr(lpRsrc, dwlen, &width, &height, &image_data, false) != 0;
 		FreeResource(lpRsrc);
-		return bResult;
+		if (!bResult)
+			return 0;
+		HBITMAP hbm = CreateBitmap(width, height, 1, 32, image_data);
+		free(image_data);
+		return hbm;
+	}
+	void BitBlt(HBITMAP hbm, HDC dstDC, int dstX, int dstY, int width, int height, int srcX, int srcY)
+	{
+		HDC hCompDC = CreateCompatibleDC(dstDC);
+		HBITMAP oldbm = (HBITMAP)SelectObject(hCompDC, hbm);
+		BitBlt(dstDC, dstX, dstY, width, height, hCompDC, srcX, srcY, SRCCOPY);
+		SelectObject(hCompDC, oldbm);
+		DeleteObject(hCompDC);
 	}
 
 	// Message handler for control box.
 	LRESULT CALLBACK Controls(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	{
-		static CImage image;
+		static HBITMAP hbm = 0;
 		switch (message)
 		{
 		case WM_INITDIALOG:
 			W32Util::CenterWindow(hDlg);
 			{
 				// TODO: connect to keyboard device instead
-				if (image.IsNull())
-					LoadImageFromResource(&image, hInst, MAKEINTRESOURCE(IDB_IMAGE_PSP), "IMAGE");
+				if (!hbm)
+					hbm = LoadImageFromResource(hInst, MAKEINTRESOURCE(IDB_IMAGE_PSP), "IMAGE");
 				int key_pad_size = (IDC_EDIT_KEYRIGHT - IDC_EDIT_KEY_TURBO + 1);
 				for (u32 i = 0; i <= IDC_EDIT_KEY_ANALOG_RIGHT - IDC_EDIT_KEY_TURBO; i++) {
 					HWND hEdit = GetDlgItem(hDlg, IDC_EDIT_KEY_TURBO + i);
@@ -913,6 +924,17 @@ namespace MainWindow
 						control_map[i] = analog_ctrl_map[(i - key_pad_size) * 2];
 					SetWindowTextA(hEdit, getVirtualKeyName(control_map[i]));
 				}
+				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "None");
+				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "XInput");
+				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "DirectInput");
+				if ((g_Config.iForceInputDevice < 0) || (g_Config.iForceInputDevice > 1))
+				{
+					ComboBox_SetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), 0);
+				}
+				else
+				{
+					ComboBox_SetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), (g_Config.iForceInputDevice + 1));
+				}
 				DWORD dwThreadID = GetWindowThreadProcessId(hDlg,NULL);
 				pKeydownHook = SetWindowsHookEx(WH_KEYBOARD,KeyboardProc, NULL, dwThreadID);
 			}
@@ -921,9 +943,11 @@ namespace MainWindow
 			{
 				PAINTSTRUCT pst;
 				HDC hdc = BeginPaint(hDlg, &pst);
-				int width = image.GetWidth();
-				int height = image.GetHeight();
-				image.BitBlt(hdc, 0, 0, width, height, 0 , 0);
+				BITMAP bm;
+				GetObject(hbm, sizeof(BITMAP), &bm);
+				int width = bm.bmWidth;
+				int height = bm.bmHeight;
+				BitBlt(hbm, hdc, 0, 0, width, height, 0 , 0);
 				EndPaint(hDlg, &pst);
 				return TRUE;
 			}
@@ -935,6 +959,8 @@ namespace MainWindow
 			}
 		case WM_CTLCOLOREDIT:
 			{
+				if ((HWND)lParam == GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE))
+					return FALSE;
 				HDC hdc = (HDC)wParam;
 				SetBkMode(hdc, TRANSPARENT);
 				SetTextColor(hdc, RGB(255, 0, 0));
@@ -942,16 +968,17 @@ namespace MainWindow
 				RECT rc = getRedrawRect(hEdit);
 				RECT clientrc;
 				GetClientRect(hEdit, &clientrc);
-				image.BitBlt(hdc, 0, 0, rc.right - rc.left, rc.bottom - rc.top, rc.left, rc.top);
+				BitBlt(hbm, hdc, 0, 0, rc.right - rc.left, rc.bottom - rc.top, rc.left, rc.top);
 				char str[11];
 				GetWindowTextA(hEdit, str, 10);
-				DrawTextA(hdc, str, strlen(str), &clientrc, DT_CENTER|DT_SINGLELINE);
+				DrawTextA(hdc, str, (int)strlen(str), &clientrc, DT_CENTER|DT_SINGLELINE);
 				return (LRESULT)GetStockObject(NULL_BRUSH);
 			}
 		case WM_COMMAND:
 			if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) 
 			{
 				if (LOWORD(wParam) == IDOK) {
+					g_Config.iForceInputDevice = (ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE)) - 1);
 					int key_pad_size = (IDC_EDIT_KEYRIGHT - IDC_EDIT_KEY_TURBO + 1);
 					for (u32 i = 0; i <= IDC_EDIT_KEY_ANALOG_RIGHT - IDC_EDIT_KEY_TURBO; i++) {
 						if (IDC_EDIT_KEY_TURBO + i <= IDC_EDIT_KEYRIGHT)
@@ -963,6 +990,10 @@ namespace MainWindow
 				}
 				UnhookWindowsHookEx(pKeydownHook);
 				EndDialog(hDlg, LOWORD(wParam));
+				if (hbm) {
+					DeleteObject(hbm);
+					hbm = 0;
+				}
 				return TRUE;
 			}
 			break;

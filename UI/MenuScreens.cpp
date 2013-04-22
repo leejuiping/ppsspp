@@ -55,6 +55,7 @@ namespace MainWindow {
 #include "Core/Config.h"
 #include "Core/CoreParameter.h"
 #include "Core/SaveState.h"
+#include "Core/HLE/sceUtility.h"
 
 #include "MenuScreens.h"
 #include "EmuScreen.h"
@@ -82,12 +83,6 @@ static const int symbols[4] = {
 };
 
 static const uint32_t colors[4] = {
-	/*
-	0xFF6666FF, // blue
-	0xFFFF6666, // red
-	0xFFFF66FF, // pink
-	0xFF66FF66, // green
-	*/
 	0xC0FFFFFF,
 	0xC0FFFFFF,
 	0xC0FFFFFF,
@@ -297,11 +292,15 @@ void MenuScreen::render() {
 				color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
 			}
 			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, textureButtonWidth, textureButtonHeight, ginfo->iconTexture, ALIGN_LEFT, color, I_DROP_SHADOW)) {
+				UIEnd();
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
+				return;
 			}
 		} else {
 			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, textureButtonWidth, textureButtonHeight, filename.c_str(), ALIGN_LEFT)) {
+				UIEnd();
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
+				return;
 			}
 		}
 	}
@@ -411,7 +410,7 @@ void PauseScreen::render() {
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 	g_Config.iFrameSkip = fs ? 1 : 0;
 
-	I18NCategory *i = GetI18NCategory("PauseScreen");
+	I18NCategory *i = GetI18NCategory("Pause");
 
 	// TODO: Add UI for more than one slot.
 	HLinear hlinear1(x, y + 80, 20);
@@ -425,15 +424,15 @@ void PauseScreen::render() {
 	}
 
 	VLinear vlinear(dp_xres - 10, 160, 20);
-	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, 0, i->T("Continue"), ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH + 20, 0, i->T("Continue"), ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
 
-	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, 0, i->T("Settings"), ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH + 20, 0, i->T("Settings"), ALIGN_RIGHT)) {
 		screenManager()->push(new SettingsScreen(), 0);
 	}
 
-	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH, 0, i->T("Back to Menu"), ALIGN_RIGHT)) {
+	if (UIButton(GEN_ID, vlinear, LARGE_BUTTON_WIDTH + 20, 0, i->T("Back to Menu"), ALIGN_RIGHT)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
@@ -463,7 +462,9 @@ void SettingsScreen::render() {
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *ms = GetI18NCategory("MainSettings");
 
-	ui_draw2d.DrawText(UBUNTU48, ms->T("Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, ms->T("Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
 
 	VLinear vlinear(40, 150, 20);
 
@@ -471,8 +472,8 @@ void SettingsScreen::render() {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
-	int w = LARGE_BUTTON_WIDTH - 10;
-	int s = 240;
+	int w = LARGE_BUTTON_WIDTH + 25;
+	int s = 280;
 
 	if (UIButton(GEN_ID, vlinear, w, 0, ms->T("Audio"), ALIGN_BOTTOMLEFT)) {
 		screenManager()->push(new AudioScreen());
@@ -536,18 +537,29 @@ void ControlsScreen::update(InputState &input) {
 	}
 }
 
+void LanguageScreen::update(InputState &input) {
+	if (input.pad_buttons_down & PAD_BUTTON_BACK) {
+		g_Config.Save();
+		screenManager()->finishDialog(this, DR_OK);
+	}
+}
+
 void DeveloperScreen::render() {
 	UIShader_Prepare();
 	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
-	ui_draw2d.DrawText(UBUNTU48, "Developer Tools", dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
 	VLinear vlinear(50, 100, 20);
 
 	int w = 400;
 
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *d = GetI18NCategory("Developer");
+
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, d->T("Developer Tools"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
+
 
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
@@ -585,7 +597,9 @@ void AudioScreen::render() {
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *a = GetI18NCategory("Audio");
 
-	ui_draw2d.DrawText(UBUNTU48, a->T("Audio Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, a->T("Audio Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
 
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
@@ -607,7 +621,10 @@ void GraphicsScreen::render() {
 
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *gs = GetI18NCategory("Graphics");
-	ui_draw2d.DrawText(UBUNTU48, gs->T("Graphics Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, gs->T("Graphics Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
 
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
@@ -641,16 +658,85 @@ void GraphicsScreen::render() {
 		}
 		g_Config.iWindowZoom = doubleRes ? 2 : 1;
 	}
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Draw Wireframe"), ALIGN_TOPLEFT, &g_Config.bDrawWireframe);
 	UIEnd();
 }
 
-SystemScreen::SystemScreen()
+LanguageScreen::LanguageScreen()
 {
 #ifdef ANDROID
 	VFSGetFileListing("assets/lang", &langs_, "ini");
 #else
 	VFSGetFileListing("lang", &langs_, "ini");
 #endif
+}
+
+void LanguageScreen::render() {
+	UIShader_Prepare();
+	UIBegin(UIShader_Get());
+	DrawBackground(1.0f);
+
+	I18NCategory *s = GetI18NCategory("System");
+	I18NCategory *g = GetI18NCategory("General");
+	I18NCategory *l = GetI18NCategory("Language");
+
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, s->T("Language"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
+
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
+		screenManager()->finishDialog(this, DR_OK);
+	}
+
+	VGrid vlang(50, 100, dp_yres - 50, 10, 10);
+
+	for (size_t i = 0; i < langs_.size(); i++) {
+		std::string code;
+		size_t dot = langs_[i].name.find('.');
+		if (dot != std::string::npos)
+			code = langs_[i].name.substr(0, dot);
+
+		std::string buttonTitle = langs_[i].name;
+		if (!code.empty())
+			buttonTitle = code;
+
+		if (UIButton(GEN_ID_LOOP(i), vlang, LARGE_BUTTON_WIDTH - 40, 0, buttonTitle.c_str(), ALIGN_TOPLEFT)) {
+			std::string oldLang = g_Config.languageIni;
+			g_Config.languageIni = code;
+
+			if (i18nrepo.LoadIni(g_Config.languageIni)) {
+				// Dunno what else to do here.
+				langValuesMapping["ja_JP"] = PSP_SYSTEMPARAM_LANGUAGE_JAPANESE;
+				langValuesMapping["en_US"] = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
+				langValuesMapping["fr_FR"] = PSP_SYSTEMPARAM_LANGUAGE_FRENCH;
+				langValuesMapping["es_ES"] = PSP_SYSTEMPARAM_LANGUAGE_SPANISH;
+				langValuesMapping["es_LA"] = PSP_SYSTEMPARAM_LANGUAGE_SPANISH;
+				langValuesMapping["de_DE"] = PSP_SYSTEMPARAM_LANGUAGE_GERMAN; 
+				langValuesMapping["it_IT"] = PSP_SYSTEMPARAM_LANGUAGE_ITALIAN; 
+				langValuesMapping["nl_NL"] = PSP_SYSTEMPARAM_LANGUAGE_DUTCH;
+				langValuesMapping["pt_BR"] = PSP_SYSTEMPARAM_LANGUAGE_PORTUGUESE;
+				langValuesMapping["ru_RU"] = PSP_SYSTEMPARAM_LANGUAGE_RUSSIAN;
+				langValuesMapping["ko_KR"] = PSP_SYSTEMPARAM_LANGUAGE_KOREAN;
+				langValuesMapping["zh_TW"] = PSP_SYSTEMPARAM_LANGUAGE_CHINESE_TRADITIONAL;
+				langValuesMapping["zh_CN"] = PSP_SYSTEMPARAM_LANGUAGE_CHINESE_SIMPLIFIED;
+
+				if(langValuesMapping.find(code) == langValuesMapping.end()) {
+					//Fallback to English
+					g_Config.ilanguage = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
+				} else {
+					g_Config.ilanguage = langValuesMapping[code];
+				}
+
+				// After this, g and s are no longer valid. Let's return, some flicker is okay.
+				g = GetI18NCategory("General");
+				s = GetI18NCategory("System");
+				l = GetI18NCategory("Language");
+			} else {
+				g_Config.languageIni = oldLang;
+			}
+		}
+	}
+	UIEnd();
 }
 
 void SystemScreen::render() {
@@ -661,9 +747,11 @@ void SystemScreen::render() {
 	I18NCategory *s = GetI18NCategory("System");
 	I18NCategory *g = GetI18NCategory("General");
 
-	ui_draw2d.DrawText(UBUNTU48, s->T("System Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, s->T("System Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
@@ -677,32 +765,13 @@ void SystemScreen::render() {
 		UICheckBox(GEN_ID, x, y += stride, s->T("Fast Memory", "Fast Memory (unstable)"), ALIGN_TOPLEFT, &g_Config.bFastMemory);
 	UICheckBox(GEN_ID, x, y += stride, s->T("Show Debug Statistics"), ALIGN_TOPLEFT, &g_Config.bShowDebugStats);
 	UICheckBox(GEN_ID, x, y += stride, s->T("Show FPS"), ALIGN_TOPLEFT, &g_Config.bShowFPSCounter);
+	UICheckBox(GEN_ID, x, y += stride, s->T("Encrypt Save"), ALIGN_TOPLEFT, &g_Config.bEncryptSave);
+	bool tf = g_Config.itimeformat == 1;
+	UICheckBox(GEN_ID, x, y += stride, s->T("12HR Time Format"), ALIGN_TOPLEFT, &tf);
+	g_Config.itimeformat = tf ? 1 : 0;
 
-	VGrid vlang(550, 100, dp_yres - 50, 10, 10);
-
-	for (int i = 0; i < langs_.size(); i++) {
-		std::string code;
-		size_t dot = langs_[i].name.find('.');
-		if (dot != std::string::npos)
-			code = langs_[i].name.substr(0, dot);
-
-		std::string buttonTitle = langs_[i].name;
-		if (!code.empty())
-			buttonTitle = code;
-
-		if (UIButton(GEN_ID_LOOP(i), vlang, LARGE_BUTTON_WIDTH, 0, buttonTitle.c_str(), ALIGN_TOPLEFT)) {
-			std::string oldLang = g_Config.languageIni;
-			g_Config.languageIni = code;
-			if (i18nrepo.LoadIni(g_Config.languageIni)) {
-				// Dunno what else to do here.
-
-				// After this, g and s are no longer valid. Let's return, some flicker is okay.
-				g = GetI18NCategory("General");
-				s = GetI18NCategory("System");
-			} else {
-				g_Config.languageIni = oldLang;
-			}
-		}
+	if (UIButton(GEN_ID, Pos(x, y += stride * 3), LARGE_BUTTON_WIDTH, 0, s->T("Language"), ALIGN_BOTTOMLEFT)) {
+		screenManager()->push(new LanguageScreen());
 	}
 	UIEnd();
 }
@@ -715,9 +784,11 @@ void ControlsScreen::render() {
 	I18NCategory *c = GetI18NCategory("Controls");
 	I18NCategory *g = GetI18NCategory("General");
 
-	ui_draw2d.DrawText(UBUNTU48, c->T("Controls Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, c->T("Controls Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
@@ -728,12 +799,10 @@ void ControlsScreen::render() {
 
 	UICheckBox(GEN_ID, x, y += stride, c->T("OnScreen", "On-Screen Touch Controls"), ALIGN_TOPLEFT, &g_Config.bShowTouchControls);
 	if (g_Config.bShowTouchControls) {
-		UICheckBox(GEN_ID, x + columnw, y, c->T("Large Controls"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
-		UICheckBox(GEN_ID, x + columnw, y += stride, c->T("Show Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
-	} else {
-		y += stride;
-	}
-	UICheckBox(GEN_ID, x, y, c->T("Tilt", "Tilt to Analog (horizontal)"), ALIGN_TOPLEFT, &g_Config.bAccelerometerToAnalogHoriz);
+		UICheckBox(GEN_ID, x, y += stride, c->T("Large Controls"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
+		UICheckBox(GEN_ID, x, y += stride, c->T("Show Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
+	} 
+	UICheckBox(GEN_ID, x, y += stride, c->T("Tilt", "Tilt to Analog (horizontal)"), ALIGN_TOPLEFT, &g_Config.bAccelerometerToAnalogHoriz);
 
 	UIEnd();
 }
@@ -837,8 +906,9 @@ void FileSelectScreen::render() {
 			ILOG("Selected: %i : %s", list_.selected, boot_filename.c_str());
 			list_.selected = -1;
 			g_Config.Save();
-
+			UIEnd();
 			screenManager()->switchScreen(new EmuScreen(boot_filename));
+			return;
 		}
 	}
 
@@ -973,7 +1043,10 @@ void ErrorScreen::render()
 	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
 
-	ui_draw2d.DrawText(UBUNTU48, errorTitle_.c_str(), dp_xres / 2, 30, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, errorTitle_.c_str(), dp_xres / 2, 30, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
+
 	ui_draw2d.DrawText(UBUNTU24, errorMessage_.c_str(), 40, 120, 0xFFFFFFFF, ALIGN_LEFT);
 
 	I18NCategory *g = GetI18NCategory("General");

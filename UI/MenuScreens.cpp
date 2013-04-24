@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+﻿// Copyright (c) 2012- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@
 namespace MainWindow {
 	void BrowseAndBoot(std::string defaultPath);
 }
+
+#pragma execution_character_set("utf-8")
 #endif
 
 #ifdef _MSC_VER
@@ -160,7 +162,7 @@ void LogoScreen::render() {
 	ui_draw2d.SetFontScale(1.5f, 1.5f);
 	ui_draw2d.DrawText(UBUNTU48, "PPSSPP", dp_xres / 2, dp_yres / 2 - 30, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	ui_draw2d.SetFontScale(1.0f, 1.0f);
-	ui_draw2d.DrawText(UBUNTU24, "Created by Henrik Rydg\u00E5rd", dp_xres / 2, dp_yres / 2 + 40, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
+	ui_draw2d.DrawText(UBUNTU24, "Created by Henrik Rydgård", dp_xres / 2, dp_yres / 2 + 40, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	ui_draw2d.DrawText(UBUNTU24, "Free Software under GPL 2.0", dp_xres / 2, dp_yres / 2 + 70, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	ui_draw2d.DrawText(UBUNTU24, "www.ppsspp.org", dp_xres / 2, dp_yres / 2 + 130, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	if (bootFilename_.size()) {
@@ -713,9 +715,9 @@ void LanguageScreen::render() {
 		langValuesMapping["it_IT"] = std::make_pair("Italiano", PSP_SYSTEMPARAM_LANGUAGE_ITALIAN); 
 		langValuesMapping["nl_NL"] = std::make_pair("Nederlands", PSP_SYSTEMPARAM_LANGUAGE_DUTCH);
 		langValuesMapping["pt_PT"] = std::make_pair("Português", PSP_SYSTEMPARAM_LANGUAGE_PORTUGUESE);
-		langValuesMapping["pt_BR"] = std::make_pair("Português Brasileiro", PSP_SYSTEMPARAM_LANGUAGE_PORTUGUESE);
-		langValuesMapping["ru_RU"] = std::make_pair("русский", PSP_SYSTEMPARAM_LANGUAGE_RUSSIAN);
-		langValuesMapping["ko_KR"] = std::make_pair("한국의", PSP_SYSTEMPARAM_LANGUAGE_KOREAN);
+		langValuesMapping["pt_BR"] = std::make_pair("Português", PSP_SYSTEMPARAM_LANGUAGE_PORTUGUESE);
+		langValuesMapping["ru_RU"] = std::make_pair("Русский", PSP_SYSTEMPARAM_LANGUAGE_RUSSIAN);
+		langValuesMapping["ko_KR"] = std::make_pair("한국어", PSP_SYSTEMPARAM_LANGUAGE_KOREAN);
 		langValuesMapping["zh_TW"] = std::make_pair("繁體中文", PSP_SYSTEMPARAM_LANGUAGE_CHINESE_TRADITIONAL);
 		langValuesMapping["zh_CN"] = std::make_pair("简体中文", PSP_SYSTEMPARAM_LANGUAGE_CHINESE_SIMPLIFIED);
 		langValuesMapping["gr_EL"] = std::make_pair("ελληνικά", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
@@ -724,6 +726,8 @@ void LanguageScreen::render() {
 		langValuesMapping["pl_PL"] = std::make_pair("Polish", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["sv_SE"] = std::make_pair("Svenska", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["tr_TR"] = std::make_pair("Türk", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+		langValuesMapping["ca_ES"] = std::make_pair("Català", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+		langValuesMapping["uk_UA"] = std::make_pair("українська", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 
 		if (!code.empty()) {
 			if(langValuesMapping.find(code) == langValuesMapping.end()) {
@@ -974,7 +978,7 @@ static const char * credits[] = {
 	"",
 	"A fast and portable PSP emulator",
 	"",
-	"Created by Henrik Rydg\u00E5rd",
+	"Created by Henrik Rydgård",
 	"(aka hrydgard, ector)"
 	"",
 	"",

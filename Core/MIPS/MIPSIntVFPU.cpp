@@ -37,7 +37,7 @@
 
 // TODO: Test and maybe fix: https://code.google.com/p/jpcsp/source/detail?r=3082#
 
-#include "../Core.h"
+#include "Core/Core.h"
 #include "Core/Reporting.h"
 #include "math/math_util.h"
 
@@ -1052,7 +1052,7 @@ namespace MIPSInt
 		int n = GetNumVectorElements(sz);
 		if (op & 0x10000)
 		{
-			//vbfy2
+			// vbfy2
 			d[0] = s[0] + s[2];
 			d[1] = s[1] + s[3];
 			d[2] = s[0] - s[2];

@@ -28,20 +28,29 @@
 #include <windows.h>
 #endif
 
-#include "../../Core.h"
-#include "../../MemMap.h"
-#include "../../CoreTiming.h"
+#include "Core/Core.h"
+#include "Core/MemMap.h"
+#include "Core/CoreTiming.h"
 
-#include "../MIPS.h"
-#include "../MIPSTables.h"
-#include "../MIPSAnalyst.h"
+#include "Core/MIPS/MIPS.h"
+#include "Core/MIPS/MIPSTables.h"
+#include "Core/MIPS/MIPSAnalyst.h"
 
-#include "x64Emitter.h"
-#include "x64Analyzer.h"
+#include "Core/MIPS/JitCommon/JitBlockCache.h"
+#include "Core/MIPS/JitCommon/JitCommon.h"
 
-#include "JitCache.h"
-#include "../JitCommon/JitCommon.h"
-#include "Asm.h"
+#if defined(ARM)
+#include "Common/ArmEmitter.h"
+#include "Core/MIPS/ARM/ArmAsm.h"
+using namespace ArmGen;
+#elif defined(_M_IX86) || defined(_M_X64)
+#include "Common/x64Emitter.h"
+#include "Common/x64Analyzer.h"
+#include "Core/MIPS/x86/Asm.h"
+using namespace Gen;
+#else
+#error "Unsupported arch!"
+#endif
 // #include "JitBase.h"
 
 #if defined USE_OPROFILE && USE_OPROFILE
@@ -56,39 +65,41 @@ op_agent_t agent;
 #pragma comment(lib, "jitprofiling.lib")
 #endif
 
-using namespace Gen;
 
 #define INVALID_EXIT 0xFFFFFFFF
 
-bool JitBlock::ContainsAddress(u32 em_address)
-{
+JitBlockCache::JitBlockCache(MIPSState *mips_, CodeBlock *codeBlock) :
+	mips(mips_), codeBlock_(codeBlock), blocks(0), num_blocks(0) {
+}
+
+JitBlockCache::~JitBlockCache() {
+	Shutdown();
+}
+
+bool JitBlock::ContainsAddress(u32 em_address) {
 	// WARNING - THIS DOES NOT WORK WITH JIT INLINING ENABLED.
+	// However, that doesn't exist yet so meh.
 	return (em_address >= originalAddress && em_address < originalAddress + 4 * originalSize);
 }
 
 bool JitBlockCache::IsFull() const 
 {
-	return GetNumBlocks() >= MAX_NUM_BLOCKS - 1;
+	return num_blocks >= MAX_NUM_BLOCKS - 1;
 }
 
 void JitBlockCache::Init()
 {
-	MAX_NUM_BLOCKS = 65536*2;
-
 #if defined USE_OPROFILE && USE_OPROFILE
 	agent = op_open_agent();
 #endif
 	blocks = new JitBlock[MAX_NUM_BLOCKS];
-	blockCodePointers = new const u8*[MAX_NUM_BLOCKS];
 	Clear();
 }
 
 void JitBlockCache::Shutdown()
 {
 	delete[] blocks;
-	delete[] blockCodePointers;
 	blocks = 0;
-	blockCodePointers = 0;
 	num_blocks = 0;
 #if defined USE_OPROFILE && USE_OPROFILE
 	op_close_agent(agent);
@@ -99,35 +110,16 @@ void JitBlockCache::Shutdown()
 #endif
 }
 
-JitBlockCache::~JitBlockCache()
-{
-	Shutdown();
-}
-
 // This clears the JIT cache. It's called from JitCache.cpp when the JIT cache
 // is full and when saving and loading states.
 void JitBlockCache::Clear()
 {
 	for (int i = 0; i < num_blocks; i++)
-	{
 		DestroyBlock(i, false);
-	}
 	links_to.clear();
 	block_map.clear();
 	num_blocks = 0;
-	memset(blockCodePointers, 0, sizeof(u8*)*MAX_NUM_BLOCKS);
 }
-
-/*void JitBlockCache::DestroyBlocksWithFlag(BlockFlag death_flag)
-{
-	for (int i = 0; i < num_blocks; i++)
-	{
-		if (blocks[i].flags & death_flag)
-		{
-			DestroyBlock(i, false);
-		}
-	}
-}*/
 
 void JitBlockCache::Reset()
 {
@@ -138,23 +130,6 @@ void JitBlockCache::Reset()
 JitBlock *JitBlockCache::GetBlock(int no)
 {
 	return &blocks[no];
-}
-
-int JitBlockCache::GetNumBlocks() const
-{
-	return num_blocks;
-}
-
-bool JitBlockCache::RangeIntersect(int s1, int e1, int s2, int e2) const
-{
-	// check if any endpoint is inside the other range
-	if ((s1 >= s2 && s1 <= e2) ||
-		(e1 >= s2 && e1 <= e2) ||
-		(s2 >= s1 && s2 <= e1) ||
-		(e2 >= s1 && e2 <= e1)) 
-		return true;
-	else
-		return false;
 }
 
 int JitBlockCache::AllocateBlock(u32 em_address)
@@ -173,13 +148,12 @@ int JitBlockCache::AllocateBlock(u32 em_address)
 	return num_blocks - 1;
 }
 
-void JitBlockCache::FinalizeBlock(int block_num, bool block_link, const u8 *code_ptr)
+void JitBlockCache::FinalizeBlock(int block_num, bool block_link)
 {
-	blockCodePointers[block_num] = code_ptr;
 	JitBlock &b = blocks[block_num];
 
 	b.originalFirstOpcode = Memory::Read_Opcode_JIT(b.originalAddress);
-	u32 opcode = MIPS_MAKE_EMUHACK(0, block_num);
+	u32 opcode = GetEmuHackOpForBlock(block_num);
 	Memory::Write_Opcode_JIT(b.originalAddress, opcode);
 	
 	// Convert the logical address to a physical address for the block map
@@ -202,9 +176,8 @@ void JitBlockCache::FinalizeBlock(int block_num, bool block_link, const u8 *code
 #if defined USE_OPROFILE && USE_OPROFILE
 	char buf[100];
 	sprintf(buf, "EmuCode%x", b.originalAddress);
-	const u8* blockStart = blockCodePointers[block_num];
-	op_write_native_code(agent, buf, (uint64_t)blockStart,
-												blockStart, b.codeSize);
+	const u8* blockStart = blocks[block_num].checkedEntry;
+	op_write_native_code(agent, buf, (uint64_t)blockStart, blockStart, b.codeSize);
 #endif
 
 #ifdef USE_VTUNE
@@ -214,7 +187,7 @@ void JitBlockCache::FinalizeBlock(int block_num, bool block_link, const u8 *code
 	jmethod.method_id = iJIT_GetNewMethodID();
 	jmethod.class_file_name = "";
 	jmethod.source_file_name = __FILE__;
-	jmethod.method_load_address = (void*)blockCodePointers[block_num];
+	jmethod.method_load_address = (void*)blocks[block_num].checkedEntry;
 	jmethod.method_size = b.codeSize;
 	jmethod.line_number_size = 0;
 	jmethod.method_name = b.blockName;
@@ -222,9 +195,34 @@ void JitBlockCache::FinalizeBlock(int block_num, bool block_link, const u8 *code
 #endif
 }
 
-const u8 **JitBlockCache::GetCodePointers()
+int binary_search(JitBlock blocks[], const u8 *baseoff, int imin, int imax)
 {
-	return blockCodePointers;
+	while (imin < imax)
+	{
+		int imid = (imin + imax) / 2;
+		if (blocks[imid].normalEntry < baseoff)
+			imin = imid + 1;
+		else
+			imax = imid;
+	}
+	if ((imax == imin) && (blocks[imin].normalEntry == baseoff))
+		return imin;
+	else
+		return -1;
+}
+
+int JitBlockCache::GetBlockNumberFromEmuHackOp(u32 inst) const {
+	if (!num_blocks || !MIPS_IS_EMUHACK(inst)) // definitely not a JIT block
+		return -1;
+	int off = (inst & MIPS_EMUHACK_VALUE_MASK);
+
+	const u8 *baseoff = codeBlock_->GetBasePtr() + off;
+	return binary_search(blocks, baseoff, 0, num_blocks-1);
+}
+
+u32 JitBlockCache::GetEmuHackOpForBlock(int blockNum) const {
+	int off = (int)(blocks[blockNum].normalEntry - codeBlock_->GetBasePtr());
+	return (MIPS_EMUHACK_OPCODE | off);
 }
 
 int JitBlockCache::GetBlockNumberFromStartAddress(u32 addr)
@@ -232,10 +230,8 @@ int JitBlockCache::GetBlockNumberFromStartAddress(u32 addr)
 	if (!blocks)
 		return -1;		
 	u32 inst = Memory::Read_U32(addr);
-	if (!MIPS_IS_EMUHACK(inst)) // definitely not a JIT block
-		return -1;
-	int bl = (inst & MIPS_EMUHACK_VALUE_MASK);
-	if (bl >= num_blocks)
+	int bl = GetBlockNumberFromEmuHackOp(inst);
+	if (bl < 0)
 		return -1;
 	if (blocks[bl].originalAddress != addr)
 		return -1;		
@@ -259,36 +255,26 @@ u32 JitBlockCache::GetOriginalFirstOp(int block_num)
 	return blocks[block_num].originalFirstOpcode;
 }
 
-CompiledCode JitBlockCache::GetCompiledCodeFromBlock(int block_num)
-{		
-	return (CompiledCode)blockCodePointers[block_num];
-}
-
-
-
-//Block linker
-//Make sure to have as many blocks as possible compiled before calling this
-//It's O(N), so it's fast :)
-//Can be faster by doing a queue for blocks to link up, and only process those
-//Should probably be done
-
 void JitBlockCache::LinkBlockExits(int i)
 {
 	JitBlock &b = blocks[i];
-	if (b.invalid)
-	{
+	if (b.invalid) {
 		// This block is dead. Don't relink it.
 		return;
 	}
-	for (int e = 0; e < 2; e++)
-	{
-		if (b.exitAddress[e] != INVALID_EXIT && !b.linkStatus[e])
-		{
+	for (int e = 0; e < 2; e++) {
+		if (b.exitAddress[e] != INVALID_EXIT && !b.linkStatus[e]) {
 			int destinationBlock = GetBlockNumberFromStartAddress(b.exitAddress[e]);
-			if (destinationBlock != -1)
-			{
+			if (destinationBlock != -1) 	{
+#if defined(ARM)
+				ARMXEmitter emit(b.exitPtrs[e]);
+				emit.B(blocks[destinationBlock].checkedEntry);
+				emit.FlushIcache();
+
+#elif defined(_M_IX86) || defined(_M_X64)
 				XEmitter emit(b.exitPtrs[e]);
 				emit.JMP(blocks[destinationBlock].checkedEntry, true);
+#endif
 				b.linkStatus[e] = true;
 			}
 		}
@@ -332,23 +318,37 @@ void JitBlockCache::UnlinkBlock(int i)
 
 void JitBlockCache::DestroyBlock(int block_num, bool invalidate)
 {
-	if (block_num < 0 || block_num >= num_blocks)
-	{
+	if (block_num < 0 || block_num >= num_blocks) {
 		ERROR_LOG(JIT, "DestroyBlock: Invalid block number %d", block_num);
 		return;
 	}
 	JitBlock &b = blocks[block_num];
-	if (b.invalid)
-	{
+	if (b.invalid) {
 		if (invalidate)
 			ERROR_LOG(JIT, "Invalidating invalid block %d", block_num);
 		return;
 	}
 	b.invalid = true;
-	if ((int)Memory::ReadUnchecked_U32(b.originalAddress) == (MIPS_EMUHACK_OPCODE | block_num))
+	if ((int)Memory::ReadUnchecked_U32(b.originalAddress) == GetEmuHackOpForBlock(block_num))
 		Memory::WriteUnchecked_U32(b.originalFirstOpcode, b.originalAddress);
+	b.normalEntry = 0;
 
 	UnlinkBlock(block_num);
+
+
+#if defined(ARM)
+
+	// Send anyone who tries to run this block back to the dispatcher.
+	// Not entirely ideal, but .. pretty good.
+	// I hope there's enough space...
+	// checkedEntry is the only "linked" entrance so it's enough to overwrite that.
+	ARMXEmitter emit((u8 *)b.checkedEntry);
+	emit.MOVI2R(R0, b.originalAddress);
+	emit.STR(R0, CTXREG, offsetof(MIPSState, pc));
+	emit.B(MIPSComp::jit->dispatcher);
+	emit.FlushIcache();
+
+#elif defined(_M_IX86) || defined(_M_X64)
 
 	// Send anyone who tries to run this block back to the dispatcher.
 	// Not entirely ideal, but .. pretty good.
@@ -356,13 +356,7 @@ void JitBlockCache::DestroyBlock(int block_num, bool invalidate)
 	XEmitter emit((u8 *)b.checkedEntry);
 	emit.MOV(32, M(&mips->pc), Imm32(b.originalAddress));
 	emit.JMP(MIPSComp::jit->Asm().dispatcher, true);
-
-	// this is not needed really
-	/*
-	emit.SetCodePtr((u8 *)blockCodePointers[blocknum]);
-	emit.MOV(32, M(&PC), Imm32(b.originalAddress));
-	emit.JMP(asm_routines.dispatcher, true);
-	*/
+#endif
 }
 
 void JitBlockCache::InvalidateICache(u32 address, const u32 length)
@@ -373,13 +367,10 @@ void JitBlockCache::InvalidateICache(u32 address, const u32 length)
 	// destroy JIT blocks
 	// !! this works correctly under assumption that any two overlapping blocks end at the same address
 	std::map<pair<u32,u32>, u32>::iterator it1 = block_map.lower_bound(std::make_pair(pAddr, 0)), it2 = it1;
-	while (it2 != block_map.end() && it2->first.second < pAddr + length)
-	{
+	while (it2 != block_map.end() && it2->first.second < pAddr + length) {
 		DestroyBlock(it2->second, true);
 		it2++;
 	}
 	if (it1 != it2)
-	{
 		block_map.erase(it1, it2);
-	}
 }

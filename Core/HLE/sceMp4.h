@@ -17,32 +17,6 @@
 
 #pragma once
 
-#include "../GPUCommon.h"
+#include "HLE.h"
 
-class ShaderManager;
-
-class NullGPU : public GPUCommon
-{
-public:
-	NullGPU();
-	~NullGPU();
-	virtual void InitClear() {}
-	virtual void ExecuteOp(u32 op, u32 diff);
-	virtual u32  DrawSync(int mode);
-
-	virtual void BeginFrame() {}
-	virtual void SetDisplayFramebuffer(u32 framebuf, u32 stride, int format) {}
-	virtual void CopyDisplayToOutput() {}
-	virtual void UpdateStats();
-	virtual void InvalidateCache(u32 addr, int size);
-	virtual void InvalidateCacheHint(u32 addr, int size);
-	virtual void Flush() {}
-
-	virtual void DeviceLost() {}
-	virtual void DumpNextFrame() {}
-
-	virtual void Resized() {}
-
-protected:
-	virtual void FastRunLoop(DisplayList &list);
-};
+void Register_sceMp4();

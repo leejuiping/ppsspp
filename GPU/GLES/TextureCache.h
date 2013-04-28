@@ -73,7 +73,6 @@ private:
 		u8 clutformat;
 		u16 dim;
 		u32 clutaddr;
-		u32 cluthash;
 		u32 texture;  //GLuint
 		int invalidHint;
 		u32 fullhash;
@@ -93,6 +92,7 @@ private:
 	void *readIndexedTex(int level, u32 texaddr, int bytesPerIndex);
 	void UpdateSamplingParams(TexCacheEntry &entry, bool force);
 	void LoadTextureLevel(TexCacheEntry &entry, int level);
+	void *DecodeTextureLevel(u8 format, u8 clutformat, int level, u32 &texByteAlign, GLenum &dstFmt);
 
 	TexCacheEntry *GetEntryAt(u32 texaddr);
 

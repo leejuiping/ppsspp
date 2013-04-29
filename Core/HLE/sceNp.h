@@ -17,29 +17,7 @@
 
 #pragma once
 
-#include "Common/Common.h"
-
-#if defined(ARM)
-#include "../ARM/ArmJit.h"
-#else
-#include "../x86/Jit.h"
-#endif
-
-// Unlike on the PPC, opcode 0 is not unused and thus we have to choose another fake
-// opcode to represent JIT blocks and other emu hacks.
-// I've chosen 0x68000000.
-
-#define MIPS_EMUHACK_OPCODE 0x68000000
-#define MIPS_EMUHACK_MASK 0xFC000000
-#define MIPS_EMUHACK_VALUE_MASK 0x03FFFFFF
-
-#define MIPS_IS_EMUHACK(op) (((op) & 0xFC000000) == MIPS_EMUHACK_OPCODE)  // masks away the subop
-
-
-// There are 2 bits available for sub-opcodes, 0x03000000.
-#define EMUOP_RUNBLOCK 0   // Runs a JIT block
-#define EMUOP_RETKERNEL 1  // Returns to the simulated PSP kernel from a thread
-
-namespace MIPSComp {
-extern Jit *jit;
-}
+void Register_sceNp();
+void Register_sceNpCommerce2();
+void Register_sceNpService();
+void Regester_sceNpAuth();

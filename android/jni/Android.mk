@@ -55,7 +55,6 @@ ARCH_FILES := \
   $(SRC)/Common/x64Emitter.cpp \
   $(SRC)/Common/CPUDetect.cpp \
   $(SRC)/Common/Thunk.cpp \
-  $(SRC)/Core/MIPS/x86/JitCache.cpp \
   $(SRC)/Core/MIPS/x86/CompALU.cpp \
   $(SRC)/Core/MIPS/x86/CompBranch.cpp \
   $(SRC)/Core/MIPS/x86/CompFPU.cpp \
@@ -75,7 +74,6 @@ ARCH_FILES := \
   $(SRC)/Common/ArmEmitter.cpp \
   $(SRC)/Common/ArmCPUDetect.cpp \
   $(SRC)/Common/ArmThunk.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmJitCache.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompALU.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompBranch.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompFPU.cpp \
@@ -97,7 +95,6 @@ ARCH_FILES := \
   $(SRC)/Common/ArmEmitter.cpp \
   $(SRC)/Common/ArmCPUDetect.cpp \
   $(SRC)/Common/ArmThunk.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmJitCache.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompALU.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompBranch.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompFPU.cpp \
@@ -215,6 +212,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/HLE/sceKernelTime.cpp \
   $(SRC)/Core/HLE/sceKernelVTimer.cpp \
   $(SRC)/Core/HLE/sceMpeg.cpp \
+  $(SRC)/Core/HLE/sceMp4.cpp \
   $(SRC)/Core/HLE/sceNet.cpp \
   $(SRC)/Core/HLE/sceOpenPSID.cpp \
   $(SRC)/Core/HLE/sceP3da.cpp \
@@ -231,6 +229,8 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/HLE/sceVaudio.cpp \
   $(SRC)/Core/HLE/scePspNpDrm_user.cpp \
   $(SRC)/Core/HLE/sceGameUpdate.cpp \
+  $(SRC)/Core/HLE/sceNp.cpp \
+  $(SRC)/Core/HLE/scePauth.cpp \
   $(SRC)/Core/FileSystems/BlockDevices.cpp \
   $(SRC)/Core/FileSystems/ISOFileSystem.cpp \
   $(SRC)/Core/FileSystems/MetaFileSystem.cpp \
@@ -246,6 +246,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/MIPS/MIPSCodeUtils.cpp.arm \
   $(SRC)/Core/MIPS/MIPSDebugInterface.cpp \
   $(SRC)/Core/MIPS/JitCommon/JitCommon.cpp \
+  $(SRC)/Core/MIPS/JitCommon/JitBlockCache.cpp \
   $(SRC)/Core/Util/BlockAllocator.cpp \
   $(SRC)/Core/Util/ppge_atlas.cpp \
   $(SRC)/Core/Util/PPGeDraw.cpp \

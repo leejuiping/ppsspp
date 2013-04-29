@@ -98,13 +98,13 @@ static void JitLogMiss(u32 op)
 	func(op);
 }
 
-Jit::Jit(MIPSState *mips) : blocks(mips), mips_(mips)
+Jit::Jit(MIPSState *mips) : blocks(mips, this), mips_(mips)
 {
 	blocks.Init();
-	asm_.Init(mips, this);
 	gpr.SetEmitter(this);
 	fpr.SetEmitter(this);
 	AllocCodeSpace(1024 * 1024 * 16);
+	asm_.Init(mips, this);
 
 	// TODO: If it becomes possible to switch from the interpreter, this should be set right.
 	js.startDefaultPrefix = true;
@@ -220,7 +220,8 @@ void Jit::Compile(u32 em_address)
 
 	int block_num = blocks.AllocateBlock(em_address);
 	JitBlock *b = blocks.GetBlock(block_num);
-	blocks.FinalizeBlock(block_num, jo.enableBlocklink, DoJit(em_address, b));
+	DoJit(em_address, b);
+	blocks.FinalizeBlock(block_num, jo.enableBlocklink);
 
 	// Drat.  The VFPU hit an uneaten prefix at the end of a block.
 	if (js.startDefaultPrefix && js.MayHavePrefix())

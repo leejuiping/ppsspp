@@ -396,7 +396,8 @@ u32 sceAtracGetChannel(int atracID, u32 channelAddr)
 	ERROR_LOG(HLE, "UNIMPL sceAtracGetChannel(%i, %08x)", atracID, channelAddr);
 	Atrac *atrac = getAtrac(atracID);
 	if (!atrac) {
-		//return -1;
+//Fix Sengoku Musou 3 Z Special [JPN] crash
+		return -1;
 	}
 	if (Memory::IsValidAddress(channelAddr))
 		Memory::Write_U32(atrac->atracChannels, channelAddr);
@@ -503,10 +504,18 @@ u32 sceAtracGetSecondBufferInfo(int atracID, u32 outposAddr, u32 outBytesAddr)
 		Memory::Write_U32(0, outBytesAddr);
 		return ATRAC_ERROR_SECOND_BUFFER_NOT_NEEDED;
 	}
+
+	// TODO: When sceAtracIsSecondBufferNeeded() says yes, change this function.  Maybe it's wrong anyway.
+#if 0
 	u32 pos = (((atrac->loopEndSample >> (0x100B - atrac->codeType)) + 1) * atrac->atracBytesPerFrame + atrac->second.fileoffset - 1 ) + 1;
 	Memory::Write_U32(pos, outposAddr);
 	Memory::Write_U32(atrac->second.writableBytes - pos, outBytesAddr);
 	return 0;
+#else
+	Memory::Write_U32(0, outposAddr);
+	Memory::Write_U32(0, outBytesAddr);
+	return ATRAC_ERROR_SECOND_BUFFER_NOT_NEEDED;
+#endif
 }
 
 u32 sceAtracGetSoundSample(int atracID, u32 outEndSampleAddr, u32 outLoopStartSampleAddr, u32 outLoopEndSampleAddr)

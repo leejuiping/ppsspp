@@ -280,7 +280,7 @@ void DoFrameTiming(bool &throttle, bool &skipFrame) {
 
 	// Check if the frameskipping code should be enabled. If neither throttling or frameskipping is on,
 	// we have nothing to do here.
-	bool doFrameSkip = g_Config.iFrameSkip == 1;
+	bool doFrameSkip = g_Config.bFrameSkip;
 
 	// On non windows, which is always vsync locked, we need to force frameskip when
 	// unthrottled.
@@ -337,7 +337,7 @@ void DoFrameTiming(bool &throttle, bool &skipFrame) {
 
 	// Max 4 skipped frames in a row - 15 fps is really the bare minimum for playability.
 	// We check for 3 here so it's 3 skipped frames, 1 non skipped, 3 skipped, etc.
-	if (numSkippedFrames >= 3) {
+	if (numSkippedFrames >= g_Config.iNumSkip) {
 		skipFrame = false;
 	}
 }
@@ -590,7 +590,10 @@ float sceDisplayGetFramePerSec() {
 }
 
 u32 sceDisplayIsForeground() {
-  	ERROR_LOG(HLE,"UNIMPL sceDisplayIsForeground()");
+  	DEBUG_LOG(HLE,"IMPL sceDisplayIsForeground()");	
+	if (!hasSetMode || framebuf.topaddr == 0)
+	return 0;
+	else
   	return 1;   // return value according to JPCSP comment
 }
 

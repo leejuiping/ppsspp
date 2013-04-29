@@ -18,6 +18,7 @@
 #pragma once
 
 void sceRtcGetCurrentTick();
+int sceRtcGetLastAdjustedTime(u32 tickPtr);
 void Register_sceRtc();
 
 struct ScePspDateTime {

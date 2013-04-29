@@ -18,6 +18,10 @@
 #include <cmath>
 #include <string>
 #include <cstdio>
+// Hack: Harmattan will not compile without this!
+#ifdef MEEGO_EDITION_HARMATTAN
+#include "StringUtil.cpp"
+#endif
 
 #ifdef _WIN32
 namespace MainWindow {
@@ -385,7 +389,15 @@ void PauseScreen::render() {
 	if (ginfo && ginfo->iconTexture) {
 		uint32_t color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 1.5));
 		ginfo->iconTexture->Bind(0);
-		ui_draw2d.DrawTexRect(10,10,10+144, 10+80, 0,0,1,1,0xFFFFFFFF);
+
+		// Maintain the icon's aspect ratio.  Minis are square, for example.
+		float iconAspect = (float)ginfo->iconTexture->Width() / (float)ginfo->iconTexture->Height();
+		float h = 80.0f;
+		float w = 144.0f;
+		float x = 10.0f + (w - h * iconAspect) / 2.0f;
+		w = h * iconAspect;
+
+		ui_draw2d.DrawTexRect(x, 10, x + w, 10 + h, 0, 0, 1, 1, 0xFFFFFFFF);
 		ui_draw2d.Flush();
 		ctx->RebindTexture();
 	}
@@ -412,10 +424,18 @@ void PauseScreen::render() {
 		if (gpu)
 			gpu->Resized();
 	}
-	bool fs = g_Config.iFrameSkip == 1;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Frame Skipping"), ALIGN_TOPLEFT, &fs);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Frame Skipping"), ALIGN_TOPLEFT, &g_Config.bFrameSkip);
+	if (g_Config.bFrameSkip) {
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Skip Frames :"), x + 60, y += stride + 10, 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 250 , y + 5, 20);
+		if (UIButton(GEN_ID, hlinear1, 80, 0, "Auto", ALIGN_LEFT))
+			g_Config.iNumSkip = 3;
+		if (UIButton(GEN_ID, hlinear1, 30, 0, "1", ALIGN_LEFT))
+			g_Config.iNumSkip = 1;
+		if (UIButton(GEN_ID, hlinear1, 30, 0, "2", ALIGN_LEFT))
+			g_Config.iNumSkip = 2;
+	}
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
-	g_Config.iFrameSkip = fs ? 1 : 0;
 
 	I18NCategory *i = GetI18NCategory("Pause");
 
@@ -488,7 +508,7 @@ void SettingsScreen::render() {
 	ui_draw2d.DrawText(UBUNTU24, ms->T("AudioDesc", "Adjust Audio Settings"), s, 110, 0xFFFFFFFF, ALIGN_LEFT);
 
 	if (UIButton(GEN_ID, vlinear, w, 0, ms->T("Graphics"), ALIGN_BOTTOMLEFT)) {
-		screenManager()->push(new GraphicsScreen());
+		screenManager()->push(new GraphicsScreenP1());
 	}
 	ui_draw2d.DrawText(UBUNTU24, ms->T("GraphicsDesc", "Change graphics options"), s, 180, 0xFFFFFFFF, ALIGN_LEFT);
 
@@ -523,7 +543,14 @@ void AudioScreen::update(InputState &input) {
 	}
 }
 
-void GraphicsScreen::update(InputState &input) {
+void GraphicsScreenP1::update(InputState &input) {
+	if (input.pad_buttons_down & PAD_BUTTON_BACK) {
+		g_Config.Save();
+		screenManager()->finishDialog(this, DR_OK);
+	}
+}
+
+void GraphicsScreenP2::update(InputState &input) {
 	if (input.pad_buttons_down & PAD_BUTTON_BACK) {
 		g_Config.Save();
 		screenManager()->finishDialog(this, DR_OK);
@@ -621,7 +648,7 @@ void AudioScreen::render() {
 	UIEnd();
 }
 
-void GraphicsScreen::render() {
+void GraphicsScreenP1::render() {
 	UIShader_Prepare();
 	UIBegin(UIShader_Get());
 	DrawBackground(1.0f);
@@ -633,8 +660,12 @@ void GraphicsScreen::render() {
 	ui_draw2d.DrawText(UBUNTU24, gs->T("Graphics Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
 	ui_draw2d.SetFontScale(1.0f, 1.0f);
 
-	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
+	}
+
+	if (UIButton(GEN_ID, Pos( 220 , dp_yres - 10), LARGE_BUTTON_WIDTH, 0, g->T("Next Page"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
+		screenManager()->push(new GraphicsScreenP2());
 	}
 
 	int x = 30;
@@ -649,23 +680,60 @@ void GraphicsScreen::render() {
 #endif
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Linear Filtering"), ALIGN_TOPLEFT, &g_Config.bLinearFiltering);
-	bool fs = g_Config.iFrameSkip == 1;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Frame Skipping"), ALIGN_TOPLEFT, &fs);
-	g_Config.iFrameSkip = fs ? 1 : 0;
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Frame Skipping"), ALIGN_TOPLEFT, &g_Config.bFrameSkip);
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Mipmapping"), ALIGN_TOPLEFT, &g_Config.bMipMap);
 	if (UICheckBox(GEN_ID, x, y += stride, gs->T("Buffered Rendering"), ALIGN_TOPLEFT, &g_Config.bBufferedRendering)) {
 		if (gpu)
 			gpu->Resized();
 	}
 	if (g_Config.bBufferedRendering) {
-		bool doubleRes = g_Config.iWindowZoom == 2;
-		if (UICheckBox(GEN_ID, x, y += stride, gs->T("2X", "2x Render Resolution"), ALIGN_TOPLEFT, &doubleRes)) {
+		if (UICheckBox(GEN_ID, x, y += stride, gs->T("2X", "2x Render Resolution"), ALIGN_TOPLEFT, &g_Config.SSAntiAliasing)) {
 			if (gpu)
 				gpu->Resized();
 		}
-		g_Config.iWindowZoom = doubleRes ? 2 : 1;
 	}
+	UIEnd();
+}
+
+void GraphicsScreenP2::render() {
+	UIShader_Prepare();
+	UIBegin(UIShader_Get());
+	DrawBackground(1.0f);
+
+	I18NCategory *g = GetI18NCategory("General");
+	I18NCategory *gs = GetI18NCategory("Graphics");
+
+	ui_draw2d.SetFontScale(1.5f, 1.5f);
+	ui_draw2d.DrawText(UBUNTU24, gs->T("Graphics Settings"), dp_xres / 2, 20, 0xFFFFFFFF, ALIGN_HCENTER);
+	ui_draw2d.SetFontScale(1.0f, 1.0f);
+
+	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres - 10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
+		screenManager()->finishDialog(this, DR_OK);
+	}
+
+	int x = 30;
+	int y = 30;
+	int stride = 40;
+	int columnw = 400;
+
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Draw Wireframe"), ALIGN_TOPLEFT, &g_Config.bDrawWireframe);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Display Raw Framebuffer"), ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("True Color"), ALIGN_TOPLEFT, &g_Config.bTrueColor);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Anisotropic Filtering"), ALIGN_TOPLEFT, &g_Config.bAnisotropicFiltering);
+	if (g_Config.bAnisotropicFiltering) {
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, y += stride + 10, 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 160 , y + 5, 20);
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "2x", ALIGN_LEFT))
+			g_Config.iAnisotropyLevel = 2;
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "4x", ALIGN_LEFT))
+			g_Config.iAnisotropyLevel = 4;
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "8x", ALIGN_LEFT))
+			g_Config.iAnisotropyLevel = 8;
+		if (UIButton(GEN_ID, hlinear1, 60, 0, "16x", ALIGN_LEFT))
+			g_Config.iAnisotropyLevel = 16;
+	} else
+		g_Config.iAnisotropyLevel = 0;
+
 	UIEnd();
 }
 
@@ -722,12 +790,13 @@ void LanguageScreen::render() {
 		langValuesMapping["zh_CN"] = std::make_pair("简体中文", PSP_SYSTEMPARAM_LANGUAGE_CHINESE_SIMPLIFIED);
 		langValuesMapping["gr_EL"] = std::make_pair("ελληνικά", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["he_IL"] = std::make_pair("עברית", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
-		langValuesMapping["hu_HU"] = std::make_pair("Hungarian", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
-		langValuesMapping["pl_PL"] = std::make_pair("Polish", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+		langValuesMapping["hu_HU"] = std::make_pair("Magyar", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+		langValuesMapping["pl_PL"] = std::make_pair("Polski", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["sv_SE"] = std::make_pair("Svenska", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["tr_TR"] = std::make_pair("Türk", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["ca_ES"] = std::make_pair("Català", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 		langValuesMapping["uk_UA"] = std::make_pair("Українська", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+		langValuesMapping["ro_RO"] = std::make_pair("Român", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 
 		if (!code.empty()) {
 			if(langValuesMapping.find(code) == langValuesMapping.end()) {
@@ -798,7 +867,6 @@ void SystemScreen::render() {
 #endif
 	if (g_Config.bJit)
 		UICheckBox(GEN_ID, x, y += stride, s->T("Fast Memory", "Fast Memory (unstable)"), ALIGN_TOPLEFT, &g_Config.bFastMemory);
-
 	UICheckBox(GEN_ID, x, y += stride, s->T("Show Debug Statistics"), ALIGN_TOPLEFT, &g_Config.bShowDebugStats);
 	UICheckBox(GEN_ID, x, y += stride, s->T("Show FPS"), ALIGN_TOPLEFT, &g_Config.bShowFPSCounter);
 	UICheckBox(GEN_ID, x, y += stride, s->T("Encrypt Save"), ALIGN_TOPLEFT, &g_Config.bEncryptSave);

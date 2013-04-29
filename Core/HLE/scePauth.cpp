@@ -15,29 +15,28 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "MediaEngine.h"
-#include "../MemMap.h"
+#include "HLE.h"
 
-static const int modeBpp[4] = { 2, 2, 2, 4 };
+#include "scePauth.h"
 
-
-void MediaEngine::writeVideoImage(u32 bufferPtr, int frameWidth, int videoPixelMode)
+int scePauth_F7AA47F6(u32 srcPtr, int srcLength, u32 destLengthPtr, u32 workArea)
 {
-	if (videoPixelMode > (int)(sizeof(modeBpp) / sizeof(modeBpp[0])) || videoPixelMode < 0)
-	{
-		ERROR_LOG(ME, "Unexpected videoPixelMode %d, using 0 instead.", videoPixelMode);
-		videoPixelMode = 0;
-	}
-
-	int bpp = modeBpp[videoPixelMode];
-
-	// fake image. To be improved.
-	if (Memory::IsValidAddress(bufferPtr))
-		// Use Dark Grey to identify CG is running 
-		Memory::Memset(bufferPtr, 0x69, frameWidth * videoHeight_ * bpp);
+	ERROR_LOG(HLE, "UNIMPL scePauth_F7AA47F6(%d, %d, %d, %d)", srcPtr, srcLength, destLengthPtr, workArea);
+	return 0;
 }
 
-void MediaEngine::feedPacketData(u32 addr, int size)
+int scePauth_98B83B5D(u32 srcPtr, int srcLength, u32 destLengthPtr, u32 workArea)
 {
-	// This media engine is totally incompetent and will just ignore all data sent to it.
+	ERROR_LOG(HLE, "UNIMPL scePauth_98B83B5D(%d, %d, %d, %d)", srcPtr, srcLength, destLengthPtr, workArea);
+	return 0;
+}
+
+const HLEFunction scePauth[] = {
+	{0xF7AA47F6, &WrapI_UIUU<scePauth_F7AA47F6>, "scePauth_F7AA47F6"},
+	{0x98B83B5D, &WrapI_UIUU<scePauth_98B83B5D>, "scePauth_98B83B5D"},
+};
+
+void Register_scePauth()
+{
+	RegisterModule("scePauth", ARRAY_SIZE(scePauth), scePauth);
 }

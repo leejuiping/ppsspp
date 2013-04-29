@@ -49,6 +49,7 @@ public:
 	bool DecodeTexture(u8 *output, GPUgstate state);
 
 private:
+	// Wow this is starting to grow big. Soon need to start looking at resizing it.
 	struct TexCacheEntry {
 		// After marking STATUS_UNRELIABLE, if it stays the same this many frames we'll trust it again.
 		const static int FRAMES_REGAIN_TRUST = 1000;
@@ -69,10 +70,9 @@ private:
 		int numFrames;
 		u32 framesUntilNextFullHash;
 		u8 format;
-		u16 dim;
 		u8 clutformat;
+		u16 dim;
 		u32 clutaddr;
-		u32 cluthash;
 		u32 texture;  //GLuint
 		int invalidHint;
 		u32 fullhash;
@@ -80,6 +80,7 @@ private:
 		float lodBias;
 
 		// Cache the current filter settings so we can avoid setting it again.
+		// (OpenGL madness where filter settings are attached to each texture).
 		u8 magFilt;
 		u8 minFilt;
 		bool sClamp;
@@ -91,6 +92,7 @@ private:
 	void *readIndexedTex(int level, u32 texaddr, int bytesPerIndex);
 	void UpdateSamplingParams(TexCacheEntry &entry, bool force);
 	void LoadTextureLevel(TexCacheEntry &entry, int level);
+	void *DecodeTextureLevel(u8 format, u8 clutformat, int level, u32 &texByteAlign, GLenum &dstFmt);
 
 	TexCacheEntry *GetEntryAt(u32 texaddr);
 

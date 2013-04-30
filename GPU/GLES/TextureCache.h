@@ -36,6 +36,7 @@ public:
 	void StartFrame();
 	void Invalidate(u32 addr, int size, bool force);
 	void InvalidateAll(bool force);
+	void ClearNextFrame();
 
 	// FramebufferManager keeps TextureCache updated about what regions of memory
 	// are being rendered to. This is barebones so far.
@@ -93,11 +94,14 @@ private:
 	void UpdateSamplingParams(TexCacheEntry &entry, bool force);
 	void LoadTextureLevel(TexCacheEntry &entry, int level);
 	void *DecodeTextureLevel(u8 format, u8 clutformat, int level, u32 &texByteAlign, GLenum &dstFmt);
+	void ScaleTexture(u32* &data, GLenum &dstfmt, int &width, int &height);
 
 	TexCacheEntry *GetEntryAt(u32 texaddr);
 
 	typedef std::map<u64, TexCacheEntry> TexCache;
 	TexCache cache;
+
+	bool clearCacheNextFrame_;
 
 	template <typename T>
 	class SimpleBuf {
@@ -147,6 +151,9 @@ private:
 	SimpleBuf<u16> tmpTexBuf16;
 
 	SimpleBuf<u32> tmpTexBufRearrange;
+
+	SimpleBuf<u32> tmpTexBufScalingInput;
+	SimpleBuf<u32> tmpTexBufScalingOutput;
 
 	u32 *clutBuf32;
 	u16 *clutBuf16;

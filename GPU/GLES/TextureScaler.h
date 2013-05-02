@@ -19,7 +19,7 @@
 
 #include "Common/MemoryUtil.h"
 #include "../Globals.h"
-#include "../native/ext/glew/GL/glew.h"
+#include "gfx/gl_common.h"
 
 #include <functional>
 #include <vector>
@@ -29,7 +29,7 @@ class TextureScaler {
 public:
 	TextureScaler();
 
-	void Scale(u32* &data, GLenum &dstfmt, int &width, int &height);
+	void Scale(u32* &data, GLenum &dstfmt, int &width, int &height, int factor);
 
 private:
 	SimpleBuf<u32> bufInput;

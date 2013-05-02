@@ -60,8 +60,7 @@ public:
 	bool bLinearFiltering;
 	bool bUseVBO;
 	bool bStretchToDisplay;
-	bool bFrameSkip;  // 0 = off;  1 = auto;  (future:  2 = skip every 2nd frame;  3 = skip every 3rd frame etc).
-	int iNumSkip;
+	int iFrameSkip;
 	bool bUseMediaEngine;
 
 	int iWindowX;
@@ -73,8 +72,7 @@ public:
 	int iAnisotropyLevel;
 	bool bTrueColor;
 	bool bMipMap;
-	bool bAnisotropicFiltering;
-	int iXBRZTexScalingLevel; // 1 = off, 2 = 2xBRZ, ..., 5 = 5xBRZ
+	int iXBRZTexScalingLevel; 
 
 	// Sound
 	bool bEnableSound;

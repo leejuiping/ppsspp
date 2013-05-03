@@ -18,10 +18,6 @@
 #include <cmath>
 #include <string>
 #include <cstdio>
-// Hack: Harmattan will not compile without this!
-#ifdef MEEGO_EDITION_HARMATTAN
-#include "StringUtil.cpp"
-#endif
 
 #ifdef _WIN32
 namespace MainWindow {
@@ -52,7 +48,7 @@ namespace MainWindow {
 #include "util/text/utf8.h"
 #include "UIShader.h"
 
-#include "Common/StringUtil.h"
+#include "Common/StringUtils.h"
 #include "Core/System.h"
 #include "Core/CoreParameter.h"
 #include "GPU/ge_constants.h"
@@ -412,10 +408,10 @@ void PauseScreen::render() {
 	// Shared with settings
 	I18NCategory *ss = GetI18NCategory("System");
 	I18NCategory *gs = GetI18NCategory("Graphics");
-
-	UICheckBox(GEN_ID, x, y += stride, ss->T("Show Debug Statistics"), ALIGN_TOPLEFT, &g_Config.bShowDebugStats);
+	I18NCategory *a = GetI18NCategory("Audio");
+	
 	UICheckBox(GEN_ID, x, y += stride, ss->T("Show FPS"), ALIGN_TOPLEFT, &g_Config.bShowFPSCounter);
-
+	UICheckBox(GEN_ID, x, y += stride, a->T("Enable Sound"), ALIGN_TOPLEFT, &g_Config.bEnableSound);
 	// TODO: Maybe shouldn't show this if the screen ratios are very close...
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Stretch to Display"), ALIGN_TOPLEFT, &g_Config.bStretchToDisplay);
 
@@ -424,15 +420,15 @@ void PauseScreen::render() {
 		if (gpu)
 			gpu->Resized();
 	}
-
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 	bool enableFrameSkip = g_Config.iFrameSkip != 0;
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Frame Skipping"), ALIGN_TOPLEFT, &enableFrameSkip);
 	if (enableFrameSkip) {
 		if (g_Config.iFrameSkip == 0)
 			g_Config.iFrameSkip = 3;
 
-		ui_draw2d.DrawText(UBUNTU24, gs->T("Skip Frames :"), x + 60, y += stride + 10, 0xFFFFFFFF, ALIGN_LEFT);
-		HLinear hlinear1(x + 250 , y + 5, 20);
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Frames :"), x + 60, y += stride, 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 200 , y + 5, 20);
 		if (UIButton(GEN_ID, hlinear1, 80, 0, "Auto", ALIGN_LEFT))
 			g_Config.iFrameSkip = 3;
 		if (UIButton(GEN_ID, hlinear1, 30, 0, "1", ALIGN_LEFT))
@@ -443,7 +439,6 @@ void PauseScreen::render() {
 	else {
 		g_Config.iFrameSkip = 0;
 	}
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 
 	I18NCategory *i = GetI18NCategory("Pause");
 
@@ -705,12 +700,6 @@ void GraphicsScreenP1::render() {
 		if (gpu)
 			gpu->Resized();
 	}
-	if (g_Config.bBufferedRendering) {
-		if (UICheckBox(GEN_ID, x, y += stride, gs->T("2X", "2x Render Resolution"), ALIGN_TOPLEFT, &g_Config.SSAntiAliasing)) {
-			if (gpu)
-				gpu->Resized();
-		}
-	}
 	UIEnd();
 }
 
@@ -735,6 +724,12 @@ void GraphicsScreenP2::render() {
 	int stride = 40;
 	int columnw = 400;
 
+	if (g_Config.bBufferedRendering) {
+		if (UICheckBox(GEN_ID, x, y += stride, gs->T("AA", "Anti Aliasing"), ALIGN_TOPLEFT, &g_Config.SSAntiAliasing)) {
+			if (gpu)
+				gpu->Resized();
+		}
+	}
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Draw Wireframe"), ALIGN_TOPLEFT, &g_Config.bDrawWireframe);
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Display Raw Framebuffer"), ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
 	UICheckBox(GEN_ID, x, y += stride, gs->T("True Color"), ALIGN_TOPLEFT, &g_Config.bTrueColor);
@@ -745,7 +740,7 @@ void GraphicsScreenP2::render() {
 		if (g_Config.iAnisotropyLevel == 0)
 			g_Config.iAnisotropyLevel = 2;
 
-		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, y += stride + 10, 0xFFFFFFFF, ALIGN_LEFT);
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, y += stride - 5, 0xFFFFFFFF, ALIGN_LEFT);
 		HLinear hlinear1(x + 160 , y + 5, 20);
 		if (UIButton(GEN_ID, hlinear1, 45, 0, "2x", ALIGN_LEFT))
 			g_Config.iAnisotropyLevel = 2;
@@ -759,20 +754,26 @@ void GraphicsScreenP2::render() {
 		g_Config.iAnisotropyLevel = 0;
 	}
 
-	bool XBRZTexScaling = g_Config.iXBRZTexScalingLevel > 1;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("xBRZ Texture Scaling"), ALIGN_TOPLEFT, &XBRZTexScaling);
-	if (XBRZTexScaling) {
-		if (g_Config.iXBRZTexScalingLevel <= 1)
-			g_Config.iXBRZTexScalingLevel = 2;
+	bool TexScaling = g_Config.iTexScalingLevel > 1;
+	UICheckBox(GEN_ID, x, y += stride + 20, gs->T("xBRZ Texture Scaling"), ALIGN_TOPLEFT, &TexScaling);
+	if (TexScaling) {
+		if (g_Config.iTexScalingLevel <= 1)
+			g_Config.iTexScalingLevel = 2;
 
-		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, y += stride + 10, 0xFFFFFFFF, ALIGN_LEFT);
-		HLinear hlinear1(x + 160 , y + 5, 20);
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, y += stride + 5, 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 160 , y - 5, 20);
 		if (UIButton(GEN_ID, hlinear1, 45, 0, "2x", ALIGN_LEFT))
-			g_Config.iXBRZTexScalingLevel = 2;
+			g_Config.iTexScalingLevel = 2;
 		if (UIButton(GEN_ID, hlinear1, 45, 0, "3x", ALIGN_LEFT))
-			g_Config.iXBRZTexScalingLevel = 3;
+			g_Config.iTexScalingLevel = 3;
+		HLinear hlinear2(x + 160 , y + 60, 20);
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Type  :"), x + 60, y += stride + 20, 0xFFFFFFFF, ALIGN_LEFT);
+		if (UIButton(GEN_ID, hlinear2, 90, 0, "xBRZ", ALIGN_LEFT))
+			g_Config.iTexScalingType = 0;
+		if (UIButton(GEN_ID, hlinear2, 100, 0, "Hybrid", ALIGN_LEFT))
+			g_Config.iTexScalingType = 1;
 	} else {
-		g_Config.iXBRZTexScalingLevel = 1;
+		g_Config.iTexScalingLevel = 1;
 	}
 	UIEnd();
 }

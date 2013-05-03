@@ -4,7 +4,7 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="ABI.h" />
-    <ClInclude Include="Atomic.h" />
+    <ClInclude Include="Atomics.h" />
     <ClInclude Include="Atomic_GCC.h" />
     <ClInclude Include="Atomic_Win32.h" />
     <ClInclude Include="ChunkFile.h" />
@@ -34,7 +34,7 @@
     <ClInclude Include="StdConditionVariable.h" />
     <ClInclude Include="StdMutex.h" />
     <ClInclude Include="StdThread.h" />
-    <ClInclude Include="StringUtil.h" />
+    <ClInclude Include="StringUtils.h" />
     <ClInclude Include="Thread.h" />
     <ClInclude Include="Thunk.h" />
     <ClInclude Include="Timer.h" />
@@ -42,7 +42,7 @@
     <ClInclude Include="x64Emitter.h" />
     <ClInclude Include="ArmEmitter.h" />
     <ClInclude Include="FixedSizeUnorderedSet.h" />
-    <ClInclude Include="ThreadPool.h" />
+    <ClInclude Include="ThreadPools.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp" />
@@ -60,7 +60,7 @@
     <ClCompile Include="MemoryUtil.cpp" />
     <ClCompile Include="Misc.cpp" />
     <ClCompile Include="MsgHandler.cpp" />
-    <ClCompile Include="StringUtil.cpp" />
+    <ClCompile Include="StringUtils.cpp" />
     <ClCompile Include="Thread.cpp" />
     <ClCompile Include="Thunk.cpp" />
     <ClCompile Include="Timer.cpp" />
@@ -69,7 +69,7 @@
     <ClCompile Include="x64Emitter.cpp" />
     <ClCompile Include="ArmEmitter.cpp" />
     <ClCompile Include="ArmCPUDetect.cpp" />
-    <ClCompile Include="ThreadPool.cpp" />
+    <ClCompile Include="ThreadPools.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="CMakeLists.txt" />

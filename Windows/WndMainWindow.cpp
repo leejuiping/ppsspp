@@ -34,6 +34,7 @@
 #include "GPU/GPUInterface.h"
 #include "GPU/GPUState.h"
 #include "native/image/png_load.h"
+#include "GPU/GLES/TextureScaler.h"
 
 #ifdef THEMES
 #include "XPTheme.h"
@@ -175,8 +176,12 @@ namespace MainWindow
 		ResizeDisplay();
 	}
 
-	void setXbrzTexScaling(int num) {
-		g_Config.iXBRZTexScalingLevel = num;
+	void setTexScalingLevel(int num) {
+		g_Config.iTexScalingLevel = num;
+		if(gpu) gpu->ClearCacheNextFrame();
+	}
+	void setTexScalingType(int num) {
+		g_Config.iTexScalingType = num;
 		if(gpu) gpu->ClearCacheNextFrame();
 	}
 
@@ -501,19 +506,31 @@ namespace MainWindow
 				break;
 
 			case ID_TEXTURESCALING_OFF:
-				setXbrzTexScaling(1);
+				setTexScalingLevel(1);
 				break;
-			case ID_TEXTURESCALING_2XBRZ:
-				setXbrzTexScaling(2);
+			case ID_TEXTURESCALING_2X:
+				setTexScalingLevel(2);
 				break;
-			case ID_TEXTURESCALING_3XBRZ:
-				setXbrzTexScaling(3);
+			case ID_TEXTURESCALING_3X:
+				setTexScalingLevel(3);
 				break;
-			case ID_TEXTURESCALING_4XBRZ:
-				setXbrzTexScaling(4);
+			case ID_TEXTURESCALING_4X:
+				setTexScalingLevel(4);
 				break;
-			case ID_TEXTURESCALING_5XBRZ:
-				setXbrzTexScaling(5);
+			case ID_TEXTURESCALING_5X:
+				setTexScalingLevel(5);
+				break;
+
+			case ID_TEXTURESCALING_XBRZ:
+				setTexScalingType(TextureScaler::XBRZ);
+				break;
+			case ID_TEXTURESCALING_HYBRID:
+				setTexScalingType(TextureScaler::HYBRID);
+				break;
+
+			case ID_TEXTURESCALING_DEPOSTERIZE:
+				g_Config.bTexDeposterize = !g_Config.bTexDeposterize;
+				if(gpu) gpu->ClearCacheNextFrame();
 				break;
 
 			case ID_OPTIONS_BUFFEREDRENDERING:
@@ -795,6 +812,7 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_USEMEDIAENGINE, g_Config.bUseMediaEngine);
 		CHECKITEM(ID_OPTIONS_MIPMAP, g_Config.bMipMap);
 		CHECKITEM(ID_EMULATION_SOUND, g_Config.bEnableSound); 
+		CHECKITEM(ID_TEXTURESCALING_DEPOSTERIZE, g_Config.bTexDeposterize); 
 
 		EnableMenuItem(menu,ID_EMULATION_RUN, (Core_IsStepping() || globalUIState == UISTATE_PAUSEMENU) ? MF_ENABLED : MF_GRAYED);
 		EnableMenuItem(menu,ID_EMULATION_PAUSE, globalUIState == UISTATE_INGAME ? MF_ENABLED : MF_GRAYED);
@@ -824,13 +842,21 @@ namespace MainWindow
 
 		static const int texscalingitems[] = {
 			ID_TEXTURESCALING_OFF,
-			ID_TEXTURESCALING_2XBRZ,
-			ID_TEXTURESCALING_3XBRZ,
-			ID_TEXTURESCALING_4XBRZ,
-			ID_TEXTURESCALING_5XBRZ,
+			ID_TEXTURESCALING_2X,
+			ID_TEXTURESCALING_3X,
+			ID_TEXTURESCALING_4X,
+			ID_TEXTURESCALING_5X,
 		};
 		for (int i = 0; i < 5; i++) {
-			CheckMenuItem(menu, texscalingitems[i], MF_BYCOMMAND | ((i == g_Config.iXBRZTexScalingLevel-1) ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, texscalingitems[i], MF_BYCOMMAND | ((i == g_Config.iTexScalingLevel-1) ? MF_CHECKED : MF_UNCHECKED));
+		}
+
+		static const int texscalingtypeitems[] = {
+			ID_TEXTURESCALING_XBRZ,
+			ID_TEXTURESCALING_HYBRID,
+		};
+		for (int i = 0; i < 3; i++) {
+			CheckMenuItem(menu, texscalingtypeitems[i], MF_BYCOMMAND | ((i == g_Config.iTexScalingType) ? MF_CHECKED : MF_UNCHECKED));
 		}
 	}
 
@@ -1084,6 +1110,9 @@ namespace MainWindow
 
 	void _ViewNormal(HWND hWnd)
 	{
+		ShowCursor(TRUE);
+		SetCursor(LoadCursor(NULL, IDC_ARROW));
+		ClipCursor(NULL);
 		// put caption and border styles back
 		DWORD dwOldStyle = ::GetWindowLong(hWnd, GWL_STYLE);
 		DWORD dwNewStyle = dwOldStyle | WS_CAPTION | WS_THICKFRAME;
@@ -1107,6 +1136,9 @@ namespace MainWindow
 
 	void _ViewFullScreen(HWND hWnd)
 	{
+		ShowCursor(FALSE);
+		SetCursor(NULL);
+		ClipCursor(&g_normalRC);
 		// keep in mind normal window rectangle
 		::GetWindowRect(hWnd, &g_normalRC);
 

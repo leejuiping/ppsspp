@@ -155,8 +155,9 @@ if(NOT MSVC)
 	if(IOS)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
 	elseif(APPLE)
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -mmacosx-version-min=10.7")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -U__STRICT_ANSI__")
 		# Karen/angelXwind: --macosx-version-min=10.7 is needed in order to produce binaries that OS X 10.7 Lion can execute. However, it seems that PPSSPP won't support 10.6 or lower without getting rid of -stdlib=libc++ ...which probably won't end well. So I guess PPSSPP will strictly be a 10.7+ app.
+		# vit9696: OSX 10.6 builds are possible: http://forums.ppsspp.org/showthread.php?tid=1826&pid=18875#pid18875
 		set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
 	endif()
 	if(CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.7.0)
@@ -795,6 +796,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceP3da.h
 	Core/HLE/sceMp4.cpp
 	Core/HLE/sceMp4.h
+	Core/HLE/sceMp3.cpp
+	Core/HLE/sceMp3.h
 	Core/HLE/sceParseHttp.cpp
 	Core/HLE/sceParseHttp.h
 	Core/HLE/sceParseUri.cpp

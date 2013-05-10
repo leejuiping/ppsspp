@@ -429,17 +429,10 @@ u32 sceAtracAddStreamData(int atracID, u32 bytesToAdd)
 	// TODO
 	if (bytesToAdd > atrac->first.writableBytes)
 		return ATRAC_ERROR_ADD_DATA_IS_TOO_BIG;
-	// only add stream data when it need more atrac data
-	if (atrac->getRemainFrames() > 0)
-		return 0;
 
 	if (atrac->data_buf && (bytesToAdd > 0)) {
 		int addbytes = std::min(bytesToAdd, atrac->first.filesize - atrac->first.fileoffset);
 		Memory::Memcpy(atrac->data_buf + atrac->first.fileoffset, atrac->first.addr, addbytes);
-#ifdef _USE_DSHOW_
-		if (atrac->first.fileoffset + addbytes >= atrac->first.filesize)
-			addAtrac3Audio(atrac->data_buf, atrac->first.filesize, atracID);
-#endif
 	}
 	atrac->first.size += bytesToAdd;
 	if (atrac->first.size > atrac->first.filesize)
@@ -871,7 +864,7 @@ int _AtracSetData(Atrac *atrac, u32 buffer, u32 bufferSize)
 
 #ifdef USE_FFMPEG
 	if (atrac->codeType == PSP_MODE_AT_3) {
-		INFO_LOG(HLE, "This is an atrac3 audio");
+		WARN_LOG(HLE, "This is an atrac3 audio");
 
 		// some games may reuse an atracID for playing sound
 		atrac->ReleaseFFMPEGContext();
@@ -883,7 +876,8 @@ int _AtracSetData(Atrac *atrac, u32 buffer, u32 bufferSize)
 		Memory::Memcpy(atrac->data_buf, buffer, std::min(bufferSize, atrac->first.filesize));
 
 		return __AtracSetContext(atrac, buffer, bufferSize);
-	}
+	} else if (atrac->codeType == PSP_MODE_AT_3_PLUS) 
+		WARN_LOG(HLE, "This is an atrac3+ audio");
 #endif // _USE_FFMPEG
 
 	return 0;

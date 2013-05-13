@@ -178,6 +178,8 @@ struct Atrac {
 			// There are not enough atrac data right now to play at a certain position.
 			// Must load more atrac data first
 			remainFrame = 0;
+		} else if (second.writableBytes <= 0) {
+			remainFrame = PSP_ATRAC_NONLOOP_STREAM_DATA_IS_ON_MEMORY ;
 		} else {
 			// guess the remain frames. 
 			// games would add atrac data when remainFrame = 0 or -1 
@@ -340,7 +342,7 @@ void Atrac::Analyze()
 	bool bfoundData = false;
 	while ((first.filesize - offset) >= 8 && !bfoundData) {
 		int chunkMagic = Memory::Read_U32(first.addr + offset);
-		int chunkSize = Memory::Read_U32(first.addr + offset + 4);
+		u32 chunkSize = Memory::Read_U32(first.addr + offset + 4);
 		offset += 8;
 		if (chunkSize > first.filesize - offset)
 			break;
@@ -724,9 +726,9 @@ u32 sceAtracGetSecondBufferInfo(int atracID, u32 outposAddr, u32 outBytesAddr)
 		//return -1;
 	}
 	if (Memory::IsValidAddress(outposAddr))
-		Memory::Write_U32(0, outposAddr);
+		Memory::Write_U32(atrac->second.fileoffset, outposAddr);
 	if (Memory::IsValidAddress(outBytesAddr))
-		Memory::Write_U32(0x10000, outBytesAddr);
+		Memory::Write_U32(atrac->second.writableBytes, outBytesAddr);
 	// TODO: Maybe don't write the above?
 	return ATRAC_ERROR_SECOND_BUFFER_NOT_NEEDED;
 }
@@ -868,8 +870,8 @@ int __AtracSetContext(Atrac *atrac, u32 buffer, u32 bufferSize)
 	}
 
 	int wanted_channels = atrac->atracOutputChannels;
-	int wanted_channel_layout = av_get_default_channel_layout(wanted_channels);
-	int dec_channel_layout = av_get_default_channel_layout(atrac->atracChannels);
+	int64_t wanted_channel_layout = av_get_default_channel_layout(wanted_channels);
+	int64_t dec_channel_layout = av_get_default_channel_layout(atrac->atracChannels);
 
 	atrac->pSwrCtx =
 		swr_alloc_set_opts

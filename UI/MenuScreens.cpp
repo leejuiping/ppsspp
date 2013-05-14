@@ -56,6 +56,7 @@ namespace MainWindow {
 #include "GPU/GPUInterface.h"
 #include "Core/Config.h"
 #include "Core/CoreParameter.h"
+#include "Core/Reporting.h"
 #include "Core/SaveState.h"
 #include "Core/HLE/sceUtility.h"
 
@@ -764,7 +765,25 @@ void GraphicsScreenP2::render() {
 	} else {
 		g_Config.iAnisotropyLevel = 0;
 	}
-
+	bool FpsLimit = g_Config.iFpsLimit != 0;
+	UICheckBox(GEN_ID, x, y += stride + 15, gs->T("Fps Limit"), ALIGN_TOPLEFT, &FpsLimit);
+	if (FpsLimit) {
+		if (g_Config.iFpsLimit == 0)
+			g_Config.iFpsLimit = 60;
+		
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Fps :"), x + 60, y += stride, 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 160 , y, 20);
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "90", ALIGN_LEFT))
+			g_Config.iFpsLimit = 90;
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "120", ALIGN_LEFT))
+			g_Config.iFpsLimit = 120;
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "180", ALIGN_LEFT))
+			g_Config.iFpsLimit = 180;
+		if (UIButton(GEN_ID, hlinear1, 45, 0, "240", ALIGN_LEFT))
+			g_Config.iFpsLimit = 240;
+	} else {
+			g_Config.iFpsLimit = 60;
+				}
 	bool TexScaling = g_Config.iTexScalingLevel > 1;
 	UICheckBox(GEN_ID, x, y += stride + 15, gs->T("xBRZ Texture Scaling"), ALIGN_TOPLEFT, &TexScaling);
 	if (TexScaling) {
@@ -928,8 +947,15 @@ void SystemScreen::render() {
 	UICheckBox(GEN_ID, x, y += stride, s->T("Encrypt Save"), ALIGN_TOPLEFT, &g_Config.bEncryptSave);
 	UICheckBox(GEN_ID, x, y += stride, s->T("Use Button X to Confirm"), ALIGN_TOPLEFT, &g_Config.bButtonPreference); 
 	bool tf = g_Config.itimeformat == 1;
-	UICheckBox(GEN_ID, x, y += stride, s->T("12HR Time Format"), ALIGN_TOPLEFT, &tf);
-	g_Config.itimeformat = tf ? 1 : 0;
+	if (UICheckBox(GEN_ID, x, y += stride, s->T("12HR Time Format"), ALIGN_TOPLEFT, &tf)) {
+		g_Config.itimeformat = tf ? 1 : 0;
+	}
+
+	bool reportingEnabled = Reporting::IsEnabled();
+	const static std::string reportHostOfficial = "report.ppsspp.org";
+	if (UICheckBox(GEN_ID, x, y += stride, s->T("Enable Compatibility Server Reports"), ALIGN_TOPLEFT, &reportingEnabled)) {
+		g_Config.sReportHost = reportingEnabled ? reportHostOfficial : "";
+	}
 
 	if (UIButton(GEN_ID, Pos(x, y += stride * 3), LARGE_BUTTON_WIDTH, 0, s->T("Language"), ALIGN_BOTTOMLEFT)) {
 		screenManager()->push(new LanguageScreen());

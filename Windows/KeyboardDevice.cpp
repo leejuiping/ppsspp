@@ -6,15 +6,9 @@
 #include "WinUser.h"
 
 unsigned int key_pad_map[] = {
-<<<<<<< HEAD
-	VK_TAB,   PAD_BUTTON_LEFT_THUMB,
+	VK_TAB,   PAD_BUTTON_UNTHROTTLE,
 	VK_RETURN, PAD_BUTTON_START,
 	VK_SPACE,      PAD_BUTTON_SELECT,
-=======
-	VK_TAB,   PAD_BUTTON_UNTHROTTLE,
-	VK_SPACE, PAD_BUTTON_START,
-	'V',      PAD_BUTTON_SELECT,
->>>>>>> upstream/master
 	'A',      PAD_BUTTON_X,
 	'W',      PAD_BUTTON_Y,
 	'D',      PAD_BUTTON_B,

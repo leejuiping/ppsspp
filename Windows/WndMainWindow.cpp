@@ -929,26 +929,6 @@ namespace MainWindow
 #define BINDUPDATE_INTERVAL_MS 50
 
 	static const char *controllist[] = {
-<<<<<<< HEAD
-		"TURBO MODE\tHold TAB",
-		"Start\tEnter",
-		"Select\tSpace",
-		"Square\tA",
-		"Triangle\tW",
-		"Circle\tD",
-		"Cross\tS",
-		"Left Trigger\tQ",
-		"Right Trigger\tE",
-		"Up\tArrow Up",
-		"Down\tArrow Down",
-		"Left\tArrow Left",
-		"Right\tArrow Right",
-		"Analog Up\tI",
-		"Analog Down\tK",
-		"Analog Left\tJ",
-		"Analog Right\tL",
-		"Rapid Fire\tShift",
-=======
 		"Menu",        // Open PauseScreen
 		"Back",        // Toggle PauseScreen & Back Setting Page.
 		"Triangle",
@@ -969,7 +949,6 @@ namespace MainWindow
 		"LY-",
 		"LX-",
 		"LX+",
->>>>>>> upstream/master
 	};
 
 	struct ControlsDlgState {

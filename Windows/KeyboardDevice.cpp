@@ -7,30 +7,18 @@
 #include "WinUser.h"
 
 unsigned int key_pad_map[] = {
-<<<<<<< HEAD
-	VK_TAB,   PAD_BUTTON_UNTHROTTLE,
-	VK_RETURN, PAD_BUTTON_START,
-	VK_SPACE,      PAD_BUTTON_SELECT,
-	'A',      PAD_BUTTON_X,
-	'W',      PAD_BUTTON_Y,
-	'D',      PAD_BUTTON_B,
-	'S',      PAD_BUTTON_A,
-	'Q',      PAD_BUTTON_LBUMPER,
-	'E',      PAD_BUTTON_RBUMPER,
-=======
 	VK_ESCAPE,PAD_BUTTON_MENU,        // Open PauseScreen
 	VK_BACK,  PAD_BUTTON_BACK,        // Toggle PauseScreen & Back Setting Page
-	'Z',      PAD_BUTTON_A,
-	'X',      PAD_BUTTON_B,
+	'S',      PAD_BUTTON_A,
+	'D',      PAD_BUTTON_B,
 	'A',      PAD_BUTTON_X,
-	'S',      PAD_BUTTON_Y,
-	'V',      PAD_BUTTON_SELECT,
-	VK_SPACE, PAD_BUTTON_START,
+	'W',      PAD_BUTTON_Y,
+	VK_SPACE, PAD_BUTTON_SELECT,
+	VK_RETURN, PAD_BUTTON_START,
 	'Q',      PAD_BUTTON_LBUMPER,
-	'W',      PAD_BUTTON_RBUMPER,
+	'E',      PAD_BUTTON_RBUMPER,
 	VK_TAB,   PAD_BUTTON_LEFT_THUMB,  // Turbo
 	VK_PAUSE, PAD_BUTTON_RIGHT_THUMB, // Open PauseScreen
->>>>>>> upstream/master
 	VK_UP,    PAD_BUTTON_UP,
 	VK_DOWN,  PAD_BUTTON_DOWN,
 	VK_LEFT,  PAD_BUTTON_LEFT,

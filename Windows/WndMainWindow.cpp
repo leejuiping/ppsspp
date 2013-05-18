@@ -185,6 +185,9 @@ namespace MainWindow
 		g_Config.iTexScalingType = num;
 		if(gpu) gpu->ClearCacheNextFrame();
 	}
+	void setFpsLimit(int fps) {
+		g_Config.iFpsLimit = fps;
+	}
 
 	BOOL Show(HINSTANCE hInstance, int nCmdShow)
 	{
@@ -651,9 +654,6 @@ namespace MainWindow
 				}
 				break;
 
-			case ID_OPTIONS_WIREFRAME:
-				g_Config.bDrawWireframe = !g_Config.bDrawWireframe;
-				break;
 			case ID_OPTIONS_VERTEXCACHE:
 				g_Config.bVertexCache = !g_Config.bVertexCache;
 				break;
@@ -702,12 +702,8 @@ namespace MainWindow
 			}
 			break;
 		case WM_KEYDOWN:
-			{
-				static int mojs=0;
-				mojs ^= 1;
-				//SetSkinMode(mojs);
-			}
 			return 0;
+
 		case WM_DROPFILES:
 			{
 				HDROP hdrop = (HDROP)wParam;
@@ -779,8 +775,8 @@ namespace MainWindow
 
 
 		case WM_MENUSELECT:
-			// This happens when a menu drops down, so this is the only place
-			// we need to call UpdateMenus.
+			// Unfortunately, accelerate keys (hotkeys) shares the same enabled/disabled states
+			// with corresponding menu items.
 			UpdateMenus();
 			break;
 
@@ -819,7 +815,6 @@ namespace MainWindow
 		CHECKITEM(ID_CPU_DYNAREC,g_Config.bJit == true);
 		CHECKITEM(ID_OPTIONS_BUFFEREDRENDERING, g_Config.bBufferedRendering);
 		CHECKITEM(ID_OPTIONS_SHOWDEBUGSTATISTICS, g_Config.bShowDebugStats);
-		CHECKITEM(ID_OPTIONS_WIREFRAME, g_Config.bDrawWireframe);
 		CHECKITEM(ID_OPTIONS_HARDWARETRANSFORM, g_Config.bHardwareTransform);
 		CHECKITEM(ID_OPTIONS_FASTMEMORY, g_Config.bFastMemory);
 		CHECKITEM(ID_OPTIONS_LINEARFILTERING, g_Config.bLinearFiltering);
@@ -832,24 +827,8 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_FRAMESKIP, g_Config.iFrameSkip != 0);
 		CHECKITEM(ID_OPTIONS_USEMEDIAENGINE, g_Config.bUseMediaEngine);
 		CHECKITEM(ID_OPTIONS_MIPMAP, g_Config.bMipMap);
-		CHECKITEM(ID_EMULATION_SOUND, g_Config.bEnableSound); 
-		CHECKITEM(ID_TEXTURESCALING_DEPOSTERIZE, g_Config.bTexDeposterize); 
-
-		EnableMenuItem(menu,ID_EMULATION_RUN, (Core_IsStepping() || globalUIState == UISTATE_PAUSEMENU) ? MF_ENABLED : MF_GRAYED);
-		EnableMenuItem(menu,ID_EMULATION_PAUSE, globalUIState == UISTATE_INGAME ? MF_ENABLED : MF_GRAYED);
-		EnableMenuItem(menu,ID_EMULATION_STOP, globalUIState == UISTATE_INGAME ? MF_ENABLED : MF_GRAYED);
-		EnableMenuItem(menu,ID_EMULATION_RESET, globalUIState == UISTATE_INGAME ? MF_ENABLED : MF_GRAYED);
-
-		UINT enable = globalUIState == UISTATE_MENU ? MF_ENABLED : MF_GRAYED;
-		EnableMenuItem(menu,ID_FILE_LOAD,enable);
-		EnableMenuItem(menu,ID_FILE_LOAD_MEMSTICK,enable);
-		EnableMenuItem(menu,ID_FILE_SAVESTATEFILE,!enable);
-		EnableMenuItem(menu,ID_FILE_LOADSTATEFILE,!enable);
-		EnableMenuItem(menu,ID_FILE_QUICKSAVESTATE,!enable);
-		EnableMenuItem(menu,ID_FILE_QUICKLOADSTATE,!enable);
-		EnableMenuItem(menu,ID_CPU_DYNAREC,enable);
-		EnableMenuItem(menu,ID_CPU_INTERPRETER,enable);
-		EnableMenuItem(menu,ID_EMULATION_STOP,!enable);
+		CHECKITEM(ID_EMULATION_SOUND, g_Config.bEnableSound);
+		CHECKITEM(ID_TEXTURESCALING_DEPOSTERIZE, g_Config.bTexDeposterize);
 		
 		static const int zoomitems[4] = {
 			ID_OPTIONS_SCREEN1X,
@@ -881,6 +860,39 @@ namespace MainWindow
 		for (int i = 0; i < 4; i++) {
 			CheckMenuItem(menu, texscalingtypeitems[i], MF_BYCOMMAND | ((i == g_Config.iTexScalingType) ? MF_CHECKED : MF_UNCHECKED));
 		}
+
+		UpdateCommands();
+	}
+
+	void UpdateCommands()
+	{
+		static GlobalUIState lastGlobalUIState = UISTATE_PAUSEMENU;
+		static CoreState lastCoreState = CORE_ERROR;
+
+		if (lastGlobalUIState == globalUIState && lastCoreState == coreState)
+			return;
+
+		lastCoreState = coreState;
+		lastGlobalUIState = globalUIState;
+
+		HMENU menu = GetMenu(GetHWND());
+		EnableMenuItem(menu,ID_EMULATION_RUN, (Core_IsStepping() || globalUIState == UISTATE_PAUSEMENU) ? MF_ENABLED : MF_GRAYED);
+
+		UINT ingameEnable = globalUIState == UISTATE_INGAME ? MF_ENABLED : MF_GRAYED;
+		EnableMenuItem(menu,ID_EMULATION_PAUSE, ingameEnable);
+		EnableMenuItem(menu,ID_EMULATION_STOP, ingameEnable);
+		EnableMenuItem(menu,ID_EMULATION_RESET, ingameEnable);
+
+		UINT menuEnable = globalUIState == UISTATE_MENU ? MF_ENABLED : MF_GRAYED;
+		EnableMenuItem(menu,ID_FILE_LOAD, menuEnable);
+		EnableMenuItem(menu,ID_FILE_LOAD_MEMSTICK, menuEnable);
+		EnableMenuItem(menu,ID_FILE_SAVESTATEFILE, !menuEnable);
+		EnableMenuItem(menu,ID_FILE_LOADSTATEFILE, !menuEnable);
+		EnableMenuItem(menu,ID_FILE_QUICKSAVESTATE, !menuEnable);
+		EnableMenuItem(menu,ID_FILE_QUICKLOADSTATE, !menuEnable);
+		EnableMenuItem(menu,ID_CPU_DYNAREC, menuEnable);
+		EnableMenuItem(menu,ID_CPU_INTERPRETER, menuEnable);
+		EnableMenuItem(menu,ID_EMULATION_STOP, !menuEnable);
 	}
 
 

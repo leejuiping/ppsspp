@@ -6,7 +6,7 @@
 #include "WinUser.h"
 
 unsigned int key_pad_map[] = {
-	VK_TAB,   PAD_BUTTON_LEFT_THUMB,
+	VK_TAB,   PAD_BUTTON_UNTHROTTLE,
 	VK_RETURN, PAD_BUTTON_START,
 	VK_SPACE,      PAD_BUTTON_SELECT,
 	'A',      PAD_BUTTON_X,
@@ -19,6 +19,7 @@ unsigned int key_pad_map[] = {
 	VK_DOWN,  PAD_BUTTON_DOWN,
 	VK_LEFT,  PAD_BUTTON_LEFT,
 	VK_RIGHT, PAD_BUTTON_RIGHT,
+	VK_F3,	  PAD_BUTTON_LEFT_THUMB,
 };
 
 unsigned short analog_ctrl_map[] = {

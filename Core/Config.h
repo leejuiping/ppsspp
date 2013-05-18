@@ -56,7 +56,6 @@ public:
 	bool bDisplayFramebuffer;
 	bool bHardwareTransform;
 	bool bBufferedRendering;
-	bool bDrawWireframe;
 	bool bLinearFiltering;
 	bool bUseVBO;
 #ifdef BLACKBERRY10
@@ -78,6 +77,8 @@ public:
 	int iTexScalingLevel; // 1 = off, 2 = 2x, ..., 5 = 5x
 	int iTexScalingType; // 0 = xBRZ, 1 = Hybrid
 	bool bTexDeposterize;
+	int iFpsLimit;
+	int iMaxRecent;
 
 	// Sound
 	bool bEnableSound;

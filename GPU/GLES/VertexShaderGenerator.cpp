@@ -106,25 +106,25 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim) {
 }
 
 static const char * const boneWeightAttrDecl[8] = {
-	"attribute float a_weight0123;\n",
-	"attribute vec2 a_weight0123;\n",
-	"attribute vec3 a_weight0123;\n",
-	"attribute vec4 a_weight0123;\n",
-	"attribute vec4 a_weight0123;\nattribute float a_weight4567;\n",
-	"attribute vec4 a_weight0123;\nattribute vec2 a_weight4567;\n",
-	"attribute vec4 a_weight0123;\nattribute vec3 a_weight4567;\n",
-	"attribute vec4 a_weight0123;\nattribute vec4 a_weight4567;\n",
+	"attribute mediump float a_w1;\n",
+	"attribute mediump vec2 a_w1;\n",
+	"attribute mediump vec3 a_w1;\n",
+	"attribute mediump vec4 a_w1;\n",
+	"attribute mediump vec4 a_w1;\nattribute mediump float a_w2;\n",
+	"attribute mediump vec4 a_w1;\nattribute mediump vec2 a_w2;\n",
+	"attribute mediump vec4 a_w1;\nattribute mediump vec3 a_w2;\n",
+	"attribute mediump vec4 a_w1;\nattribute mediump vec4 a_w2;\n",
 };
 
 static const char * const boneWeightAttr[8] = {
-	"a_weight0123.x",
-	"a_weight0123.y",
-	"a_weight0123.z",
-	"a_weight0123.w",
-	"a_weight4567.x",
-	"a_weight4567.y",
-	"a_weight4567.z",
-	"a_weight4567.w",
+	"a_w1.x",
+	"a_w1.y",
+	"a_w1.z",
+	"a_w1.w",
+	"a_w2.x",
+	"a_w2.y",
+	"a_w2.z",
+	"a_w2.w",
 };
 
 enum DoLightComputation {
@@ -135,8 +135,12 @@ enum DoLightComputation {
 
 void GenerateVertexShader(int prim, char *buffer) {
 	char *p = buffer;
+
+#define USE_FOR_LOOP
+
 #if defined(USING_GLES2)
 	WRITE(p, "precision highp float;\n");
+
 #elif !defined(FORCE_OPENGL_2_0)
 	WRITE(p, "#version 110\n");
 	// Remove lowp/mediump in non-mobile implementations
@@ -217,12 +221,10 @@ void GenerateVertexShader(int prim, char *buffer) {
 		if (gstate.getUVGenMode() == 0)
 			WRITE(p, "uniform vec4 u_uvscaleoffset;\n");
 		else if (gstate.getUVGenMode() == 1)
-			WRITE(p, "uniform mat4 u_texmtx;\n");
+			WRITE(p, "uniform mediump mat4 u_texmtx;\n");
 		if ((vertType & GE_VTYPE_WEIGHT_MASK) != GE_VTYPE_WEIGHT_NONE) {
 			int numBones = 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT);
-			for (int i = 0; i < numBones; i++) {
-				WRITE(p, "uniform mat4 u_bone%i;\n", i);
-			}
+			WRITE(p, "uniform mediump mat4 u_bone[%i];\n", numBones);
 		}
 		if (gstate.isLightingEnabled()) {
 			WRITE(p, "uniform lowp vec4 u_ambient;\n");
@@ -239,10 +241,10 @@ void GenerateVertexShader(int prim, char *buffer) {
 			}
 			if (doLight[i] == LIGHT_FULL) {
 				// These are needed for the full thing
-				WRITE(p, "uniform vec3 u_lightdir%i;\n", i);
-				WRITE(p, "uniform vec3 u_lightatt%i;\n", i);
-				WRITE(p, "uniform float u_lightangle%i;\n", i);
-				WRITE(p, "uniform float u_lightspotCoef%i;\n", i);
+				WRITE(p, "uniform mediump vec3 u_lightdir%i;\n", i);
+				WRITE(p, "uniform mediump vec3 u_lightatt%i;\n", i);
+				WRITE(p, "uniform mediump float u_lightangle%i;\n", i);
+				WRITE(p, "uniform mediump float u_lightspotCoef%i;\n", i);
 
 				WRITE(p, "uniform lowp vec3 u_lightambient%i;\n", i);
 				WRITE(p, "uniform lowp vec3 u_lightdiffuse%i;\n", i);
@@ -301,19 +303,44 @@ void GenerateVertexShader(int prim, char *buffer) {
 				WRITE(p, "  vec3 worldnormal = vec3(0.0, 0.0, 1.0);\n");
 
 			int numWeights = 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT);
-			static const float rescale[4] = {0, 2*127.5f/128.f, 2*32767.5f/32768.f, 2.0f};
-			float factor = rescale[(vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT];
+
+#ifdef USE_FOR_LOOP
+
+			// To loop through the weights, we unfortunately need to put them in a float array.
+			// GLSL ES sucks - no way to directly initialize an array!
+			switch (numWeights) {
+			case 1: WRITE(p, "  float w[1]; w[0] = a_w1;\n"); break;
+			case 2: WRITE(p, "  float w[2]; w[0] = a_w1.x; w[1] = a_w1.y;\n"); break;
+			case 3: WRITE(p, "  float w[3]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z;\n"); break;
+			case 4: WRITE(p, "  float w[4]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w;\n"); break;
+			case 5: WRITE(p, "  float w[5]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2;\n"); break;
+			case 6: WRITE(p, "  float w[6]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y;\n"); break;
+			case 7: WRITE(p, "  float w[7]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y; w[6] = a_w2.z;\n"); break;
+			case 8: WRITE(p, "  float w[8]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y; w[6] = a_w2.z; w[7] = a_w2.w;\n"); break;
+			}
+
+			WRITE(p, "  for (int i = 0; i < %i; i++) {\n", numWeights);
+			WRITE(p, "    worldpos += w[i] * (u_bone[i] * vec4(a_position.xyz, 1.0)).xyz;\n");
+			if (hasNormal)
+				WRITE(p, "    worldnormal += w[i] * (u_bone[i] * vec4(a_normal, 0.0)).xyz;\n");
+			WRITE(p, "  }\n");
+
+#else
 			for (int i = 0; i < numWeights; i++) {
 				const char *weightAttr = boneWeightAttr[i];
 				// workaround for "cant do .x of scalar" issue
-				if (numWeights == 1 && i == 0) weightAttr = "a_weight0123";
-				if (numWeights == 5 && i == 4) weightAttr = "a_weight4567";
-				WRITE(p, "  worldpos += %s * (u_bone%i * vec4(a_position.xyz, 1.0)).xyz;\n", weightAttr, i);
+				if (numWeights == 1 && i == 0) weightAttr = "a_w1";
+				if (numWeights == 5 && i == 4) weightAttr = "a_w2";
+				WRITE(p, "  worldpos += %s * (u_bone[%i] * vec4(a_position.xyz, 1.0)).xyz;\n", weightAttr, i);
 				if (hasNormal)
-					WRITE(p, "  worldnormal += %s * (u_bone%i * vec4(a_normal, 0.0)).xyz;\n", weightAttr, i);
+					WRITE(p, "  worldnormal += %s * (u_bone[%i] * vec4(a_normal, 0.0)).xyz;\n", weightAttr, i);
 			}
+#endif
 
-			// Finally, multiply by world matrix (yes, we have to).
+			static const float rescale[4] = {0, 2*127.5f/128.f, 2*32767.5f/32768.f, 2.0f};
+			float factor = rescale[(vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT];
+
+			// Finally, multiply by world matrix and compensate for quantization at the same time.
 			WRITE(p, "  worldpos = (u_world * vec4(worldpos * %f, 1.0)).xyz;\n", factor);
 			if (hasNormal)
 				WRITE(p, "  worldnormal = (u_world * vec4(worldnormal, 0.0)).xyz;\n");
@@ -357,10 +384,10 @@ void GenerateVertexShader(int prim, char *buffer) {
 			bool doSpecular = (comp != GE_LIGHTCOMP_ONLYDIFFUSE);
 			bool poweredDiffuse = comp == GE_LIGHTCOMP_BOTHWITHPOWDIFFUSE;
 
-			WRITE(p, "  float dot%i = dot(normalize(toLight%i), worldnormal);\n", i, i);
+			WRITE(p, "  mediump float dot%i = dot(normalize(toLight%i), worldnormal);\n", i, i);
 			WRITE(p, "  float distance%i = length(toLight%i);\n", i, i);
-			WRITE(p, "  float lightScale%i = 0.0;\n", i);
-			WRITE(p, "  float angle%i = 0.0;\n", i);
+			WRITE(p, "  lowp float lightScale%i = 0.0;\n", i);
+			WRITE(p, "  lowp float angle%i = 0.0;\n", i);
 
 			if (poweredDiffuse) {
 				WRITE(p, "  dot%i = pow(dot%i, u_matspecular.a);\n", i, i);
@@ -385,9 +412,9 @@ void GenerateVertexShader(int prim, char *buffer) {
 				break;
 			}
 
-			WRITE(p, "  vec3 diffuse%i = (u_lightdiffuse%i * %s) * max(dot%i, 0.0);\n", i, i, diffuse, i);
+			WRITE(p, "  lowp vec3 diffuse%i = (u_lightdiffuse%i * %s) * max(dot%i, 0.0);\n", i, i, diffuse, i);
 			if (doSpecular) {
-				WRITE(p, "  vec3 halfVec%i = normalize(normalize(toLight%i) + vec3(0.0, 0.0, 1.0));\n", i, i);
+				WRITE(p, "  mediump vec3 halfVec%i = normalize(normalize(toLight%i) + vec3(0.0, 0.0, 1.0));\n", i, i);
 				WRITE(p, "  dot%i = dot(halfVec%i, worldnormal);\n", i, i);
 				WRITE(p, "  if (dot%i > 0.0)\n", i);
 				WRITE(p, "    lightSum1 += u_lightspecular%i * %s * (pow(dot%i, u_matspecular.a) * lightScale%i);\n", i, specular, i, i);

@@ -989,7 +989,12 @@ namespace MainWindow
 				HWND hDlg = GetParent(hEdit);
 				const char *str = getVirtualKeyName(wParam);
 				if (str) {
-					pCtrlDlgState->pCtrlMap->SetBindCode(wParam);
+					if (nCtrlID >= IDC_EDIT_KEY_ANALOG_UP) {
+						pCtrlDlgState->pCtrlMap->SetBindCode(wParam, CONTROLS_KEYBOARD_ANALOG_INDEX,
+							nCtrlID - IDC_EDIT_KEY_ANALOG_UP);
+					} else {
+						pCtrlDlgState->pCtrlMap->SetBindCode(wParam);
+					}
 					SetWindowTextA(hEdit, str);
 					RECT rc = getRedrawRect(hEdit);
 					InvalidateRect(hDlg, &rc, false);
@@ -1134,10 +1139,14 @@ namespace MainWindow
 					DeleteObject(hResBM);
 				}
 
-				for (u32 i = 0; i <= CONTROLS_IDC_EDIT_END - CONTROLS_IDC_EDIT_BIGIN; i++) {
+				for (u32 i = 0; i <= IDC_EDIT_KEYRIGHT - CONTROLS_IDC_EDIT_BIGIN; i++) {
 					HWND hEdit = GetDlgItem(hDlg, CONTROLS_IDC_EDIT_BIGIN + i);
 					SetWindowTextA(hEdit, getVirtualKeyName(pCtrlDlgState->pCtrlMap->GetBindCode(CONTROLS_KEYBOARD_INDEX, i)));
 
+				}
+				for (u32 i = 0; i <= CONTROLS_IDC_EDIT_END - IDC_EDIT_KEY_ANALOG_UP; i++) {
+					HWND hEdit = GetDlgItem(hDlg, IDC_EDIT_KEY_ANALOG_UP + i);
+					SetWindowTextA(hEdit, getVirtualKeyName(pCtrlDlgState->pCtrlMap->GetBindCode(CONTROLS_KEYBOARD_ANALOG_INDEX, i)));
 				}
 				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "None");
 				ComboBox_AddString(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), "XInput");
@@ -1150,10 +1159,10 @@ namespace MainWindow
 				{
 					ComboBox_SetCurSel(GetDlgItem(hDlg, IDC_FORCE_INPUT_DEVICE), (g_Config.iForceInputDevice + 1));
 				}
-				pCtrlDlgState->orgPSPImageProc = (WNDPROC)GetWindowLong(pCtrlDlgState->hStaticPspImage, GWL_WNDPROC);
-				SetWindowLong(pCtrlDlgState->hStaticPspImage, GWL_WNDPROC, (LONG)PSPImageProc);
+				pCtrlDlgState->orgPSPImageProc = (WNDPROC)GetWindowLongPtr(pCtrlDlgState->hStaticPspImage, GWLP_WNDPROC);
+				SetWindowLongPtr(pCtrlDlgState->hStaticPspImage, GWLP_WNDPROC, (LONG_PTR)PSPImageProc);
 				DWORD dwThreadID = GetWindowThreadProcessId(hDlg, NULL);
-				pCtrlDlgState->pKeydownHook = SetWindowsHookEx(WH_KEYBOARD,KeyboardProc, NULL, dwThreadID);
+				pCtrlDlgState->pKeydownHook = SetWindowsHookEx(WH_KEYBOARD, KeyboardProc, NULL, dwThreadID);
 			
 				pCtrlDlgState->timerId = SetTimer(hDlg, TIMER_CONTROLS_BINDUPDATE, BINDUPDATE_INTERVAL_MS, 0);
 			}
@@ -1223,12 +1232,15 @@ namespace MainWindow
 						{
 						case CONTROLS_KEYBOARD_INDEX:
 							{
-								for (u32 i = 0; i <= CONTROLS_IDC_EDIT_END - CONTROLS_IDC_EDIT_BIGIN; i++) {
+								for (u32 i = 0; i <= IDC_EDIT_KEYRIGHT - CONTROLS_IDC_EDIT_BIGIN; i++) {
 									HWND hEdit = GetDlgItem(hDlg, CONTROLS_IDC_EDIT_BIGIN + i);
-									if (i >= IDC_EDIT_KEY_ANALOG_UP - CONTROLS_IDC_EDIT_BIGIN) {
-										Edit_SetReadOnly(hEdit, FALSE);
-									}
 									SetWindowTextA(hEdit, getVirtualKeyName(pCtrlDlgState->pCtrlMap->GetBindCode(i)));
+								}
+								for (u32 i = 0; i <= CONTROLS_IDC_EDIT_END - IDC_EDIT_KEY_ANALOG_UP; i++) {
+									HWND hEdit = GetDlgItem(hDlg, IDC_EDIT_KEY_ANALOG_UP + i);
+									Edit_SetReadOnly(hEdit, FALSE);
+									SetWindowText(hEdit, getVirtualKeyName(pCtrlDlgState->pCtrlMap->GetBindCode(
+										CONTROLS_KEYBOARD_ANALOG_INDEX, i)));
 								}
 								InvalidateRect(hDlg, 0, 0);
 							}
@@ -1344,7 +1356,7 @@ namespace MainWindow
 				}
 				UnhookWindowsHookEx(pCtrlDlgState->pKeydownHook);
 				KillTimer(hDlg, pCtrlDlgState->timerId);
-				SetWindowLong(pCtrlDlgState->hStaticPspImage, GWL_WNDPROC, (LONG)pCtrlDlgState->orgPSPImageProc);
+				SetWindowLongPtr(pCtrlDlgState->hStaticPspImage, GWLP_WNDPROC, (LONG_PTR)pCtrlDlgState->orgPSPImageProc);
 				EndDialog(hDlg, LOWORD(wParam));
 				if (pCtrlDlgState->hbmPspImage) {
 					DeleteObject(pCtrlDlgState->hbmPspImage);

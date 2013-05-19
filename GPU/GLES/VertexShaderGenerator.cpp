@@ -136,7 +136,7 @@ enum DoLightComputation {
 void GenerateVertexShader(int prim, char *buffer) {
 	char *p = buffer;
 
-#define USE_FOR_LOOP
+// #define USE_FOR_LOOP
 
 #if defined(USING_GLES2)
 	WRITE(p, "precision highp float;\n");
@@ -226,14 +226,6 @@ void GenerateVertexShader(int prim, char *buffer) {
 			int numBones = 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT);
 			WRITE(p, "uniform mediump mat4 u_bone[%i];\n", numBones);
 		}
-		if (gstate.isLightingEnabled()) {
-			WRITE(p, "uniform lowp vec4 u_ambient;\n");
-			if ((gstate.materialupdate & 2) == 0)
-				WRITE(p, "uniform lowp vec3 u_matdiffuse;\n");
-			// if ((gstate.materialupdate & 4) == 0)
-			WRITE(p, "uniform lowp vec4 u_matspecular;\n");  // Specular coef is contained in alpha
-			WRITE(p, "uniform lowp vec3 u_matemissive;\n");
-		}
 		for (int i = 0; i < 4; i++) {
 			if (doLight[i] != LIGHT_OFF) {
 				// This is needed for shade mapping
@@ -242,14 +234,30 @@ void GenerateVertexShader(int prim, char *buffer) {
 			if (doLight[i] == LIGHT_FULL) {
 				// These are needed for the full thing
 				WRITE(p, "uniform mediump vec3 u_lightdir%i;\n", i);
-				WRITE(p, "uniform mediump vec3 u_lightatt%i;\n", i);
-				WRITE(p, "uniform mediump float u_lightangle%i;\n", i);
-				WRITE(p, "uniform mediump float u_lightspotCoef%i;\n", i);
+				GELightType type = (GELightType)((gstate.ltype[i] >> 8) & 3);
 
+				if (type != GE_LIGHTTYPE_DIRECTIONAL)
+					WRITE(p, "uniform mediump vec3 u_lightatt%i;\n", i);
+
+				if (type == GE_LIGHTTYPE_SPOT) {
+					WRITE(p, "uniform mediump float u_lightangle%i;\n", i);
+					WRITE(p, "uniform mediump float u_lightspotCoef%i;\n", i);
+				}
 				WRITE(p, "uniform lowp vec3 u_lightambient%i;\n", i);
 				WRITE(p, "uniform lowp vec3 u_lightdiffuse%i;\n", i);
-				WRITE(p, "uniform lowp vec3 u_lightspecular%i;\n", i);
+
+				GELightComputation comp = (GELightComputation)(gstate.ltype[i] & 3);
+				if (comp != GE_LIGHTCOMP_ONLYDIFFUSE)
+					WRITE(p, "uniform lowp vec3 u_lightspecular%i;\n", i);
 			}
+		}
+		if (gstate.isLightingEnabled()) {
+			WRITE(p, "uniform lowp vec4 u_ambient;\n");
+			if ((gstate.materialupdate & 2) == 0)
+				WRITE(p, "uniform lowp vec3 u_matdiffuse;\n");
+			// if ((gstate.materialupdate & 4) == 0)
+			WRITE(p, "uniform lowp vec4 u_matspecular;\n");  // Specular coef is contained in alpha
+			WRITE(p, "uniform lowp vec3 u_matemissive;\n");
 		}
 	}
 
@@ -296,16 +304,9 @@ void GenerateVertexShader(int prim, char *buffer) {
 			else
 				WRITE(p, "  vec3 worldnormal = vec3(0.0, 0.0, 1.0);\n");
 		} else {
-			WRITE(p, "  vec3 worldpos = vec3(0.0);\n");
-			if (hasNormal)
-				WRITE(p, "  vec3 worldnormal = vec3(0.0);\n");
-			else
-				WRITE(p, "  vec3 worldnormal = vec3(0.0, 0.0, 1.0);\n");
-
 			int numWeights = 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT);
 
 #ifdef USE_FOR_LOOP
-
 			// To loop through the weights, we unfortunately need to put them in a float array.
 			// GLSL ES sucks - no way to directly initialize an array!
 			switch (numWeights) {
@@ -319,23 +320,33 @@ void GenerateVertexShader(int prim, char *buffer) {
 			case 8: WRITE(p, "  float w[8]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y; w[6] = a_w2.z; w[7] = a_w2.w;\n"); break;
 			}
 
-			WRITE(p, "  for (int i = 0; i < %i; i++) {\n", numWeights);
-			WRITE(p, "    worldpos += w[i] * (u_bone[i] * vec4(a_position.xyz, 1.0)).xyz;\n");
-			if (hasNormal)
-				WRITE(p, "    worldnormal += w[i] * (u_bone[i] * vec4(a_normal, 0.0)).xyz;\n");
-			WRITE(p, "  }\n");
+			WRITE(p, "  mat4 skinMatrix = w[0] * u_bone[0];\n");
+			if (numWeights > 1) {
+				WRITE(p, "  for (int i = 1; i < %i; i++) {\n", numWeights);
+				WRITE(p, "    skinMatrix += w[i] * u_bone[i];\n");
+				WRITE(p, "  }\n");
+			}
 
 #else
-			for (int i = 0; i < numWeights; i++) {
+			if (numWeights == 1)
+				WRITE(p, "  mat4 skinMatrix = a_w1 * u_bone[0];\n");
+			else
+				WRITE(p, "  mat4 skinMatrix = a_w1.x * u_bone[0];\n");
+			for (int i = 1; i < numWeights; i++) {
 				const char *weightAttr = boneWeightAttr[i];
 				// workaround for "cant do .x of scalar" issue
 				if (numWeights == 1 && i == 0) weightAttr = "a_w1";
 				if (numWeights == 5 && i == 4) weightAttr = "a_w2";
-				WRITE(p, "  worldpos += %s * (u_bone[%i] * vec4(a_position.xyz, 1.0)).xyz;\n", weightAttr, i);
-				if (hasNormal)
-					WRITE(p, "  worldnormal += %s * (u_bone[%i] * vec4(a_normal, 0.0)).xyz;\n", weightAttr, i);
+				WRITE(p, "  skinMatrix += %s * u_bone[%i];\n", weightAttr, i);
 			}
 #endif
+
+			WRITE(p, "  vec3 worldpos = (skinMatrix * vec4(a_position, 1.0)).xyz;\n");
+
+			if (hasNormal)
+				WRITE(p, "  vec3 worldnormal = (skinMatrix * vec4(a_normal, 0.0)).xyz;\n");
+			else
+				WRITE(p, "  vec3 worldnormal = (skinMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz;\n");
 
 			static const float rescale[4] = {0, 2*127.5f/128.f, 2*32767.5f/32768.f, 2.0f};
 			float factor = rescale[(vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT];
@@ -358,13 +369,41 @@ void GenerateVertexShader(int prim, char *buffer) {
 		}
 		// TODO: Declare variables for dots for shade mapping if needed.
 
-		const char *ambient = (gstate.materialupdate & 1) ? (hasColor ? "a_color0" : "u_matambientalpha") : "u_matambientalpha";
-		const char *diffuse = (gstate.materialupdate & 2) ? "unlitColor" : "u_matdiffuse";
-		const char *specular = (gstate.materialupdate & 4) ? "unlitColor" : "u_matspecular.rgb";
+		const char *ambientStr = (gstate.materialupdate & 1) ? (hasColor ? "a_color0" : "u_matambientalpha") : "u_matambientalpha";
+		const char *diffuseStr = (gstate.materialupdate & 2) ? "unlitColor" : "u_matdiffuse";
+		const char *specularStr = (gstate.materialupdate & 4) ? "unlitColor" : "u_matspecular.rgb";
+
+		bool diffuseIsZero = true;
+		bool specularIsZero = true;
+		bool distanceNeeded = false;
 
 		if (gstate.isLightingEnabled()) {
-			WRITE(p, "  lowp vec4 lightSum0 = u_ambient * %s + vec4(u_matemissive, 0.0);\n", ambient);
-			WRITE(p, "  lowp vec3 lightSum1 = vec3(0.0);\n");
+			WRITE(p, "  lowp vec4 lightSum0 = u_ambient * %s + vec4(u_matemissive, 0.0);\n", ambientStr);
+
+			for (int i = 0; i < 4; i++) {
+				if (doLight[i] != LIGHT_FULL)
+					continue;
+				diffuseIsZero = false;
+				GELightComputation comp = (GELightComputation)(gstate.ltype[i] & 3);
+				if (comp != GE_LIGHTCOMP_ONLYDIFFUSE)
+					specularIsZero = false;
+				GELightType type = (GELightType)((gstate.ltype[i] >> 8) & 3);
+				if (type != GE_LIGHTTYPE_DIRECTIONAL)
+					distanceNeeded = true;
+			}
+
+			if (!specularIsZero) {
+				WRITE(p, "  lowp vec3 lightSum1 = vec3(0.0);\n");
+				WRITE(p, "  mediump vec3 halfVec;\n");
+			}
+			if (!diffuseIsZero) {
+				WRITE(p, "  vec3 toLight;\n");
+				WRITE(p, "  lowp vec3 diffuse;\n");
+			}
+			if (distanceNeeded) {
+				WRITE(p, "  float distance;\n");
+				WRITE(p, "  lowp float lightScale;\n");
+			}
 		}
 
 		// Calculate lights if needed. If shade mapping is enabled, lights may need to be
@@ -377,58 +416,71 @@ void GenerateVertexShader(int prim, char *buffer) {
 			GELightType type = (GELightType)((gstate.ltype[i] >> 8) & 3);
 
 			if (type == GE_LIGHTTYPE_DIRECTIONAL)
-				WRITE(p, "  vec3 toLight%i = u_lightpos%i;\n", i, i);
+				WRITE(p, "  toLight = u_lightpos%i;\n", i);
 			else
-				WRITE(p, "  vec3 toLight%i = u_lightpos%i - worldpos;\n", i, i);
+				WRITE(p, "  toLight = u_lightpos%i - worldpos;\n", i);
 
 			bool doSpecular = (comp != GE_LIGHTCOMP_ONLYDIFFUSE);
 			bool poweredDiffuse = comp == GE_LIGHTCOMP_BOTHWITHPOWDIFFUSE;
 
-			WRITE(p, "  mediump float dot%i = dot(normalize(toLight%i), worldnormal);\n", i, i);
-			WRITE(p, "  float distance%i = length(toLight%i);\n", i, i);
-			WRITE(p, "  lowp float lightScale%i = 0.0;\n", i);
-			WRITE(p, "  lowp float angle%i = 0.0;\n", i);
-
 			if (poweredDiffuse) {
-				WRITE(p, "  dot%i = pow(dot%i, u_matspecular.a);\n", i, i);
+				WRITE(p, "  mediump float dot%i = pow(dot(normalize(toLight), worldnormal), u_matspecular.a);\n", i, i);
+			} else {
+				WRITE(p, "  mediump float dot%i = dot(normalize(toLight), worldnormal);\n", i);
 			}
+
+			char timesLightScale[128];
+			sprintf(timesLightScale, " * lightScale");
 
 			// Attenuation
 			switch (type) {
 			case GE_LIGHTTYPE_DIRECTIONAL:
-				WRITE(p, "  lightScale%i = 1.0;\n", i);
+				timesLightScale[0] = 0;
 				break;
 			case GE_LIGHTTYPE_POINT:
-				WRITE(p, "  lightScale%i = clamp(1.0 / dot(u_lightatt%i, vec3(1.0, distance%i, distance%i*distance%i)), 0.0, 1.0);\n", i, i, i, i, i);
+				WRITE(p, "  distance = length(toLight);\n", i, i);
+				WRITE(p, "  lightScale = clamp(1.0 / dot(u_lightatt%i, vec3(1.0, distance, distance*distance)), 0.0, 1.0);\n", i);
 				break;
 			case GE_LIGHTTYPE_SPOT:
-				WRITE(p, "  angle%i = dot(normalize(u_lightdir%i), normalize(toLight%i));\n", i, i, i);
+				WRITE(p, "  distance = length(toLight);\n", i, i);
+				WRITE(p, "  lowp float angle%i = dot(normalize(u_lightdir%i), normalize(toLight));\n", i, i, i);
 				WRITE(p, "  if (angle%i >= u_lightangle%i) {\n", i, i);
-				WRITE(p, "    lightScale%i = clamp(1.0 / dot(u_lightatt%i, vec3(1.0, distance%i, distance%i*distance%i)), 0.0, 1.0) * pow(angle%i, u_lightspotCoef%i);\n", i, i, i, i, i, i, i);
-				WRITE(p, "  }\n");
+				WRITE(p, "    lightScale = clamp(1.0 / dot(u_lightatt%i, vec3(1.0, distance, distance*distance)), 0.0, 1.0) * pow(angle%i, u_lightspotCoef%i);\n", i, i, i);
+				WRITE(p, "  } else {\n");
+				WRITE(p, "    lightScale = 0.0;\n");
+				WRITE(p, "  }\n");  
 				break;
 			default:
 				// ILLEGAL
 				break;
 			}
 
-			WRITE(p, "  lowp vec3 diffuse%i = (u_lightdiffuse%i * %s) * max(dot%i, 0.0);\n", i, i, diffuse, i);
+			WRITE(p, "  diffuse = (u_lightdiffuse%i * %s) * max(dot%i, 0.0);\n", i, diffuseStr, i);
 			if (doSpecular) {
-				WRITE(p, "  mediump vec3 halfVec%i = normalize(normalize(toLight%i) + vec3(0.0, 0.0, 1.0));\n", i, i);
-				WRITE(p, "  dot%i = dot(halfVec%i, worldnormal);\n", i, i);
+				WRITE(p, "  halfVec = normalize(normalize(toLight) + vec3(0.0, 0.0, 1.0));\n", i, i);
+				WRITE(p, "  dot%i = dot(halfVec, worldnormal);\n", i, i);
 				WRITE(p, "  if (dot%i > 0.0)\n", i);
-				WRITE(p, "    lightSum1 += u_lightspecular%i * %s * (pow(dot%i, u_matspecular.a) * lightScale%i);\n", i, specular, i, i);
+				WRITE(p, "    lightSum1 += u_lightspecular%i * %s * (pow(dot%i, u_matspecular.a) %s);\n", i, specularStr, i, timesLightScale);
 			}
-			WRITE(p, "  lightSum0 += vec4((u_lightambient%i + diffuse%i)*lightScale%i, 0.0);\n", i, i, i);
+			WRITE(p, "  lightSum0.rgb += (u_lightambient%i + diffuse) %s;\n", i, timesLightScale);
 		}
 
 		if (gstate.isLightingEnabled()) {
 			// Sum up ambient, emissive here.
-			WRITE(p, "  v_color0 = clamp(lightSum0, 0.0, 1.0);\n");
 			if (lmode) {
-				WRITE(p, "  v_color1 = clamp(lightSum1, 0.0, 1.0);\n");
+				WRITE(p, "  v_color0 = clamp(lightSum0, 0.0, 1.0);\n");
+				// v_color1 only exists when lmode = 1.
+				if (specularIsZero) {
+					WRITE(p, "  v_color1 = vec3(0.0);\n");
+				} else {
+					WRITE(p, "  v_color1 = clamp(lightSum1, 0.0, 1.0);\n");
+				}
 			} else {
-				WRITE(p, "  v_color0 = clamp(v_color0 + vec4(lightSum1, 0.0), 0.0, 1.0);\n");
+				if (specularIsZero) {
+					WRITE(p, "  v_color0 = clamp(lightSum0, 0.0, 1.0);\n");
+				} else {
+					WRITE(p, "  v_color0 = clamp(clamp(lightSum0, 0.0, 1.0) + vec4(lightSum1, 0.0), 0.0, 1.0);\n");
+				}
 			}
 		} else {
 			// Lighting doesn't affect color.
@@ -449,22 +501,31 @@ void GenerateVertexShader(int prim, char *buffer) {
 				break;
 
 			case 1:  // Projection mapping.
-				switch (gstate.getUVProjMode()) {
-				case 0:  // Use model space XYZ as source
-					WRITE(p, "  vec3 temp_tc = a_position.xyz;\n");
-					break;
-				case 1:  // Use unscaled UV as source
-					WRITE(p, "  vec3 temp_tc = vec3(a_texcoord.xy * 2.0, 0.0);\n");
-					break;
-				case 2:  // Use normalized transformed normal as source
-					WRITE(p, "  vec3 temp_tc = normalize(a_normal);\n");
-					break;
-				case 3:  // Use non-normalized transformed normal as source
-					WRITE(p, "  vec3 temp_tc = a_normal;\n");
-					break;
+				{
+					const char *temp_tc;
+					switch (gstate.getUVProjMode()) {
+					case 0:  // Use model space XYZ as source
+						temp_tc = "vec4(a_position.xyz, 1.0)";
+						break;
+					case 1:  // Use unscaled UV as source
+						temp_tc = "vec4(a_texcoord.xy * 2.0, 0.0, 1.0)";
+						break;
+					case 2:  // Use normalized transformed normal as source
+						if (hasNormal)
+							temp_tc = "vec4(normalize(a_normal), 1.0)";
+						else
+							temp_tc = "vec4(0.0, 0.0, 1.0, 1.0)";
+						break;
+					case 3:  // Use non-normalized transformed normal as source
+						if (hasNormal)
+							temp_tc = "vec4(a_normal, 1.0)";
+						else
+							temp_tc = "vec4(0.0, 0.0, 1.0, 1.0)";
+						break;
+					}
+					WRITE(p, "  v_texcoord = (u_texmtx * %s).xyz;\n", temp_tc);
 				}
 				// Transform by texture matrix. XYZ as we are doing projection mapping.
-				WRITE(p, "  v_texcoord = (u_texmtx * vec4(temp_tc, 1.0)).xyz;\n");
 				break;
 
 			case 2:  // Shade mapping - use dots from light sources.

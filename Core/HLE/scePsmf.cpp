@@ -779,18 +779,19 @@ int scePsmfPlayerGetAudioData(u32 psmfPlayer, u32 audioDataAddr)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
-	Memory::Memset(audioDataAddr, 0, audioSamplesBytes);
+	if (Memory::IsValidAddress(audioDataAddr))
+		Memory::Memset(audioDataAddr, 0, audioSamplesBytes);
 	return 0;
 }
 
 int scePsmfPlayerGetCurrentStatus(u32 psmfPlayer) 
 {
-	ERROR_LOG(HLE, "scePsmfPlayerGetCurrentStatus(%08x)", psmfPlayer);
 	PsmfPlayer *psmfplayer = getPsmfPlayer(psmfPlayer);
 	if (!psmfplayer) {
-		ERROR_LOG(HLE, "scePsmfPlayerUpdate - invalid psmf");
+		ERROR_LOG(HLE, "scePsmfPlayerGetCurrentStatus(%08x) - invalid psmf", psmfPlayer);
 		return ERROR_PSMF_NOT_FOUND;
 	}
+	ERROR_LOG(HLE, "%d=scePsmfPlayerGetCurrentStatus(%08x)", psmfplayer->status, psmfPlayer);
 	return psmfplayer->status;
 }
 

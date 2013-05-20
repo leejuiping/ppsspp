@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "CommonTypes.h"
 
 extern const char *PPSSPP_GIT_VERSION;
 

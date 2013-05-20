@@ -31,6 +31,8 @@
 #include "../../GPU/GPUInterface.h"
 #include "../../GPU/GPUState.h"
 
+#include "util/random/rng.h"
+
 #include "__sceAudio.h"
 #include "sceAtrac.h"
 #include "sceAudio.h"
@@ -64,6 +66,7 @@
 #include "sceImpose.h"
 #include "sceUsb.h"
 #include "scePspNpDrm_user.h"
+#include "sceVaudio.h"
 
 #include "../Util/PPGeDraw.h"
 
@@ -115,6 +118,7 @@ void __KernelInit()
 	__UsbInit();
 	__FontInit();
 	__NetInit();
+	__VaudioInit();
 	
 	SaveState::Init();  // Must be after IO, as it may create a directory
 
@@ -209,6 +213,7 @@ void __KernelDoState(PointerWrap &p)
 	__UmdDoState(p);
 	__UtilityDoState(p);
 	__UsbDoState(p);
+	__VaudioDoState(p);
 
 	__PPGeDoState(p);
 

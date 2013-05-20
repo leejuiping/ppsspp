@@ -115,6 +115,13 @@ enum {
 	PSP_DISPLAY_SETBUF_NEXTFRAME = 1
 };
 
+static int lastFpsFrame = 0;
+static double lastFpsTime = 0.0;
+static double fps = 0.0;
+static double fpsHistory[120];
+static size_t fpsHistoryPos = 0;
+static size_t fpsHistoryValid = 0;
+
 void hleEnterVblank(u64 userdata, int cyclesLate);
 void hleLeaveVblank(u64 userdata, int cyclesLate);
 void hleAfterFlip(u64 userdata, int cyclesLate);
@@ -142,6 +149,9 @@ void __DisplayInit() {
 	vCount = 0;
 	curFrameTime = 0.0;
 	nextFrameTime = 0.0;
+
+	fpsHistoryPos = 0;
+	fpsHistoryValid = 0;
 
 	InitGfxState();
 }
@@ -203,13 +213,23 @@ void __DisplayFireVblank() {
 	}
 }
 
-static double highestFps = 0.0;
-static int lastFpsFrame = 0;
-static double lastFpsTime = 0.0;
-static double fps = 0.0;
-
 void __DisplayGetFPS(float *out_vps, float *out_fps) {
 	*out_vps = *out_fps = fps;
+}
+
+void __DisplayGetAveragedFPS(float *out_vps, float *out_fps) {
+	float avg = 0.0;
+	if (fpsHistoryValid > 0) {
+		if (fpsHistoryValid > ARRAY_SIZE(fpsHistory)) {
+			fpsHistoryValid = ARRAY_SIZE(fpsHistory);
+		}
+		for (size_t i = 0; i < fpsHistoryValid; ++i) {
+			avg += fpsHistory[i];
+		}
+		avg /= (double) fpsHistoryValid;
+	}
+
+	*out_vps = *out_fps = avg;
 }
 
 void CalculateFPS()
@@ -220,11 +240,13 @@ void CalculateFPS()
 	if (now >= lastFpsTime + 1.0)
 	{
 		fps = (gpuStats.numFrames - lastFpsFrame) / (now - lastFpsTime);
-		if (fps > highestFps)
-			highestFps = fps;
 
 		lastFpsFrame = gpuStats.numFrames;	
 		lastFpsTime = now;
+
+		fpsHistory[fpsHistoryPos++] = fps;
+		fpsHistoryPos = fpsHistoryPos % ARRAY_SIZE(fpsHistory);
+		++fpsHistoryValid;
 	}
 }
 
@@ -277,14 +299,17 @@ void __DisplayGetDebugStats(char stats[2048])
 	kernelStats.ResetFrame();
 }
 
+enum {
+	FPS_LIMIT_NORMAL = 0,
+	FPS_LIMIT_CUSTOM = 1,
+	FPS_LIMIT_TURBO = 2,
+};
+
 // Let's collect all the throttling and frameskipping logic here.
-void DoFrameTiming(bool &throttle, bool &skipFrame, int &fpsLimiter, double &customLimiter) {
-	throttle = !PSP_CoreParameter().unthrottle;
-	fpsLimiter = PSP_CoreParameter().fpsLimit;
-	customLimiter = g_Config.iFpsLimit;
+void DoFrameTiming(bool &throttle, bool &skipFrame) {
+	int fpsLimiter = PSP_CoreParameter().fpsLimit;
+	throttle = !PSP_CoreParameter().unthrottle && fpsLimiter != FPS_LIMIT_TURBO;
 	skipFrame = false;
-	if (PSP_CoreParameter().headLess)
-		throttle = false;
 
 	// Check if the frameskipping code should be enabled. If neither throttling or frameskipping is on,
 	// we have nothing to do here.
@@ -325,7 +350,7 @@ void DoFrameTiming(bool &throttle, bool &skipFrame, int &fpsLimiter, double &cus
 		if (nextFrameTime - curFrameTime > 1.0 / 30.0) {
 			nextFrameTime = curFrameTime + 1.0 / 60.0;
 		} else {
-			// Wait until we've catched up.
+			// Wait until we've caught up.
 			while (time_now_d() < nextFrameTime) {
 				Common::SleepCurrentThread(1);
 				time_update();
@@ -338,15 +363,13 @@ void DoFrameTiming(bool &throttle, bool &skipFrame, int &fpsLimiter, double &cus
 	const double maxFallBehindFrames = 5.5;
 
 	// 3 states of fps limiter
-	if (fpsLimiter == 0) {
+	if (fpsLimiter == FPS_LIMIT_NORMAL) {
 		nextFrameTime = std::max(nextFrameTime + 1.0 / 60.0, time_now_d() - maxFallBehindFrames / 60.0);
-	} else if (fpsLimiter == 1) {
+	} else if (fpsLimiter == FPS_LIMIT_CUSTOM) {
+		double customLimiter = g_Config.iFpsLimit;
 		nextFrameTime = std::max(nextFrameTime + 1.0 / customLimiter, time_now_d() - maxFallBehindFrames / customLimiter);
-	} else if (fpsLimiter == 2) {
-		return;
-	}
-	else {
-		nextFrameTime = nextFrameTime + 1.0 / 60;
+	} else {
+		nextFrameTime = nextFrameTime + 1.0 / 60.0;
 	}
 
 	// Max 4 skipped frames in a row - 15 fps is really the bare minimum for playability.
@@ -409,10 +432,7 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 	gstate_c.skipDrawReason &= ~SKIPDRAW_SKIPFRAME;
 
 	bool throttle, skipFrame;
-	int fpsLimiter;
-	double customLimiter;
-	
-	DoFrameTiming(throttle, skipFrame, fpsLimiter, customLimiter);
+	DoFrameTiming(throttle, skipFrame);
 
 	if (skipFrame) {
 		gstate_c.skipDrawReason |= SKIPDRAW_SKIPFRAME;
@@ -657,7 +677,7 @@ u32 sceDisplaySetHoldMode(u32 hMode) {
 
 const HLEFunction sceDisplay[] = {
 	{0x0E20F177,WrapU_III<sceDisplaySetMode>, "sceDisplaySetMode"},
-	{0x289D82FE,WrapU_UIII<sceDisplaySetFramebuf>, "sceDisplaySetFramebuf"},
+	{0x289D82FE,WrapU_UIII<sceDisplaySetFramebuf>, "sceDisplaySetFrameBuf"},
 	{0xEEDA2E54,WrapU_UUUI<sceDisplayGetFramebuf>,"sceDisplayGetFrameBuf"},
 	{0x36CDFADE,WrapU_V<sceDisplayWaitVblank>, "sceDisplayWaitVblank"},
 	{0x984C27E7,WrapU_V<sceDisplayWaitVblankStart>, "sceDisplayWaitVblankStart"},

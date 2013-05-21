@@ -48,7 +48,7 @@ u32 sceVaudioChReserve(int sampleCount, int freq, int format) {
 	DEBUG_LOG(HLE, "sceVaudioChReserve(%i, %i, %i)", sampleCount, freq, format);
 	chans[PSP_AUDIO_CHANNEL_VAUDIO].reserved = true;
 	chans[PSP_AUDIO_CHANNEL_VAUDIO].sampleCount = sampleCount;
-	chans[PSP_AUDIO_CHANNEL_VAUDIO].format = format;
+	chans[PSP_AUDIO_CHANNEL_VAUDIO].format = format == 2 ? PSP_AUDIO_FORMAT_STEREO : PSP_AUDIO_FORMAT_MONO;
 	chans[PSP_AUDIO_CHANNEL_VAUDIO].leftVolume = 0;
 	chans[PSP_AUDIO_CHANNEL_VAUDIO].rightVolume = 0;
 	vaudioReserved = true;
@@ -61,6 +61,7 @@ u32 sceVaudioChRelease() {
 	if (!chans[PSP_AUDIO_CHANNEL_VAUDIO].reserved) {
 		return SCE_ERROR_AUDIO_CHANNEL_NOT_RESERVED;
 	} else {
+		chans[PSP_AUDIO_CHANNEL_VAUDIO].reset();
 		chans[PSP_AUDIO_CHANNEL_VAUDIO].reserved = false;
 		vaudioReserved = false;
 		return 0;

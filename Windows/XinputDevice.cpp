@@ -1,4 +1,4 @@
-#include <limits.h>
+﻿#include <limits.h>
 #include "Core/Config.h"
 #include "input/input_state.h"
 #include "XinputDevice.h"
@@ -90,35 +90,36 @@ int XinputDevice::UpdateState(InputState &input_state) {
 	}
 }
 
-// We only filter the left stick since PSP has no analog triggers or right stick
-static Stick NormalizedDeadzoneFilter(short x, short y) {
-	static const short DEADZONE = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
-	Stick left;
-	left.x = x;
-	left.y = y;
-
-	float magnitude = sqrt(left.x*left.x + left.y*left.y);
-
-	Stick norm;
-	norm.x = left.x / magnitude;
-	norm.y = left.y / magnitude;
-
-	if (magnitude > DEADZONE) {
-		if (magnitude > 32767) magnitude = 32767;
-		// normalize the magnitude
-		magnitude -= DEADZONE;
-		magnitude /= (32767 - DEADZONE);
-
-		// normalize the axis
-		left.x = norm.x * magnitude;
-		left.y = norm.y * magnitude;
-	} else {
-		left.x = left.y = 0;
-	}
-
-	return left;
+inline float Clampf(float val, float min, float max) {
+	if (val < min) return min;
+	if (val > max) return max;
+	return val;
 }
 
+// We only filter the left stick since PSP has no analog triggers or right stick
+static Stick NormalizedDeadzoneFilter(short x, short y) {
+	static const float DEADZONE = (float)XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE / 32767.0f;
+	Stick s;
+
+	s.x = (float)x / 32767.0f;
+	s.y = (float)y / 32767.0f;
+
+	float magnitude = sqrtf(s.x * s.x + s.y * s.y);
+	
+	if (magnitude > DEADZONE) {
+		if (magnitude > 1.0f) {
+			s.x *= 1.41421f;
+			s.y *= 1.41421f;
+		}
+
+		s.x = Clampf(s.x, -1.0f, 1.0f);
+		s.y = Clampf(s.y, -1.0f, 1.0f);
+	} else {
+		s.x = 0.0f;
+		s.y = 0.0f;
+	}
+	return s;
+}
 
 
 struct xinput_button_name {

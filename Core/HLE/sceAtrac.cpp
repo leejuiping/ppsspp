@@ -113,7 +113,7 @@ struct Atrac {
 		pFrame = 0;
 #endif // USE_FFMPEG
 		decoder_context = 0;
-		sampleQueue.empty();
+		sampleQueue.clear();
 	}
 
 	~Atrac() {
@@ -130,7 +130,7 @@ struct Atrac {
 		data_buf = 0;
 
 		Atrac3plus_Decoder::closeContext(&decoder_context);
-		sampleQueue.empty();
+		sampleQueue.clear();
 	}
 
 	void DoState(PointerWrap &p) {
@@ -545,7 +545,7 @@ u32 sceAtracDecodeData(int atracID, u32 outAddr, u32 numSamplesAddr, u32 finishF
 					inbytes = std::min(inbytes, (int)atrac->atracBytesPerFrame);
 					if (inbytes > 0) {
 						Atrac3plus_Decoder::atrac3plus_decode(atrac->decoder_context, atrac->data_buf + atrac->decodePos, inbytes, &decodebytes, buf);
-						INFO_LOG(HLE, "decodebytes: %i outbuf: %08p", decodebytes, buf);
+						DEBUG_LOG(HLE, "decodebytes: %i outbuf: %08p", decodebytes, buf);
 						atrac->sampleQueue.push(buf, decodebytes);
 					}
 				}

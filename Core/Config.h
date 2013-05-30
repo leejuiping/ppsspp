@@ -80,6 +80,8 @@ public:
 	bool bTexDeposterize;
 	int iFpsLimit;
 	int iMaxRecent;
+	bool bEnableCheats;
+	bool bReloadCheats;
 
 	// Sound
 	bool bEnableSound;
@@ -113,6 +115,7 @@ public:
 	std::string currentDirectory;
 	std::string memCardDirectory;
 	std::string flashDirectory;
+	std::string internalDataDirectory;
 
 	void Load(const char *iniFileName = "ppsspp.ini");
 	void Save();

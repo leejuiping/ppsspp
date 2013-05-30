@@ -51,10 +51,6 @@ bool Load_PSP_ISO(const char *filename, std::string *error_string)
 	pspFileSystem.Mount("umd1:", umd2);
 	pspFileSystem.Mount("disc0:", umd2);
 	pspFileSystem.Mount("umd:", umd2);
-	pspFileSystem.Mount("UMD1:", umd2);
-	pspFileSystem.Mount("UMD0:", umd2);
-	pspFileSystem.Mount("DISC0:", umd2);
-	pspFileSystem.Mount("UMD:", umd2);
 
 	std::string sfoPath("disc0:/PSP_GAME/PARAM.SFO");
 	PSPFileInfo fileInfo = pspFileSystem.GetFileInfo(sfoPath.c_str());
@@ -79,9 +75,6 @@ bool Load_PSP_ISO(const char *filename, std::string *error_string)
 	// bypass patchers
 	if (pspFileSystem.GetFileInfo("disc0:/PSP_GAME/SYSDIR/EBOOT.OLD").exists) {
 		bootpath = "disc0:/PSP_GAME/SYSDIR/EBOOT.OLD";
-	}
-	if (pspFileSystem.GetFileInfo("disc0:/PSP_GAME/SYSDIR/EBOOT_LRC_CH.BIN").exists) {
-		bootpath = "disc0:/PSP_GAME/SYSDIR/EBOOT_LRC_CH.BIN";
 	}
 	// bypass another patchers
 	if (pspFileSystem.GetFileInfo("disc0:/PSP_GAME/SYSDIR/EBOOT.DAT").exists) {

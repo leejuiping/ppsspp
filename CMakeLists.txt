@@ -443,7 +443,10 @@ elseif(IOS)
 		ios/ViewController.mm
 		ios/ViewController.h
 		ios/AudioEngine.mm
-		ios/AudioEngine.h)
+		ios/AudioEngine.h
+		ios/iCade/iCadeReaderView.h
+		ios/iCade/iCadeReaderView.m
+		ios/iCade/iCadeState.h)
 	set(nativeExtraLibs ${nativeExtraLibs} "-framework Foundation -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework UIKit -framework GLKit -framework OpenAL")
 	set(TargetBin PPSSPP)
 elseif(USING_QT_UI)
@@ -503,6 +506,7 @@ add_library(native STATIC
 	native/base/error_context.h
 	native/base/fastlist.h
 	native/base/fastlist_test.cpp
+	native/base/functional.h
 	native/base/linked_ptr.h
 	native/base/logging.h
 	native/base/mutex.h
@@ -583,6 +587,8 @@ add_library(native STATIC
 	native/net/http_client.h
 	native/net/resolve.cpp
 	native/net/resolve.h
+	native/net/url.cpp
+	native/net/url.h
 	native/profiler/profiler.cpp
 	native/profiler/profiler.h
 	native/thread/prioritizedworkqueue.cpp
@@ -695,8 +701,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/CoreParameter.h
 	Core/CoreTiming.cpp
 	Core/CoreTiming.h
-	Core/Cwcheat.cpp
-	Core/Cwcheat.h
+	Core/CwCheat.cpp
+	Core/CwCheat.h
 	Core/Debugger/Breakpoints.cpp
 	Core/Debugger/Breakpoints.h
 	Core/Debugger/DebugInterface.h

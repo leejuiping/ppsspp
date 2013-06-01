@@ -128,7 +128,8 @@ void Config::Load(const char *iniFileName)
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
-
+	sound->Get("EnableAtrac3plus", &bEnableAtrac3plus, true);
+	
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 	control->Get("ShowStick", &bShowAnalogStick, false);
 #ifdef BLACKBERRY10
@@ -169,7 +170,11 @@ void Config::Save()
 		}
 
 		IniFile::Section *general = iniFile.GetOrCreateSection("General");
+		
+		// Need to do this somewhere...
+		bFirstRun = false;
 		general->Set("FirstRun", bFirstRun);
+
 		general->Set("AutoLoadLast", bAutoLoadLast);
 		general->Set("AutoRun", bAutoRun);
 		general->Set("Browse", bBrowse);
@@ -218,7 +223,8 @@ void Config::Save()
 
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);
-
+		sound->Set("EnableAtrac3plus", bEnableAtrac3plus);
+		
 		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 		control->Set("ShowStick", bShowAnalogStick);
 		control->Set("ShowTouchControls", bShowTouchControls);

@@ -33,9 +33,10 @@ public:
 	// Whether to save the config on close.
 	bool bSaveSettings;
 
+	bool bFirstRun;
+
 	// These are broken
 	bool bAutoLoadLast;
-	bool bFirstRun;
 	bool bSpeedLimit;
 	bool bConfirmOnQuit;
 	bool bAutoRun;  // start immediately
@@ -85,7 +86,8 @@ public:
 
 	// Sound
 	bool bEnableSound;
-
+	bool bEnableAtrac3plus;
+	
 	// UI
 	bool bShowTouchControls;
 	bool bShowDebuggerOnLoad;

@@ -295,6 +295,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	}
 
 #if defined(ANDROID)
+	g_Config.internalDataDirectory = savegame_directory;
 	// Maybe there should be an option to use internal memory instead, but I think
 	// that for most people, using external memory (SDCard/USB Storage) makes the
 	// most sense.
@@ -444,16 +445,9 @@ bool NativeIsAtTopLevel()
 	return false;
 }
 
-void NativeTouch(int finger, float x, float y, double time, TouchEvent event)
+void NativeTouch(const TouchInput &touch)
 {
-	switch (event) {
-	case TOUCH_DOWN:
-		break;
-	case TOUCH_MOVE:
-		break;
-	case TOUCH_UP:
-		break;
-	}
+	screenManager->touch(touch);
 }
 
 void NativeMessageReceived(const char *message, const char *value)
@@ -486,7 +480,6 @@ void NativeShutdownGraphics()
 
 void NativeShutdown()
 {
-	i18nrepo.SaveIni("D:\\lang.ini");
 	g_gameInfoCache.Shutdown();
 
 	delete host;

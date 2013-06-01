@@ -611,7 +611,7 @@ void PSPOskDialog::RemoveKorean()
 		{
 			if(kor_lconsCom[i] == i_value[2])
 			{
-				tmp = kor_vowelCom[i - 1];
+				tmp = kor_lconsCom[i - 1];
 				break;
 			}
 		}
@@ -860,6 +860,16 @@ static void DoBasePointer(PointerWrap &p, T **ptr)
 	else
 		*ptr = Memory::GetStruct<T>(addr);
 
+}
+
+int PSPOskDialog::Shutdown(bool force)
+{
+    if (status != SCE_UTILITY_STATUS_FINISHED && !force)
+        return SCE_ERROR_UTILITY_INVALID_STATUS;
+
+    PSPDialog::Shutdown();
+
+    return 0;
 }
 
 void PSPOskDialog::DoState(PointerWrap &p)

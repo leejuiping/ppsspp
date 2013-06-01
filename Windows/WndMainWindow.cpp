@@ -202,6 +202,9 @@ namespace MainWindow
 	void setFpsLimit(int fps) {
 		g_Config.iFpsLimit = fps;
 	}
+	void enableCheats(bool cheats){
+		g_Config.bEnableCheats = cheats;
+	}
 
 	BOOL Show(HINSTANCE hInstance, int nCmdShow)
 	{

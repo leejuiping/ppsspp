@@ -63,7 +63,9 @@ void Config::Load(const char *iniFileName)
 	general->Get("ShowDebuggerOnLoad", &bShowDebuggerOnLoad, false);
 	general->Get("Language", &languageIni, "en_US");
 	general->Get("NumWorkerThreads", &iNumWorkerThreads, cpu_info.num_cores);
+	general->Get("EnableCheats", &bEnableCheats, false);
 	general->Get("MaxRecent", &iMaxRecent, 12);
+
 	// Fix issue from switching from uint (hex in .ini) to int (dec)
 	if (iMaxRecent == 0)
 		iMaxRecent = 12;
@@ -126,7 +128,6 @@ void Config::Load(const char *iniFileName)
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
-	sound->Get("AutoLoadDShow", &bAutoLoadDShow, false);
 
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 	control->Get("ShowStick", &bShowAnalogStick, false);
@@ -184,6 +185,7 @@ void Config::Save()
 		general->Set("Language", languageIni);
 		general->Set("NumWorkerThreads", iNumWorkerThreads);
 		general->Set("MaxRecent", iMaxRecent);
+		general->Set("EnableCheats", bEnableCheats);
 
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 		cpu->Set("Jit", bJit);
@@ -216,7 +218,6 @@ void Config::Save()
 
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);
-		sound->Set("AutoLoadDShow", bAutoLoadDShow);
 
 		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 		control->Set("ShowStick", bShowAnalogStick);

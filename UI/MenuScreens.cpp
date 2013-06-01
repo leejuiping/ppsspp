@@ -179,6 +179,9 @@ void LogoScreen::render() {
 //		Menu Screen
 // ==================
 
+MenuScreen::MenuScreen() : frames_(0) {
+}
+
 void MenuScreen::update(InputState &input_state) {
 	globalUIState = UISTATE_MENU;
 	frames_++;
@@ -339,6 +342,8 @@ void PauseScreen::update(InputState &input) {
 void PauseScreen::sendMessage(const char *msg, const char *value) {
 	if (!strcmp(msg, "run")) {
 		screenManager()->finishDialog(this, DR_CANCEL);
+	} else if (!strcmp(msg, "stop")) {
+		screenManager()->finishDialog(this, DR_OK);
 	}
 }
 
@@ -778,22 +783,22 @@ void GraphicsScreenP2::render() {
 		if (g_Config.iTexScalingLevel <= 1)
 			g_Config.iTexScalingLevel = 2;
 		ui_draw2d.DrawText(UBUNTU24, gs->T("Type  :"), x + 60, y += stride, 0xFFFFFFFF, ALIGN_LEFT);
-		HLinear hlinear1(x + 180 , y - 5, 20);
+		HLinear hlinear1(x + 180 , y + 5, 20);
 		if (UIButton(GEN_ID, hlinear1, 80, 0, gs->T("xBRZ"), ALIGN_LEFT))
 			g_Config.iTexScalingType = 0;
 		if (UIButton(GEN_ID, hlinear1, 150, 0, gs->T("Hybrid", "Hybrid(H)"), ALIGN_LEFT))
 			g_Config.iTexScalingType = 1;
 		if (UIButton(GEN_ID, hlinear1, 150, 0, gs->T("Bicubic", "Bicubic(B)"), ALIGN_LEFT))
 			g_Config.iTexScalingType = 2;
-		if (UIButton(GEN_ID, hlinear1, 120, 0, gs->T("H+B", "H+B"), ALIGN_LEFT))
+		if (UIButton(GEN_ID, hlinear1, 80, 0, gs->T("H+B", "H+B"), ALIGN_LEFT))
 			g_Config.iTexScalingType = 3;
-		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, (y += stride) + 15, 0xFFFFFFFF, ALIGN_LEFT);
-		HLinear hlinear2(x + 180 , y + 10, 20);
+		ui_draw2d.DrawText(UBUNTU24, gs->T("Level :"), x + 60, (y += stride) + 25, 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear2(x + 180 , y + 25, 20);
 		if (UIButton(GEN_ID, hlinear2, 45, 0, gs->T("2x"), ALIGN_LEFT))
 			g_Config.iTexScalingLevel = 2;
 		if (UIButton(GEN_ID, hlinear2, 45, 0, gs->T("3x"), ALIGN_LEFT))
 			g_Config.iTexScalingLevel = 3;
-		UICheckBox(GEN_ID, x + 60, y += stride + 25, gs->T("Deposterize"), ALIGN_LEFT, &g_Config.bTexDeposterize);
+		UICheckBox(GEN_ID, x + 60, y += stride + 45, gs->T("Deposterize"), ALIGN_LEFT, &g_Config.bTexDeposterize);
 	} else {
 		g_Config.iTexScalingLevel = 1;
 	}
@@ -939,16 +944,20 @@ void SystemScreen::render() {
 	if (UICheckBox(GEN_ID, x, y += stride, s->T("12HR Time Format"), ALIGN_TOPLEFT, &tf)) {
 		g_Config.itimeformat = tf ? 1 : 0;
 	}
-
+	UICheckBox(GEN_ID, x, y += stride, s->T("Enable Cheats"), ALIGN_TOPLEFT, &g_Config.bEnableCheats);
+	HLinear hlinear2(x, y+110, 20);
+	if (UIButton(GEN_ID, hlinear2, 210, 0, "Reload Cheats", ALIGN_TOPLEFT)) {
+		g_Config.bReloadCheats = true;
+	}
 	bool reportingEnabled = Reporting::IsEnabled();
 	const static std::string reportHostOfficial = "report.ppsspp.org";
 	if (UICheckBox(GEN_ID, x, y += stride, s->T("Enable Compatibility Server Reports"), ALIGN_TOPLEFT, &reportingEnabled)) {
 		g_Config.sReportHost = reportingEnabled ? reportHostOfficial : "";
 	}
-
-	if (UIButton(GEN_ID, Pos(x, y += stride * 3), LARGE_BUTTON_WIDTH, 0, s->T("Language"), ALIGN_BOTTOMLEFT)) {
-		screenManager()->push(new LanguageScreen());
-	}
+	if (UIButton(GEN_ID, Pos(x+300, y += stride * 3), LARGE_BUTTON_WIDTH, 0, s->T("Language"), ALIGN_BOTTOMLEFT)) {
+    screenManager()->push(new LanguageScreen());
+  } 
+	
 	UIEnd();
 }
 

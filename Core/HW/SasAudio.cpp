@@ -22,12 +22,26 @@
 
 // #define AUDIO_TO_FILE
 
-static const s8 f[5][2] =
-{ { 0, 0 },
-{	 60,	0 },
-{	115, -52 },
-{	 98, -55 },
-{	122, -60 } };
+static const s8 f[16][2] = {
+	{   0,   0 },
+	{  60,	 0 },
+	{ 115, -52 },
+	{  98, -55 },
+	{ 122, -60 },
+
+	// Padding to prevent overflow.
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+	{   0,   0 },
+};
 
 void VagDecoder::Start(u32 data, int vagSize, bool loopEnabled) {
 	loopEnabled_ = loopEnabled;
@@ -47,11 +61,9 @@ void VagDecoder::DecodeBlock(u8 *&readp) {
 	int predict_nr = *readp++;
 	int shift_factor = predict_nr & 0xf;
 	predict_nr >>= 4;
-	if (predict_nr >= sizeof(f) / sizeof(f[0])) {
-		predict_nr = 0;
-	}
 	int flags = *readp++;
 	if (flags == 7) {
+		VERBOSE_LOG(SAS, "VAG ending block at %d", curBlock_);
 		end_ = true;
 		return;
 	}
@@ -66,20 +78,21 @@ void VagDecoder::DecodeBlock(u8 *&readp) {
 	for (int i = 0; i < 28; i += 2) {
 		int d = *readp++;
 		int s = (short)((d & 0xf) << 12);
-		samples[i] = s >> shift_factor;
+		DecodeSample(i, s >> shift_factor, predict_nr);
 		s = (short)((d & 0xf0) << 8);
-		samples[i + 1] = s >> shift_factor;
-	}
-	for (int i = 0; i < 28; i++) {
-		samples[i] = (int) (samples[i] + ((s_1 * f[predict_nr][0] + s_2 * f[predict_nr][1]) >> 6));
-		s_2 = s_1;
-		s_1 = samples[i];
+		DecodeSample(i + 1, s >> shift_factor, predict_nr);
 	}
 	curSample = 0;
 	curBlock_++;
 	if (curBlock_ == numBlocks_) {
 		end_ = true;
 	}
+}
+
+inline void VagDecoder::DecodeSample(int i, int sample, int predict_nr) {
+	samples[i] = (int) (sample + ((s_1 * f[predict_nr][0] + s_2 * f[predict_nr][1]) >> 6));
+	s_2 = s_1;
+	s_1 = samples[i];
 }
 
 void VagDecoder::GetSamples(s16 *outSamples, int numSamples) {
@@ -90,17 +103,20 @@ void VagDecoder::GetSamples(s16 *outSamples, int numSamples) {
 	u8 *readp = Memory::GetPointer(read_);
 	if (!readp)
 	{
-		WARN_LOG(HLE, "Bad VAG samples address?");
+		WARN_LOG(SAS, "Bad VAG samples address?");
 		return;
 	}
 	u8 *origp = readp;
 	for (int i = 0; i < numSamples; i++) {
 		if (curSample == 28) {
 			if (loopAtNextBlock_) {
-				read_ = data_ + 16 * loopStartBlock_;
+				VERBOSE_LOG(SAS, "Looping VAG from block %d/%d to %d", curBlock_, numBlocks_, loopStartBlock_);
+				// data_ starts at curBlock = -1.
+				read_ = data_ + 16 * loopStartBlock_ + 16;
 				readp = Memory::GetPointer(read_);
 				origp = readp;
 				curBlock_ = loopStartBlock_;
+				loopAtNextBlock_ = false;
 			}
 			DecodeBlock(readp);
 			if (end_) {
@@ -468,6 +484,7 @@ void SasVoice::KeyOn() {
 void SasVoice::KeyOff() {
 	on = false;
 	envelope.KeyOff();
+	vag.SetLoop(false);
 }
 
 void SasVoice::ChangedParams(bool changedVag) {
@@ -491,6 +508,7 @@ void SasVoice::DoState(PointerWrap &p)
 	p.Do(vagSize);
 	p.Do(pcmAddr);
 	p.Do(pcmSize);
+	p.Do(pcmIndex);
 	p.Do(sampleRate);
 
 	p.Do(sampleFrac);

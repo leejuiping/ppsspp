@@ -845,7 +845,7 @@ u32 __KernelInterruptReturnAddress()
 	return intReturnHackAddr;
 }
 
-u32 __KernelSetThreadRA(SceUID threadID, int nid)
+u32 __KernelSetThreadRA(SceUID threadID, u32 nid)
 {
 	u32 newRA;
 	switch (nid)
@@ -923,7 +923,7 @@ void __KernelThreadingInit()
 	Memory::Memcpy(idleThreadHackAddr, idleThreadCode, sizeof(idleThreadCode));
 
 	u32 pos = idleThreadHackAddr + sizeof(idleThreadCode);
-	for (int i = 0; i < ARRAY_SIZE(threadHacks); ++i) {
+	for (size_t i = 0; i < ARRAY_SIZE(threadHacks); ++i) {
 		__KernelWriteFakeSysCall(threadHacks[i].nid, threadHacks[i].addr, pos);
 	}
 
@@ -2957,11 +2957,14 @@ void __KernelSwitchContext(Thread *target, const char *reason)
 			oldUID, oldPC, currentThread, currentMIPS->pc);
 	}
 
-	// No longer waiting.
-	target->nt.waitType = WAITTYPE_NONE;
-	target->nt.waitID = 0;
+	if (target)
+	{
+		// No longer waiting.
+		target->nt.waitType = WAITTYPE_NONE;
+		target->nt.waitID = 0;
 
-	__KernelExecutePendingMipsCalls(target, true);
+		__KernelExecutePendingMipsCalls(target, true);
+	}
 }
 
 void __KernelChangeThreadState(Thread *thread, ThreadStatus newStatus) {

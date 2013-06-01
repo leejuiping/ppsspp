@@ -129,9 +129,15 @@ if(NOT MSVC)
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 	add_definitions(-Wno-multichar)
 	add_definitions(-fno-strict-aliasing)
-	add_definitions(-ffast-math)
+	if (CMAKE_C_COMPILER_ID STREQUAL "Intel")
+		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -parallel -fopenmp")
+	else()
+		add_definitions(-ffast-math)
+	endif()
 	if(NOT APPLE)
-		add_definitions(-Wno-psabi)
+		if (NOT CMAKE_C_COMPILER_ID STREQUAL "Intel")
+			add_definitions(-Wno-psabi)
+		endif()
 		add_definitions(-D_XOPEN_SOURCE=600 -D_XOPEN_SOURCE_EXTENDED -D__BSD_VISIBLE=1)
 		add_definitions(-D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64)
 	endif()
@@ -437,7 +443,10 @@ elseif(IOS)
 		ios/ViewController.mm
 		ios/ViewController.h
 		ios/AudioEngine.mm
-		ios/AudioEngine.h)
+		ios/AudioEngine.h
+		ios/iCade/iCadeReaderView.h
+		ios/iCade/iCadeReaderView.m
+		ios/iCade/iCadeState.h)
 	set(nativeExtraLibs ${nativeExtraLibs} "-framework Foundation -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework UIKit -framework GLKit -framework OpenAL")
 	set(TargetBin PPSSPP)
 elseif(USING_QT_UI)
@@ -449,7 +458,7 @@ elseif(USING_QT_UI)
 	set(nativeExtraLibs ${nativeExtraLibs} ${QT_LIBRARIES})
 	set(TargetBin PPSSPPQt)
 elseif(BLACKBERRY)
-	set(nativeExtra ${nativeExtra} native/base/BlackberryMain.cpp)
+	set(nativeExtra ${nativeExtra} native/base/BlackberryMain.cpp native/base/BlackberryDisplay.cpp)
 	set(nativeExtraLibs ${nativeExtraLibs} OpenAL bps screen socket EGL)
 	# FFMPEG
 	add_definitions(-DUSE_FFMPEG)
@@ -497,6 +506,7 @@ add_library(native STATIC
 	native/base/error_context.h
 	native/base/fastlist.h
 	native/base/fastlist_test.cpp
+	native/base/functional.h
 	native/base/linked_ptr.h
 	native/base/logging.h
 	native/base/mutex.h
@@ -577,6 +587,8 @@ add_library(native STATIC
 	native/net/http_client.h
 	native/net/resolve.cpp
 	native/net/resolve.h
+	native/net/url.cpp
+	native/net/url.h
 	native/profiler/profiler.cpp
 	native/profiler/profiler.h
 	native/thread/prioritizedworkqueue.cpp
@@ -689,6 +701,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/CoreParameter.h
 	Core/CoreTiming.cpp
 	Core/CoreTiming.h
+	Core/CwCheat.cpp
+	Core/CwCheat.h
 	Core/Debugger/Breakpoints.cpp
 	Core/Debugger/Breakpoints.h
 	Core/Debugger/DebugInterface.h
@@ -832,12 +846,15 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceNp.h
 	Core/HLE/scePauth.cpp
 	Core/HLE/scePauth.h
+	Core/HW/atrac3plus.cpp
+	Core/HW/atrac3plus.h
 	Core/HW/MediaEngine.cpp
 	Core/HW/MediaEngine.h
 	Core/HW/MemoryStick.cpp
 	Core/HW/MemoryStick.h
 	Core/HW/SasAudio.cpp
 	Core/HW/SasAudio.h
+	Core/HW/atrac3plus.cpp
 	Core/Host.cpp
 	Core/Host.h
 	Core/Loaders.cpp

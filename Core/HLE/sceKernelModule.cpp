@@ -296,6 +296,7 @@ void __KernelModuleShutdown()
 {
 	unresolvedVars.clear();
 	exportedVars.clear();
+	MIPSAnalyst::Shutdown();
 }
 
 void WriteVarSymbol(u32 exportAddress, u32 relocAddress, u8 type)
@@ -1059,6 +1060,13 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr)
 	return hleDelayResult(module->GetUID(), "module loaded", 500);
 }
 
+u32 sceKernelLoadModuleNpDrm(const char *name, u32 flags, u32 optionAddr)
+{
+	DEBUG_LOG(LOADER, "sceKernelLoadModuleNpDrm(%s, %08x)", name, flags);
+
+	return sceKernelLoadModule(name, flags, optionAddr);
+}
+
 void sceKernelStartModule(u32 moduleId, u32 argsize, u32 argAddr, u32 returnValueAddr, u32 optionAddr)
 {
 	u32 priority = 0x20;
@@ -1095,21 +1103,22 @@ void sceKernelStartModule(u32 moduleId, u32 argsize, u32 argAddr, u32 returnValu
 		int attribute = module->nm.attribute;
 		u32 entryAddr = module->nm.entry_addr;
 
-		if ((entryAddr == -1) || entryAddr == module->memoryBlockAddr - 1)
+		if (module->nm.module_start_func != 0 && module->nm.module_start_func != (u32)-1)
 		{
-			if (module->nm.module_start_func != 0 && module->nm.module_start_func != (u32)-1)
+			entryAddr = module->nm.module_start_func;
+			attribute = module->nm.module_start_thread_attr;
+		}
+		else if ((entryAddr == (u32)-1) || entryAddr == module->memoryBlockAddr - 1)
+		{
+			if (optionAddr)
 			{
-				entryAddr = module->nm.module_start_func;
-				attribute = module->nm.module_start_thread_attr;
-			}
-			else if (optionAddr)
-			{
+				// TODO: Does sceKernelStartModule() really give an error when no entry only if you pass options?
 				attribute = smoption.attribute;
 			}
 			else
 			{
 				// TODO: Why are we just returning the module ID in this case?
-				ERROR_LOG_REPORT(HLE, "sceKernelStartModule(): doing nothing for some reason?");
+				WARN_LOG(HLE, "sceKernelStartModule(): module has no start or entry func");
 				RETURN(moduleId);
 				return;
 			}
@@ -1423,7 +1432,7 @@ const HLEFunction ModuleMgrForUser[] =
 	{0x8f2df740,WrapU_UUUUU<sceKernelStopUnloadSelfModuleWithStatus>,"sceKernelStopUnloadSelfModuleWithStatus"},
 	{0xfef27dc1,&WrapU_CU<sceKernelLoadModuleDNAS> , "sceKernelLoadModuleDNAS"},
 	{0x644395e2,0,"sceKernelGetModuleIdList"},
-	{0xf2d8d1b4,0,"ModuleMgrForUser_F2D8D1B4"},
+	{0xf2d8d1b4,&WrapU_CUU<sceKernelLoadModuleNpDrm>,"sceKernelLoadModuleNpDrm"},
 };
 
 

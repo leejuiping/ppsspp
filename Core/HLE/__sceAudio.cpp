@@ -19,7 +19,7 @@
 #include "sceAudio.h"
 #include "sceKernel.h"
 #include "sceKernelThread.h"
-#include "StdMutex.h"
+#include "base/mutex.h"
 #include "CommonTypes.h"
 #include "../CoreTiming.h"
 #include "../MemMap.h"
@@ -30,7 +30,7 @@
 #include "Common/Thread.h"
 
 // Should be used to lock anything related to the outAudioQueue.
-std::recursive_mutex section;
+recursive_mutex section;
 
 int eventAudioUpdate = -1;
 int eventHostAudioUpdate = -1;
@@ -48,6 +48,18 @@ const int chanQueueMaxSizeFactor = 2;
 const int chanQueueMinSizeFactor = 1;
 
 FixedSizeQueue<s16, hostAttemptBlockSize * 16> outAudioQueue;
+
+static inline s16 clamp_s16(int i) {
+	if (i > 32767)
+		return 32767;
+	if (i < -32768)
+		return -32768;
+	return i;
+}
+
+static inline s16 adjustvolume(s16 sample, int vol) {
+	return clamp_s16((sample * vol) >> 15);
+}
 
 void hleAudioUpdate(u64 userdata, int cyclesLate)
 {
@@ -84,9 +96,10 @@ void __AudioDoState(PointerWrap &p)
 
 	p.Do(mixFrequency);
 
-	section.lock();
-	outAudioQueue.DoState(p);
-	section.unlock();
+	{
+		lock_guard guard(section);
+		outAudioQueue.DoState(p);
+	}
 
 	int chanCount = ARRAY_SIZE(chans);
 	p.Do(chanCount);
@@ -152,14 +165,23 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
 			// Walking a pointer for speed.  But let's make sure we wouldn't trip on an invalid ptr.
 			if (Memory::IsValidAddress(chan.sampleAddress + (totalSamples - 1) * sizeof(s16)))
 			{
-				for (u32 i = 0; i < totalSamples; i++)
-					chan.sampleQueue.push(*sampleData++);
+				for (u32 i = 0; i < totalSamples; i += 2) {
+					chan.sampleQueue.push(adjustvolume(*sampleData++, chan.leftVolume));
+					chan.sampleQueue.push(adjustvolume(*sampleData++, chan.rightVolume));
+				}
 			}
 		}
 		else
 		{
-			for (u32 i = 0; i < totalSamples; i++)
-				chan.sampleQueue.push((s16)Memory::Read_U16(chan.sampleAddress + sizeof(s16) * i));
+			for (u32 i = 0; i < totalSamples; i++) {
+				s16 sampleL = (s16)Memory::Read_U16(chan.sampleAddress + sizeof(s16) * i);
+				sampleL = adjustvolume(sampleL, chan.leftVolume);
+				chan.sampleQueue.push(sampleL);
+				i++;
+				s16 sampleR = (s16)Memory::Read_U16(chan.sampleAddress + sizeof(s16) * i);
+				sampleR = adjustvolume(sampleR, chan.rightVolume);
+				chan.sampleQueue.push(sampleR);
+			}
 		}
 	}
 	else if (chan.format == PSP_AUDIO_FORMAT_MONO)
@@ -168,34 +190,26 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
 		{
 			// Expand to stereo
 			s16 sample = (s16)Memory::Read_U16(chan.sampleAddress + 2 * i);
-			chan.sampleQueue.push(sample);
-			chan.sampleQueue.push(sample);
+			chan.sampleQueue.push(adjustvolume(sample, chan.leftVolume));
+			chan.sampleQueue.push(adjustvolume(sample, chan.rightVolume));
 		}
 	}
 	return ret;
 }
 
-static inline s16 clamp_s16(int i) {
-	if (i > 32767)
-		return 32767;
-	if (i < -32768)
-		return -32768;
-	return i;
-}
-
-inline void __AudioWakeThreads(AudioChannel &chan, int step)
+inline void __AudioWakeThreads(AudioChannel &chan, int result, int step)
 {
 	u32 error;
 	for (size_t w = 0; w < chan.waitingThreads.size(); ++w)
 	{
 		AudioChannelWaitInfo &waitInfo = chan.waitingThreads[w];
-		waitInfo.numSamples -= hwBlockSize;
+		waitInfo.numSamples -= step;
 
 		// If it's done (there will still be samples on queue) and actually still waiting, wake it up.
 		if (waitInfo.numSamples <= 0 && __KernelGetWaitID(waitInfo.threadID, WAITTYPE_AUDIOCHANNEL, error) != 0)
 		{
 			// DEBUG_LOG(HLE, "Woke thread %i for some buffer filling", waitingThread);
-			u32 ret = __KernelGetWaitValue(waitInfo.threadID, error);
+			u32 ret = result == 0 ? __KernelGetWaitValue(waitInfo.threadID, error) : SCE_ERROR_AUDIO_CHANNEL_NOT_RESERVED;
 			__KernelResumeThreadFromWait(waitInfo.threadID, ret);
 
 			chan.waitingThreads.erase(chan.waitingThreads.begin() + w--);
@@ -203,9 +217,9 @@ inline void __AudioWakeThreads(AudioChannel &chan, int step)
 	}
 }
 
-void __AudioWakeThreads(AudioChannel &chan)
+void __AudioWakeThreads(AudioChannel &chan, int result)
 {
-	__AudioWakeThreads(chan, 0x7FFFFFFF);
+	__AudioWakeThreads(chan, result, 0x7FFFFFFF);
 }
 
 // Mix samples from the various audio channels into a single sample queue.
@@ -224,7 +238,7 @@ void __AudioUpdate()
 	{
 		if (!chans[i].reserved)
 			continue;
-		__AudioWakeThreads(chans[i], hwBlockSize);
+		__AudioWakeThreads(chans[i], 0, hwBlockSize);
 
 		if (!chans[i].sampleQueue.size()) {
 			// ERROR_LOG(HLE, "No queued samples, skipping channel %i", i);
@@ -237,9 +251,8 @@ void __AudioUpdate()
 			{
 				s16 sampleL = chans[i].sampleQueue.pop_front();
 				s16 sampleR = chans[i].sampleQueue.pop_front();
-				// The channel volume should be done here?
-				mixBuffer[s * 2 + 0] += sampleL * (s32)chans[i].leftVolume >> 15;
-				mixBuffer[s * 2 + 1] += sampleR * (s32)chans[i].rightVolume >> 15;
+				mixBuffer[s * 2 + 0] += sampleL;
+				mixBuffer[s * 2 + 1] += sampleR;
 			} 
 			else
 			{
@@ -250,7 +263,7 @@ void __AudioUpdate()
 	}
 
 	if (g_Config.bEnableSound) {
-		section.lock();
+		lock_guard guard(section);
 		if (outAudioQueue.room() >= hwBlockSize * 2) {
 			// Push the mixed samples onto the output audio queue.
 			for (int i = 0; i < hwBlockSize; i++) {
@@ -265,7 +278,6 @@ void __AudioUpdate()
 			// about the amount of audio we produce.
 			DEBUG_LOG(HLE, "Audio outbuffer overrun! room = %i / %i", outAudioQueue.room(), (u32)outAudioQueue.capacity());
 		}
-		section.unlock();
 	}
 	
 }
@@ -281,15 +293,13 @@ void __AudioSetOutputFrequency(int freq)
 int __AudioMix(short *outstereo, int numFrames)
 {
 	// TODO: if mixFrequency != the actual output frequency, resample!
-
-	section.lock();
+	lock_guard guard(section);
 	int underrun = -1;
 	s16 sampleL = 0;
 	s16 sampleR = 0;
 	bool anythingToPlay = false;
 	for (int i = 0; i < numFrames; i++) {
-		if (outAudioQueue.size() >= 2)
-		{
+		if (outAudioQueue.size() >= 2) {
 			sampleL = outAudioQueue.pop_front();
 			sampleR = outAudioQueue.pop_front();
 			outstereo[i * 2 + 0] = sampleL;
@@ -306,6 +316,5 @@ int __AudioMix(short *outstereo, int numFrames)
 	} else {
 		// DEBUG_LOG(HLE, "No underrun, mixed %i samples fine", numFrames);
 	}
-	section.unlock();
 	return underrun >= 0 ? underrun : numFrames;
 }

@@ -257,17 +257,16 @@ void AnalyzeMpeg(u32 buffer_addr, MpegContext *ctx) {
 	ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
 	ctx->avc.avcFrameStatus = 0;
 
-	//if (!isCurrentMpegAnalyzed) {
-	//SceMpegRingBuffer ringbuffer;
-	//InitRingbuffer(&ringbuffer, 0, 0, 0, 0, 0);
-	// ????
-	//Memory::WriteStruct(ctx->mpegRingbufferAddr, &ringbuffer);
-	//}
-
 	ctx->videoFrameCount = 0;
 	ctx->audioFrameCount = 0;
 	ctx->endOfAudioReached = false;
 	ctx->endOfVideoReached = false;
+
+	if (ctx->mpegMagic != PSMF_MAGIC || ctx->mpegVersion < 0 ||
+		(ctx->mpegOffset & 2047) != 0 || ctx->mpegOffset == 0) {
+		// mpeg header is invalid!
+		return;
+	}
 
 	if (ctx->mediaengine && (ctx->mpegStreamSize > 0) && !ctx->isAnalyzed) {
 		// init mediaEngine
@@ -975,8 +974,8 @@ int sceMpegGetAvcAu(u32 mpeg, u32 streamId, u32 auAddr, u32 attrAddr)
 	int result = 0;
 
 	sceAu.pts = ctx->mediaengine->getVideoTimeStamp();
-	if (sceAu.pts >= ctx->mpegLastTimestamp) {
-		INFO_LOG(HLE, "video end reach. pts: %i dts: %i", (int)sceAu.pts, (int)ctx->mpegLastTimestamp);
+	if (ctx->mediaengine->IsVideoEnd()) {
+		INFO_LOG(HLE, "video end reach. pts: %i dts: %i", (int)sceAu.pts, (int)ctx->mediaengine->getLastTimeStamp());
 		mpegRingbuffer.packetsFree = mpegRingbuffer.packets;
 		Memory::WriteStruct(ctx->mpegRingbufferAddr, &mpegRingbuffer);
 
@@ -1039,8 +1038,8 @@ int sceMpegGetAtracAu(u32 mpeg, u32 streamId, u32 auAddr, u32 attrAddr)
 	int result = 0;
 
 	sceAu.pts = ctx->mediaengine->getAudioTimeStamp();
-	if (sceAu.pts >= ctx->mpegLastTimestamp) {
-		INFO_LOG(HLE, "video end reach. pts: %i dts: %i", (int)sceAu.pts, (int)ctx->mpegLastTimestamp);
+	if (ctx->mediaengine->IsVideoEnd()) {
+		INFO_LOG(HLE, "video end reach. pts: %i dts: %i", (int)sceAu.pts, (int)ctx->mediaengine->getLastTimeStamp());
 		mpegRingbuffer.packetsFree = mpegRingbuffer.packets;
 		Memory::WriteStruct(ctx->mpegRingbufferAddr, &mpegRingbuffer);
 

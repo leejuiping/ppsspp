@@ -91,6 +91,10 @@ MediaEngine::MediaEngine(): m_streamSize(0), m_readSize(0), m_pdata(0) {
 	m_buffer = 0;
 	m_demux = 0;
 	m_audioContext = 0;
+	m_pdata = 0;
+	m_streamSize = 0;
+	m_readSize = 0;
+	m_isVideoEnd = false;
 }
 
 MediaEngine::~MediaEngine() {
@@ -128,6 +132,7 @@ void MediaEngine::closeMedia() {
 	m_pdata = 0;
 	m_demux = 0;
 	Atrac3plus_Decoder::CloseContext(&m_audioContext);
+	m_isVideoEnd = false;
 }
 
 int _MpegReadbuffer(void *opaque, uint8_t *buf, int buf_size)
@@ -158,8 +163,22 @@ int64_t _MpegSeekbuffer(void *opaque, int64_t offset, int whence)
 	return offset;
 }
 
+#ifdef _DEBUG
+void ffmpeg_logger(void *, int, const char *format, va_list va_args) {
+	char tmp[1024];
+	vsprintf(tmp, format, va_args);
+	INFO_LOG(HLE, tmp);
+}
+#endif
+
 bool MediaEngine::openContext() {
 #ifdef USE_FFMPEG
+
+#ifdef _DEBUG
+	av_log_set_level(AV_LOG_VERBOSE);
+	av_log_set_callback(&ffmpeg_logger);
+#endif 
+
 	u8* tempbuf = (u8*)av_malloc(m_bufSize);
 
 	AVFormatContext *pFormatCtx = avformat_alloc_context();
@@ -173,9 +192,6 @@ bool MediaEngine::openContext() {
 
 	if(avformat_find_stream_info(pFormatCtx, NULL) < 0)
 		return false;
-
-	// Dump information about file onto standard error
-	av_dump_format(pFormatCtx, 0, NULL, 0);
 
 	// Find the first video stream
 	for(int i = 0; i < (int)pFormatCtx->nb_streams; i++) {
@@ -208,6 +224,7 @@ bool MediaEngine::openContext() {
 	m_demux->demux();
 	m_audioPos = 0;
 	m_audioContext = Atrac3plus_Decoder::OpenContext();
+	m_isVideoEnd = false;
 #endif // USE_FFMPEG
 	return true;
 }
@@ -225,6 +242,8 @@ bool MediaEngine::loadStream(u8* buffer, int readSize, int StreamSize)
 	m_readSize = readSize;
 	m_streamSize = StreamSize;
 	m_pdata = new u8[StreamSize];
+	if (!m_pdata)
+		return false;
 	memcpy(m_pdata, buffer, m_readSize);
 	
 	if (readSize > 0x2000)
@@ -237,6 +256,8 @@ bool MediaEngine::loadFile(const char* filename)
 	PSPFileInfo info = pspFileSystem.GetFileInfo(filename);
 	s64 infosize = info.size;
 	u8* buf = new u8[infosize];
+	if (!buf)
+		return false;
 	u32 h = pspFileSystem.OpenFile(filename, (FileAccess) FILEACCESS_READ);
 	pspFileSystem.ReadFile(h, buf, infosize);
 	pspFileSystem.CloseFile(h);
@@ -261,7 +282,7 @@ bool MediaEngine::loadFile(const char* filename)
 
 int MediaEngine::addStreamData(u8* buffer, int addSize) {
 	int size = std::min(addSize, m_streamSize - m_readSize);
-	if (size > 0) {
+	if (size > 0 && m_pdata) {
 		memcpy(m_pdata + m_readSize, buffer, size);
 		m_readSize += size;
 		if (!m_pFormatCtx && m_readSize > 0x2000)
@@ -361,20 +382,16 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 					pCodecCtx->height, m_pFrameRGB->data, m_pFrameRGB->linesize);
       
 			if(frameFinished) {
-				if (m_videopts == 3003) {
-					m_audiopts = packet.pts;
-				}
-				m_videopts = packet.pts + packet.duration;
+				int firstTimeStamp = bswap32(*(int*)(m_pdata + 86));
+				m_videopts = pFrame->pkt_dts + pFrame->pkt_duration - firstTimeStamp;
 				bGetFrame = true;
 			}
 		}
 		av_free_packet(&packet);
 		if (bGetFrame) break;
 	}
-	if (m_audiopts > 0) {
-		if (m_audiopts - m_videopts > 5000)
-			return stepVideo(videoPixelMode);
-	}
+	if (!bGetFrame && m_readSize >= m_streamSize)
+		m_isVideoEnd = true;
 	return bGetFrame;
 #else
 	return true;
@@ -544,6 +561,16 @@ int MediaEngine::getAudioSamples(u8* buffer) {
 	u8* frame = audioStream + m_audioPos;
 	int outbytes = 0;
 	Atrac3plus_Decoder::Decode(m_audioContext, frame, frameSize - 8, &outbytes, buffer);
+	if (headerCode1 == 0x24) {
+		// it a mono atrac3plus, convert it to stereo
+		s16 *outbuf = (s16*)buffer;
+		s16 *inbuf = (s16*)buffer;
+		for (int i = 0x800 - 1; i >= 0; i--) {
+			s16 sample = inbuf[i];
+			outbuf[i * 2] = sample;
+			outbuf[i * 2 + 1] = sample;
+		}
+	}
 	if (nextHeader >= 0) {
 		m_audioPos = nextHeader;
 	} else
@@ -557,15 +584,15 @@ s64 MediaEngine::getVideoTimeStamp() {
 }
 
 s64 MediaEngine::getAudioTimeStamp() {
-	if (m_audiopts > 0)
-		return m_audiopts;
+	if (m_demux)
+		return std::max(m_audiopts - 4180, (s64)0);
 	return m_videopts;
 }
 
 s64 MediaEngine::getLastTimeStamp() {
 	if (!m_pdata)
 		return 0;
+	int firstTimeStamp = bswap32(*(int*)(m_pdata + 86));
 	int lastTimeStamp = bswap32(*(int*)(m_pdata + 92));
-	return lastTimeStamp;
+	return lastTimeStamp - firstTimeStamp;
 }
-

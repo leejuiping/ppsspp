@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,19 +17,4 @@
 
 #pragma once
 
-#include "sceAudio.h"
-
-// Easy interface for sceAudio to write to, to keep the complexity in check.
-
-void __AudioInit();
-void __AudioDoState(PointerWrap &p);
-void __AudioUpdate();
-void __AudioShutdown();
-void __AudioSetOutputFrequency(int freq);
-
-// May return SCE_ERROR_AUDIO_CHANNEL_BUSY if buffer too large
-u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking);
-void __AudioWakeThreads(AudioChannel &chan, int result, int step);
-void __AudioWakeThreads(AudioChannel &chan, int result);
-
-int __AudioMix(short *outstereo, int numSamples);
+// Game screen: Contains options such as 

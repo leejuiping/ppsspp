@@ -106,24 +106,17 @@ void CenterRect(float *x, float *y, float *w, float *h,
 }
 
 FramebufferManager::FramebufferManager() :
+	ramDisplayFramebufPtr_(0),
+	displayFramebuf_(0),
 	displayFramebufPtr_(0),
 	prevDisplayFramebuf_(0),
 	prevPrevDisplayFramebuf_(0),
 	frameLastFramebufUsed(0),
-	currentRenderVfb_(0)
+	currentRenderVfb_(0),
+	drawPixelsTex_(0),
+	drawPixelsTexFormat_(-1),
+	convBuf(0)
 {
-	glGenTextures(1, &backbufTex);
-
-	//initialize backbuffer texture
-	glBindTexture(GL_TEXTURE_2D, backbufTex);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 480, 272, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-	glBindTexture(GL_TEXTURE_2D, 0);
-
 	draw2dprogram = glsl_create_source(basic_vs, tex_fs);
 
 	glsl_bind(draw2dprogram);
@@ -137,96 +130,120 @@ FramebufferManager::FramebufferManager() :
 	glClearColor(0,0,0,1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-	convBuf = new u8[480 * 272 * 4];
 	useBufferedRendering_ = g_Config.bBufferedRendering;
 }
 
 FramebufferManager::~FramebufferManager() {
-	glDeleteTextures(1, &backbufTex);
+	if (drawPixelsTex_)
+		glDeleteTextures(1, &drawPixelsTex_);
 	glsl_destroy(draw2dprogram);
 	delete [] convBuf;
 }
 
 void FramebufferManager::DrawPixels(const u8 *framebuf, int pixelFormat, int linesize) {
-	// TODO: We can trivially do these in the shader, and there's no need to
-	// upconvert to 8888 for the 16-bit formats.
-	for (int y = 0; y < 272; y++) {
+	if (drawPixelsTex_ && drawPixelsTexFormat_ != pixelFormat) {
+		glDeleteTextures(1, &drawPixelsTex_);
+		drawPixelsTex_ = 0;
+	}
+
+	if (!drawPixelsTex_) {
+		glGenTextures(1, &drawPixelsTex_);
+
+		// Initialize backbuffer texture for DrawPixels
+		glBindTexture(GL_TEXTURE_2D, drawPixelsTex_);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
 		switch (pixelFormat) {
-		case PSP_DISPLAY_PIXEL_FORMAT_565:
-			{
-				const u16 *src = (const u16 *)framebuf + linesize * y;
-				u8 *dst = convBuf + 4 * 480 * y;
-				for (int x = 0; x < 480; x++)
-				{
-					u16 col = src[x];
-					dst[x * 4] = ((col) & 0x1f) << 3;
-					dst[x * 4 + 1] = ((col >> 5) & 0x3f) << 2;
-					dst[x * 4 + 2] = ((col >> 11) & 0x1f) << 3;
-					dst[x * 4 + 3] = 255;
-				}
-			}
-			break;
-
-		case PSP_DISPLAY_PIXEL_FORMAT_5551:
-			{
-				const u16 *src = (const u16 *)framebuf + linesize * y;
-				u8 *dst = convBuf + 4 * 480 * y;
-				for (int x = 0; x < 480; x++)
-				{
-					u16 col = src[x];
-					dst[x * 4] = ((col) & 0x1f) << 3;
-					dst[x * 4 + 1] = ((col >> 5) & 0x1f) << 3;
-					dst[x * 4 + 2] = ((col >> 10) & 0x1f) << 3;
-					dst[x * 4 + 3] = (col >> 15) ? 255 : 0;
-				}
-			}
-			break;
-
 		case PSP_DISPLAY_PIXEL_FORMAT_8888:
-			{
-				const u8 *src = framebuf + linesize * 4 * y;
-				u8 *dst = convBuf + 4 * 480 * y;
-				for (int x = 0; x < 480; x++)
-				{
-					dst[x * 4] = src[x * 4];
-					dst[x * 4 + 1] = src[x * 4 + 1];
-					dst[x * 4 + 2] = src[x * 4 + 2];
-					dst[x * 4 + 3] = src[x * 4 + 3];
-				}
-			}
 			break;
+		}
 
-		case PSP_DISPLAY_PIXEL_FORMAT_4444:
-			{
-				const u16 *src = (const u16 *)framebuf + linesize * y;
-				u8 *dst = convBuf + 4 * 480 * y;
-				for (int x = 0; x < 480; x++)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 512, 272, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		drawPixelsTexFormat_ = pixelFormat;
+	}
+
+	// TODO: We can just change the texture format and flip some bits around instead of this.
+	if (pixelFormat != PSP_DISPLAY_PIXEL_FORMAT_8888 || linesize != 512) {
+		if (!convBuf) {
+			convBuf = new u8[512 * 272 * 4];
+		}
+		for (int y = 0; y < 272; y++) {
+			switch (pixelFormat) {
+			case PSP_DISPLAY_PIXEL_FORMAT_565:
 				{
-					u16 col = src[x];
-					dst[x * 4] = ((col >> 8) & 0xf) << 4;
-					dst[x * 4 + 1] = ((col >> 4) & 0xf) << 4;
-					dst[x * 4 + 2] = (col & 0xf) << 4;
-					dst[x * 4 + 3] = (col >> 12) << 4;
+					const u16 *src = (const u16 *)framebuf + linesize * y;
+					u8 *dst = convBuf + 4 * 512 * y;
+					for (int x = 0; x < 480; x++)
+					{
+						u16 col = src[x];
+						dst[x * 4] = ((col) & 0x1f) << 3;
+						dst[x * 4 + 1] = ((col >> 5) & 0x3f) << 2;
+						dst[x * 4 + 2] = ((col >> 11) & 0x1f) << 3;
+						dst[x * 4 + 3] = 255;
+					}
 				}
+				break;
+
+			case PSP_DISPLAY_PIXEL_FORMAT_5551:
+				{
+					const u16 *src = (const u16 *)framebuf + linesize * y;
+					u8 *dst = convBuf + 4 * 512 * y;
+					for (int x = 0; x < 480; x++)
+					{
+						u16 col = src[x];
+						dst[x * 4] = ((col) & 0x1f) << 3;
+						dst[x * 4 + 1] = ((col >> 5) & 0x1f) << 3;
+						dst[x * 4 + 2] = ((col >> 10) & 0x1f) << 3;
+						dst[x * 4 + 3] = (col >> 15) ? 255 : 0;
+					}
+				}
+				break;
+
+			case PSP_DISPLAY_PIXEL_FORMAT_4444:
+				{
+					const u16 *src = (const u16 *)framebuf + linesize * y;
+					u8 *dst = convBuf + 4 * 512 * y;
+					for (int x = 0; x < 480; x++)
+					{
+						u16 col = src[x];
+						dst[x * 4] = ((col >> 8) & 0xf) << 4;
+						dst[x * 4 + 1] = ((col >> 4) & 0xf) << 4;
+						dst[x * 4 + 2] = (col & 0xf) << 4;
+						dst[x * 4 + 3] = (col >> 12) << 4;
+					}
+				}
+				break;
+
+			case PSP_DISPLAY_PIXEL_FORMAT_8888:
+				{
+					const u8 *src = framebuf + linesize * 4 * y;
+					u8 *dst = convBuf + 4 * 512 * y;
+					memcpy(dst, src, 4 * 480);
+				}
+				break;
 			}
-			break;
 		}
 	}
 
-	glBindTexture(GL_TEXTURE_2D,backbufTex);
+	glBindTexture(GL_TEXTURE_2D,drawPixelsTex_);
 	if (g_Config.bLinearFiltering)
 	{
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	}
-	glTexSubImage2D(GL_TEXTURE_2D,0,0,0,480,272, GL_RGBA, GL_UNSIGNED_BYTE, convBuf);
+	glTexSubImage2D(GL_TEXTURE_2D,0,0,0,512,272, GL_RGBA, GL_UNSIGNED_BYTE, pixelFormat == PSP_DISPLAY_PIXEL_FORMAT_8888 ? framebuf : convBuf);
 
 	float x, y, w, h;
 	CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight);
-	DrawActiveTexture(x, y, w, h);
+	DrawActiveTexture(x, y, w, h, false, 480.0f / 512.0f);
 }
 
-void FramebufferManager::DrawActiveTexture(float x, float y, float w, float h, bool flip) {
-	float u2 = 1.0f;
+void FramebufferManager::DrawActiveTexture(float x, float y, float w, float h, bool flip, float uscale) {
+	float u2 = uscale;
 	float v1 = flip ? 1.0f : 0.0f;
 	float v2 = flip ? 0.0f : 1.0f;
 
@@ -253,7 +270,7 @@ VirtualFramebuffer *FramebufferManager::GetDisplayFBO() {
 	VirtualFramebuffer *match = NULL;
 	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
 		VirtualFramebuffer *v = *iter;
-		if (MaskedEqual(v->fb_address, displayFramebufPtr_) && v->format == displayFormat_) {
+		if (MaskedEqual(v->fb_address, displayFramebufPtr_) && v->format == displayFormat_ && v->width >= 480) {
 			// Could check w too but whatever
 			if (match == NULL || match->last_frame_used < v->last_frame_used) {
 				match = v;
@@ -487,7 +504,10 @@ void FramebufferManager::CopyDisplayToOutput() {
 
 	VirtualFramebuffer *vfb = GetDisplayFBO();
 	if (!vfb) {
-		if (Memory::IsValidAddress(displayFramebufPtr_)) {
+		if (Memory::IsValidAddress(ramDisplayFramebufPtr_)) {
+			// The game is displaying something directly from RAM. In GTA, it's decoded video.
+			DrawPixels(Memory::GetPointer(ramDisplayFramebufPtr_), displayFormat_, displayStride_);
+		} else if (Memory::IsValidAddress(displayFramebufPtr_)) {
 			// The game is displaying something directly from RAM. In GTA, it's decoded video.
 			DrawPixels(Memory::GetPointer(displayFramebufPtr_), displayFormat_, displayStride_);
 		} else {
@@ -552,7 +572,7 @@ void FramebufferManager::BeginFrame() {
 	DecimateFBOs();
 	// NOTE - this is all wrong. At the beginning of the frame is a TERRIBLE time to draw the fb.
 	if (g_Config.bDisplayFramebuffer && displayFramebufPtr_) {
-		INFO_LOG(HLE, "Drawing the framebuffer");
+		INFO_LOG(HLE, "Drawing the framebuffer (%08x)", displayFramebufPtr_);
 		const u8 *pspframebuf = Memory::GetPointer((0x44000000) | (displayFramebufPtr_ & 0x1FFFFF));	// TODO - check
 		glstate.cullFace.disable();
 		glstate.depthTest.disable();
@@ -570,7 +590,11 @@ void FramebufferManager::SetDisplayFramebuffer(u32 framebuf, u32 stride, int for
 
 	if ((framebuf & 0x04000000) == 0) {
 		DEBUG_LOG(HLE, "Non-VRAM display framebuffer address set: %08x", framebuf);
+		ramDisplayFramebufPtr_ = framebuf;
+		displayStride_ = stride;
+		displayFormat_ = format;
 	} else {
+		ramDisplayFramebufPtr_ = 0;
 		displayFramebufPtr_ = framebuf;
 		displayStride_ = stride;
 		displayFormat_ = format;

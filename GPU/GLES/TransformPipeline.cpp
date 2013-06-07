@@ -126,6 +126,7 @@ void TransformDrawEngine::DrawBezier(int ucount, int vcount) {
 
 	Reporting::ReportMessage("Unsupported bezier curve");
 
+	// if (gstate.patchprimitive)
 	// Generate indices for a rectangular mesh.
 	int c = 0;
 	for (int y = 0; y < 3; y++) {
@@ -350,7 +351,7 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 		if (gstate.lightEnable[l] & 1)
 		{
 			Color4 lightAmbient(gstate_c.lightColor[0][l], 0.0f);
-			lightSum0 += (lightAmbient + diff) * lightScale;
+			lightSum0 += (lightAmbient * *ambient + diff) * lightScale;
 		}
 	}
 
@@ -1111,7 +1112,7 @@ void TransformDrawEngine::Flush() {
 
 	LinkedShader *program = shaderManager_->ApplyShader(prim);
 
-	if (CanUseHardwareTransform(prim)) {
+	if (program->useHWTransform_) {
 		GLuint vbo = 0, ebo = 0;
 		int vertexCount = 0;
 		bool useElements = true;

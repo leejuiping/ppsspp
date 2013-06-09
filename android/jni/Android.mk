@@ -137,6 +137,8 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/GameInfoCache.cpp \
   $(SRC)/UI/OnScreenDisplay.cpp \
   $(SRC)/UI/PluginScreen.cpp \
+  $(SRC)/UI/GameScreen.cpp \
+  $(SRC)/UI/GameSettingsScreen.cpp \
   $(SRC)/native/android/app-android.cpp \
   $(SRC)/ext/disarm.cpp \
   $(SRC)/ext/libkirk/AES.c \
@@ -214,6 +216,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/HLE/sceAtrac.cpp \
   $(SRC)/Core/HLE/__sceAudio.cpp \
   $(SRC)/Core/HLE/sceAudio.cpp \
+  $(SRC)/Core/HLE/sceAudioCodec.cpp \
   $(SRC)/Core/HLE/sceChnnlsv.cpp \
   $(SRC)/Core/HLE/sceCtrl.cpp \
   $(SRC)/Core/HLE/sceDeflt.cpp \

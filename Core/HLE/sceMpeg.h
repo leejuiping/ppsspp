@@ -40,6 +40,8 @@ enum {
 	ERROR_PSMFPLAYER_NO_MORE_DATA                       = 0x8061600c,
 
 	ERROR_MPEG_NO_DATA                                  = 0x80618001,
+	ERROR_MPEG_ALREADY_INIT                             = 0x80618005,
+	ERROR_MPEG_NOT_YET_INIT                             = 0x80618009,
 };
 
 // MPEG statics.
@@ -89,7 +91,7 @@ struct SceMpegRingBuffer {
   u32 mpeg; // pointer to mpeg struct, fixed up in sceMpegCreate
 };
 
-void __MpegInit(bool useMediaEngine_);
+void __MpegInit();
 void __MpegDoState(PointerWrap &p);
 void __MpegShutdown();
 

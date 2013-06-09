@@ -22,6 +22,8 @@
 #include "Core/HLE/scePsmf.h"
 #include "Core/HLE/sceMpeg.h"
 #include "Core/HW/MediaEngine.h"
+#include "GPU/GPUInterface.h"
+#include "GPU/GPUState.h"
 
 #include <map>
 
@@ -555,8 +557,7 @@ u32 scePsmfQueryStreamOffset(u32 bufferAddr, u32 offsetAddr)
 	if (Memory::IsValidAddress(offsetAddr)) {
 		Memory::Write_U32(bswap32(Memory::Read_U32(bufferAddr + PSMF_STREAM_OFFSET_OFFSET)), offsetAddr);
 	}
-	// return 0 breaks history mode in Saint Seiya Omega
-	return 1; 
+	return 0;
 }
 
 u32 scePsmfQueryStreamSize(u32 bufferAddr, u32 sizeAddr)
@@ -874,8 +875,10 @@ int scePsmfPlayerGetVideoData(u32 psmfPlayer, u32 videoDataAddr)
 		int frameWidth = Memory::Read_U32(videoDataAddr);
         u32 displaybuf = Memory::Read_U32(videoDataAddr + 4);
         int displaypts = Memory::Read_U32(videoDataAddr + 8);
-		if (psmfplayer->mediaengine->stepVideo(videoPixelMode))
-			psmfplayer->mediaengine->writeVideoImage(Memory::GetPointer(displaybuf), frameWidth, videoPixelMode);
+		if (psmfplayer->mediaengine->stepVideo(videoPixelMode)) {
+			int displaybufSize = psmfplayer->mediaengine->writeVideoImage(Memory::GetPointer(displaybuf), frameWidth, videoPixelMode);
+			gpu->InvalidateCache(displaybuf, displaybufSize, GPU_INVALIDATE_SAFE);
+		}
 		psmfplayer->psmfPlayerAvcAu.pts = psmfplayer->mediaengine->getVideoTimeStamp();
 		Memory::Write_U32(psmfplayer->psmfPlayerAvcAu.pts, videoDataAddr + 8);
 	}

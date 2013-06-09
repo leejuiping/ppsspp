@@ -55,6 +55,7 @@
 #include "Core/HLE/sceUtility.h"
 
 #include "UI/MenuScreens.h"
+#include "UI/GameScreen.h"
 #include "UI/EmuScreen.h"
 #include "UI/PluginScreen.h"
 
@@ -307,12 +308,16 @@ void MenuScreen::render() {
 			}
 			if (UITextureButton(ctx, (int)GEN_ID_LOOP(i), vgrid_recent, textureButtonWidth, textureButtonHeight, ginfo->iconTexture, ALIGN_LEFT, color, I_DROP_SHADOW)) {
 				UIEnd();
+
+				// To try some new UI, enable this.
+				//screenManager()->switchScreen(new GameScreen(g_Config.recentIsos[i]));
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 				return;
 			}
 		} else {
 			if (UIButton((int)GEN_ID_LOOP(i), vgrid_recent, textureButtonWidth, textureButtonHeight, filename.c_str(), ALIGN_LEFT)) {
 				UIEnd();
+				//screenManager()->switchScreen(new GameScreen(g_Config.recentIsos[i]));
 				screenManager()->switchScreen(new EmuScreen(g_Config.recentIsos[i]));
 				return;
 			}
@@ -441,7 +446,6 @@ void PauseScreen::render() {
 	I18NCategory *a = GetI18NCategory("Audio");
 	
 	UICheckBox(GEN_ID, x, y += stride, a->T("Enable Sound"), ALIGN_TOPLEFT, &g_Config.bEnableSound);
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 	// TODO: Maybe shouldn't show this if the screen ratios are very close...
 #ifdef BLACKBERRY10
 	if (pixel_xres == pixel_yres)
@@ -734,7 +738,6 @@ void GraphicsScreenP1::render() {
 	int stride = 40;
 	int columnw = 400;
 
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Media Engine"), ALIGN_TOPLEFT, &g_Config.bUseMediaEngine);
 #ifndef __SYMBIAN32__
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Hardware Transform"), ALIGN_TOPLEFT, &g_Config.bHardwareTransform);
 #endif

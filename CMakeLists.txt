@@ -630,7 +630,11 @@ add_library(native STATIC
 	native/ext/rapidxml/rapidxml.hpp
 	native/ext/rapidxml/rapidxml_iterators.hpp
 	native/ext/rapidxml/rapidxml_print.hpp
-	native/ext/rapidxml/rapidxml_utils.hpp)
+	native/ext/rapidxml/rapidxml_utils.hpp
+	native/ext/vjson/json.cpp
+	native/ext/vjson/json.h
+	native/ext/vjson/block_allocator.cpp
+	native/ext/vjson/block_allocator.h)
 include_directories(native)
 # rapidxml is headers only so we can't make a lib specific for it
 include_directories(native/ext/rapidxml)
@@ -761,8 +765,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceAtrac.cpp
 	Core/HLE/sceAtrac.h
 	Core/HLE/sceAudio.cpp
-	Core/HLE/sceAudioCodec.cpp
-	Core/HLE/sceAudioCodec.h
+	Core/HLE/sceAudiocodec.cpp
+	Core/HLE/sceAudiocodec.h
 	Core/HLE/sceAudio.h
 	Core/HLE/sceChnnlsv.cpp
 	Core/HLE/sceChnnlsv.h
@@ -1063,6 +1067,7 @@ set(NativeAppSource
 	UI/GamepadEmu.cpp
 	UI/UIShader.cpp
 	UI/OnScreenDisplay.cpp
+	UI/PluginScreen.cpp
 	UI/ui_atlas.cpp)
 if(ANDROID)
 	set(NativeAppSource ${NativeAppSource} android/jni/ArmEmitterTest.cpp)

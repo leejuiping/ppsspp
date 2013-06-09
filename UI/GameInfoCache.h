@@ -33,7 +33,9 @@
 
 class GameInfo {
 public:
-	GameInfo() : fileType(FILETYPE_UNKNOWN), iconTexture(NULL), pic0Texture(NULL), pic1Texture(NULL), wantBG(false), paramSFOLoaded(false) {}
+	GameInfo() 
+		: fileType(FILETYPE_UNKNOWN), iconTexture(NULL), pic0Texture(NULL), pic1Texture(NULL),
+		  wantBG(false), paramSFOLoaded(false), gameSize(0), saveDataSize(0) {}
 
 	bool DeleteGame();  // Better be sure what you're doing when calling this.
 	bool DeleteAllSaveData();
@@ -43,7 +45,7 @@ public:
 
 	void LoadParamSFO();
 
-	std::string GetSaveDataDirectory();
+	std::vector<std::string> GetSaveDataDirectories();
 
 
 	// Hold this when reading or writing from the GameInfo.
@@ -54,6 +56,8 @@ public:
 
 	FileInfo fileInfo;
 	std::string title;  // for easy access, also available in paramSFO.
+	std::string id;
+	std::string id_version;
 	EmuFileType fileType;
 	ParamSFOData paramSFO;
 	bool paramSFOLoaded;
@@ -75,6 +79,9 @@ public:
 	double timeIconWasLoaded;
 	double timePic0WasLoaded;
 	double timePic1WasLoaded;
+
+	u64 gameSize;
+	u64 saveDataSize;
 };
 
 class GameInfoCache {

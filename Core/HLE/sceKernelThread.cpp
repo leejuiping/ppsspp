@@ -2543,6 +2543,11 @@ int sceKernelReleaseWaitThread(SceUID threadID)
 	{
 		if (!t->isWaiting())
 			return SCE_KERNEL_ERROR_NOT_WAIT;
+		if (t->nt.waitType == WAITTYPE_HLEDELAY)
+		{
+			WARN_LOG_REPORT(HLE, "sceKernelReleaseWaitThread(): Refusing to wake HLE-delayed thread, right thing to do?");
+			return SCE_KERNEL_ERROR_NOT_WAIT;
+		}
 
 		__KernelResumeThreadFromWait(threadID, SCE_KERNEL_ERROR_RELEASE_WAIT);
 		hleReSchedule("thread released from wait");
@@ -2814,15 +2819,14 @@ void ActionAfterMipsCall::run(MipsCall &call) {
 
 ActionAfterMipsCall *Thread::getRunningCallbackAction()
 {
-	if (this->GetUID() == currentThread && g_inCbCount > 0)
-	{
+	if (this->GetUID() == currentThread && g_inCbCount > 0) 	{
 		MipsCall *call = mipsCalls.get(this->currentMipscallId);
 		ActionAfterMipsCall *action = 0;
 		if (call)
-			action = dynamic_cast<ActionAfterMipsCall *>(call->doAfter);
+			action = static_cast<ActionAfterMipsCall *>(call->doAfter);
 
-		if (!call || !action)
-		{
+		// We don't have rtti, so check manually.
+		if (!call || !action || action->actionTypeID != actionAfterMipsCall) {
 			ERROR_LOG(HLE, "Failed to access deferred info for thread: %s", this->nt.name);
 			return NULL;
 		}

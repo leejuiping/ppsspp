@@ -332,7 +332,7 @@ bool MediaEngine::setVideoDim(int width, int height)
 void MediaEngine::updateSwsFormat(int videoPixelMode) {
 #ifdef USE_FFMPEG
 	AVPixelFormat swsDesired = getSwsFormat(videoPixelMode);
-	if (swsDesired != m_sws_fmt) {
+	if (swsDesired != m_sws_fmt && m_pCodecCtx != 0) {
 		m_sws_fmt = swsDesired;
 		m_sws_ctx = sws_getCachedContext
 			(
@@ -353,6 +353,10 @@ void MediaEngine::updateSwsFormat(int videoPixelMode) {
 }
 
 bool MediaEngine::stepVideo(int videoPixelMode) {
+	if (!m_pFormatCtx)
+		return false;
+	if (!m_pCodecCtx)
+		return false;
 
 	// if video engine is broken, force to add timestamp
 	m_videopts += 3003;
@@ -390,7 +394,7 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 				sws_scale(m_sws_ctx, m_pFrame->data, m_pFrame->linesize, 0,
 					m_pCodecCtx->height, m_pFrameRGB->data, m_pFrameRGB->linesize);
 
-				int firstTimeStamp = bswap32(*(int*)(m_pdata + 86));
+				s64 firstTimeStamp = getMpegTimeStamp(m_pdata + PSMF_FIRST_TIMESTAMP_OFFSET);
 				m_videopts = m_pFrame->pkt_dts + av_frame_get_pkt_duration(m_pFrame) - firstTimeStamp;
 				bGetFrame = true;
 			}
@@ -412,6 +416,7 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 int MediaEngine::writeVideoImage(u8* buffer, int frameWidth, int videoPixelMode) {
 	if ((!m_pFrame)||(!m_pFrameRGB))
 		return false;
+	int videoImageSize = 0;
 #ifdef USE_FFMPEG
 	// lock the image size
 	int height = m_desHeight;
@@ -420,7 +425,6 @@ int MediaEngine::writeVideoImage(u8* buffer, int frameWidth, int videoPixelMode)
 	u8 *data = m_pFrameRGB->data[0];
 	u16 *imgbuf16 = (u16 *)buffer;
 	u16 *data16 = (u16 *)data;
-	int videoImageSize = 0;
 
 	switch (videoPixelMode) {
 	case TPSM_PIXEL_STORAGE_MODE_32BIT_ABGR8888:
@@ -473,13 +477,13 @@ int MediaEngine::writeVideoImageWithRange(u8* buffer, int frameWidth, int videoP
 	                             int xpos, int ypos, int width, int height) {
 	if ((!m_pFrame)||(!m_pFrameRGB))
 		return false;
+	int videoImageSize = 0;
 #ifdef USE_FFMPEG
 	// lock the image size
 	u8 *imgbuf = buffer;
 	u8 *data = m_pFrameRGB->data[0];
 	u16 *imgbuf16 = (u16 *)buffer;
 	u16 *data16 = (u16 *)data;
-	int videoImageSize = 0;
 
 	if (width > m_desWidth - xpos)
 		width = m_desWidth - xpos;
@@ -619,7 +623,7 @@ s64 MediaEngine::getAudioTimeStamp() {
 s64 MediaEngine::getLastTimeStamp() {
 	if (!m_pdata)
 		return 0;
-	int firstTimeStamp = bswap32(*(int*)(m_pdata + 86));
-	int lastTimeStamp = bswap32(*(int*)(m_pdata + 92));
+	s64 firstTimeStamp = getMpegTimeStamp(m_pdata + PSMF_FIRST_TIMESTAMP_OFFSET);
+	s64 lastTimeStamp = getMpegTimeStamp(m_pdata + PSMF_LAST_TIMESTAMP_OFFSET);
 	return lastTimeStamp - firstTimeStamp;
 }

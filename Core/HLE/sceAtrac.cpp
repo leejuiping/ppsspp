@@ -91,6 +91,7 @@ struct InputBuffer {
 
 struct Atrac;
 int __AtracSetContext(Atrac *atrac);
+void _AtracGenarateContext(Atrac *atrac, SceAtracId *context);
 
 struct AtracLoopInfo {
 	int cuePointID;
@@ -178,9 +179,6 @@ struct Atrac {
 		p.Do(loopEndSample);
 		p.Do(loopNum);
 
-		// Is NULL okay for this?
-		if (p.mode == p.MODE_READ)
-			decoder_context = 0;
 		p.Do(atracContext);
 
 		p.DoMarker("Atrac");
@@ -315,7 +313,11 @@ Atrac *getAtrac(int atracID) {
 }
 
 int createAtrac(Atrac *atrac) {
-	int id = nextAtracID++;
+	int id;
+	do {
+		id= nextAtracID;
+		nextAtracID = (nextAtracID + 1) & 0x3f;
+	} while (atracMap.find(id) != atracMap.end());
 	atracMap[id] = atrac;
 	atrac->atracID = id;
 	return id;
@@ -465,6 +467,24 @@ u32 sceAtracGetAtracID(int codecType)
 	return atracID;
 }
 
+u32 _AtracAddStreamData(int atracID, u8 *buf, u32 bytesToAdd) {
+	Atrac *atrac = getAtrac(atracID);
+	if (!atrac)
+		return 0;
+	int addbytes = std::min(bytesToAdd, atrac->first.filesize - atrac->first.fileoffset);
+	memcpy(atrac->data_buf + atrac->first.fileoffset, buf, addbytes);
+	atrac->first.size += bytesToAdd;
+	if (atrac->first.size > atrac->first.filesize)
+		atrac->first.size = atrac->first.filesize;
+	atrac->first.fileoffset = atrac->first.size;
+	atrac->first.writableBytes = 0;
+	if (atrac->atracContext.Valid()) {
+		// refresh atracContext
+		_AtracGenarateContext(atrac, atrac->atracContext);
+	}
+	return 0;
+}
+
 // PSP allow games to add stream data to a temp buf, the buf size is given by "atracBufSize "here.
 // "first.offset" means how many bytes the temp buf has been written,
 // and "first.writableBytes" means how many bytes the temp buf is allowed to write
@@ -611,10 +631,14 @@ u32 _AtracDecodeData(int atracID, u8* outbuf, u32 *SamplesNum, u32* finish, int 
 			*finish = finishFlag;
 			*remains = atrac->getRemainFrames();
 		}
+		if (atrac->atracContext.Valid()) {
+			// refresh atracContext
+			_AtracGenarateContext(atrac, atrac->atracContext);
+		}
 	// TODO: Can probably remove this after we validate no wrong ids?
 	} else {
-		memset(outbuf, 0, ATRAC3_MAX_SAMPLES * sizeof(s16) * atrac->atracOutputChannels);
-		*SamplesNum = ATRAC3_MAX_SAMPLES;
+		memset(outbuf, 0, 4);
+		*SamplesNum = 1;
 		*finish = 1;
 		*remains = -1;
 	}
@@ -1276,11 +1300,13 @@ int _AtracGetIDByContext(u32 contextAddr) {
 void _AtracGenarateContext(Atrac *atrac, SceAtracId *context) {
 	context->info.buffer = atrac->first.addr;
 	context->info.bufferByte = atrac->atracBufSize;
+	context->info.secondBuffer = atrac->second.addr;
+	context->info.secondBufferByte = atrac->second.size;
 	context->info.codec = atrac->codeType;
 	context->info.loopNum = atrac->loopNum;
 	context->info.loopStart = atrac->loopStartSample > 0 ? atrac->loopStartSample : 0;
 	context->info.loopEnd = atrac->loopEndSample > 0 ? atrac->loopEndSample : 0;
-	if (atrac->first.size >= atrac->first.fileoffset) {
+	if (atrac->first.size >= atrac->first.filesize) {
 		// state 2, all data loaded
 		context->info.state = 2;
 	} else if (atrac->loopinfoNum == 0) {
@@ -1297,6 +1323,7 @@ void _AtracGenarateContext(Atrac *atrac, SceAtracId *context) {
 	context->info.endSample = atrac->endSample;
 	context->info.dataEnd = atrac->first.filesize;
 	context->info.curOff = atrac->first.size;
+	context->info.decodePos = atrac->getDecodePosBySample(atrac->currentSample);
 	context->info.streamDataByte = atrac->first.size - atrac->firstSampleoffset;
 
 	u8* buf = (u8*)context;

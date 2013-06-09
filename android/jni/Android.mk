@@ -7,7 +7,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := native_audio
 LOCAL_CFLAGS := -O2 -fsigned-char -ffast-math -Wall -Wno-multichar -Wno-psabi
 # yes, it's really CPPFLAGS for C++
-LOCAL_CPPFLAGS := -std=gnu++11 -frtti
+LOCAL_CPPFLAGS := -std=gnu++11 -fno-rtti
 NATIVE := ../../native
 LOCAL_SRC_FILES := \
 		$(NATIVE)/android/native-audio-so.cpp
@@ -28,7 +28,7 @@ SRC := ../..
 
 LOCAL_CFLAGS := -DUSE_FFMPEG -DUSE_PROFILER -DGL_GLEXT_PROTOTYPES -DUSING_GLES2 -O2 -fsigned-char -Wall -Wno-multichar -Wno-psabi -Wno-unused-variable -fno-strict-aliasing -ffast-math
 # yes, it's really CPPFLAGS for C++
-LOCAL_CPPFLAGS := -std=gnu++11 -frtti
+LOCAL_CPPFLAGS := -std=gnu++11 -fno-rtti
 LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../../Common \
   $(LOCAL_PATH)/../.. \
@@ -216,7 +216,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/HLE/sceAtrac.cpp \
   $(SRC)/Core/HLE/__sceAudio.cpp \
   $(SRC)/Core/HLE/sceAudio.cpp \
-  $(SRC)/Core/HLE/sceAudioCodec.cpp \
+  $(SRC)/Core/HLE/sceAudiocodec.cpp \
   $(SRC)/Core/HLE/sceChnnlsv.cpp \
   $(SRC)/Core/HLE/sceCtrl.cpp \
   $(SRC)/Core/HLE/sceDeflt.cpp \

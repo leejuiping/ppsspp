@@ -501,6 +501,7 @@ void FramebufferManager::SetRenderFrameBuffer() {
 
 void FramebufferManager::CopyDisplayToOutput() {
 	fbo_unbind();
+	currentRenderVfb_ = 0;
 
 	VirtualFramebuffer *vfb = GetDisplayFBO();
 	if (!vfb) {
@@ -531,8 +532,6 @@ void FramebufferManager::CopyDisplayToOutput() {
 		prevDisplayFramebuf_ = displayFramebuf_;
 	}
 	displayFramebuf_ = vfb;
-
-	currentRenderVfb_ = 0;
 
 	if (vfb->fbo) {
 		glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
@@ -622,6 +621,8 @@ std::vector<FramebufferInfo> FramebufferManager::GetFramebufferList() {
 
 void FramebufferManager::DecimateFBOs() {
 	fbo_unbind();
+	currentRenderVfb_ = 0;
+
 	for (auto iter = vfbs_.begin(); iter != vfbs_.end();) {
 		VirtualFramebuffer *vfb = *iter;
 		if (vfb == displayFramebuf_ || vfb == prevDisplayFramebuf_ || vfb == prevPrevDisplayFramebuf_) {
@@ -646,6 +647,8 @@ void FramebufferManager::DecimateFBOs() {
 
 void FramebufferManager::DestroyAllFBOs() {
 	fbo_unbind();
+	currentRenderVfb_ = 0;
+
 	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
 		VirtualFramebuffer *vfb = *iter;
 		textureCache_->NotifyFramebufferDestroyed(vfb->fb_address, vfb);
@@ -657,6 +660,50 @@ void FramebufferManager::DestroyAllFBOs() {
 		delete vfb;
 	}
 	vfbs_.clear();
+}
+
+void FramebufferManager::UpdateFromMemory(u32 addr, int size) {
+	addr &= ~0x40000000;
+
+	// TODO: Could go through all FBOs, but probably not important?
+	// TODO: Could also check for inner changes, but video is most important.
+	if (addr == DisplayFramebufAddr() || addr == PrevDisplayFramebufAddr()) {
+		// TODO: Deleting the FBO is a heavy hammer solution, so let's only do it if it'd help.
+		if (!Memory::IsValidAddress(displayFramebufPtr_))
+			return;
+
+		fbo_unbind();
+		currentRenderVfb_ = 0;
+
+		bool needUnbind = false;
+		for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ) {
+			VirtualFramebuffer *vfb = *iter;
+			if (MaskedEqual(vfb->fb_address, addr)) {
+				// TODO: This without the fbo_unbind() above would be better than destroying the FBO.
+				// However, it doesn't seem to work for Star Ocean, at least
+				if (g_Config.bBufferedRendering) {
+					fbo_bind_as_render_target(vfb->fbo);
+					needUnbind = true;
+					DrawPixels(Memory::GetPointer(addr), vfb->format, vfb->fb_stride);
+					++iter;
+				} else {
+					textureCache_->NotifyFramebufferDestroyed(vfb->fb_address, vfb);
+					INFO_LOG(HLE, "Invalidating FBO for %08x (%i x %i x %i)", vfb->fb_address, vfb->width, vfb->height, vfb->format)
+					if (vfb->fbo) {
+						fbo_destroy(vfb->fbo);
+						vfb->fbo = 0;
+					}
+					delete vfb;
+					vfbs_.erase(iter++);
+				}
+			}
+			else
+				++iter;
+		}
+
+		if (needUnbind)
+			fbo_unbind();
+	}
 }
 
 void FramebufferManager::Resized() {

@@ -41,6 +41,9 @@ public:
 	bool bConfirmOnQuit;
 	bool bAutoRun;  // start immediately
 	bool bBrowse;
+#ifdef _WIN32
+	bool bTopMost;
+#endif
 
 	// General
 	int iNumWorkerThreads;
@@ -65,7 +68,6 @@ public:
 #endif
 	bool bStretchToDisplay;
 	int iFrameSkip;
-	bool bUseMediaEngine;
 
 	int iWindowX;
 	int iWindowY;

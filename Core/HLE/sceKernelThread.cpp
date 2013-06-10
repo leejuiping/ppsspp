@@ -2160,57 +2160,65 @@ int sceKernelDeleteThread(int threadHandle)
 	}
 }
 
-int sceKernelTerminateDeleteThread(int threadno)
+int sceKernelTerminateDeleteThread(int threadID)
 {
-	if (threadno != currentThread)
+	if (threadID == 0 || threadID == currentThread)
 	{
-		INFO_LOG(HLE, "sceKernelTerminateDeleteThread(%i)", threadno);
+		ERROR_LOG(HLE, "sceKernelTerminateDeleteThread(%i): cannot terminate current thread", threadID);
+		return SCE_KERNEL_ERROR_ILLEGAL_THID;
+	}
 
-		u32 error;
-		Thread *t = kernelObjects.Get<Thread>(threadno, error);
-		if (t)
-		{
-			//TODO: should we really reschedule here?
-			error = __KernelDeleteThread(threadno, SCE_KERNEL_ERROR_THREAD_TERMINATED, "thread terminated with delete", false);
-			hleReSchedule("thread terminated with delete");
+	u32 error;
+	Thread *t = kernelObjects.Get<Thread>(threadID, error);
+	if (t)
+	{
+		INFO_LOG(HLE, "sceKernelTerminateDeleteThread(%i)", threadID);
+		//TODO: should we really reschedule here?
+		error = __KernelDeleteThread(threadID, SCE_KERNEL_ERROR_THREAD_TERMINATED, "thread terminated with delete", false);
+		hleReSchedule("thread terminated with delete");
 
-			return error;
-		}
-
-		// TODO: Error when doesn't exist?
-		return 0;
+		return error;
 	}
 	else
 	{
-		ERROR_LOG_REPORT(HLE, "Thread \"%s\" trying to delete itself! :(", __GetCurrentThread() ? __GetCurrentThread()->GetName() : "NULL");
-		return -1;
+		ERROR_LOG(HLE, "sceKernelTerminateDeleteThread(%i): thread doesn't exist", threadID);
+		return error;
 	}
 }
 
 int sceKernelTerminateThread(SceUID threadID)
 {
-	if (threadID != currentThread)
+	if (threadID == 0 || threadID == currentThread)
 	{
+		ERROR_LOG(HLE, "sceKernelTerminateThread(%i): cannot terminate current thread", threadID);
+		return SCE_KERNEL_ERROR_ILLEGAL_THID;
+	}
+
+	u32 error;
+	Thread *t = kernelObjects.Get<Thread>(threadID, error);
+	if (t)
+	{
+		if (t->isStopped())
+		{
+			ERROR_LOG(HLE, "sceKernelTerminateThread(%i): already stopped", threadID);
+			return SCE_KERNEL_ERROR_DORMANT;
+		}
+
 		INFO_LOG(HLE, "sceKernelTerminateThread(%i)", threadID);
 
-		u32 error;
-		Thread *t = kernelObjects.Get<Thread>(threadID, error);
-		if (t)
-		{
-			t->nt.exitStatus = SCE_KERNEL_ERROR_THREAD_TERMINATED;
-			__KernelChangeReadyState(t, threadID, false);
-			t->nt.status = THREADSTATUS_DORMANT;
-			__KernelFireThreadEnd(threadID);
-			// TODO: Should this really reschedule?
-			__KernelTriggerWait(WAITTYPE_THREADEND, threadID, t->nt.exitStatus, "thread terminated", true);
-		}
-		// TODO: Return an error if it doesn't exist?
+		t->nt.exitStatus = SCE_KERNEL_ERROR_THREAD_TERMINATED;
+		__KernelChangeReadyState(t, threadID, false);
+		t->nt.status = THREADSTATUS_DORMANT;
+		__KernelFireThreadEnd(threadID);
+		// TODO: Should this really reschedule?
+		__KernelTriggerWait(WAITTYPE_THREADEND, threadID, t->nt.exitStatus, "thread terminated", true);
+
 		return 0;
 	}
 	else
 	{
-		ERROR_LOG_REPORT(HLE, "Thread \"%s\" trying to delete itself! :(", __GetCurrentThread() ? __GetCurrentThread()->GetName() : "NULL");
-		return -1;
+		ERROR_LOG(HLE, "sceKernelTerminateThread(%i): thread doesn't exist", threadID);
+		return error;
 	}
 }
 
@@ -2543,6 +2551,11 @@ int sceKernelReleaseWaitThread(SceUID threadID)
 	{
 		if (!t->isWaiting())
 			return SCE_KERNEL_ERROR_NOT_WAIT;
+		if (t->nt.waitType == WAITTYPE_HLEDELAY)
+		{
+			WARN_LOG_REPORT(HLE, "sceKernelReleaseWaitThread(): Refusing to wake HLE-delayed thread, right thing to do?");
+			return SCE_KERNEL_ERROR_NOT_WAIT;
+		}
 
 		__KernelResumeThreadFromWait(threadID, SCE_KERNEL_ERROR_RELEASE_WAIT);
 		hleReSchedule("thread released from wait");
@@ -2814,15 +2827,14 @@ void ActionAfterMipsCall::run(MipsCall &call) {
 
 ActionAfterMipsCall *Thread::getRunningCallbackAction()
 {
-	if (this->GetUID() == currentThread && g_inCbCount > 0)
-	{
+	if (this->GetUID() == currentThread && g_inCbCount > 0) 	{
 		MipsCall *call = mipsCalls.get(this->currentMipscallId);
 		ActionAfterMipsCall *action = 0;
 		if (call)
-			action = dynamic_cast<ActionAfterMipsCall *>(call->doAfter);
+			action = static_cast<ActionAfterMipsCall *>(call->doAfter);
 
-		if (!call || !action)
-		{
+		// We don't have rtti, so check manually.
+		if (!call || !action || action->actionTypeID != actionAfterMipsCall) {
 			ERROR_LOG(HLE, "Failed to access deferred info for thread: %s", this->nt.name);
 			return NULL;
 		}

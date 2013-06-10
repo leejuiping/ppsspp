@@ -35,6 +35,11 @@
 #include "sceKernel.h"
 
 enum {
+	ERROR_SAS_INVALID_GRAIN = 0x80420001,
+	ERROR_SAS_INVALID_MAX_VOICES = 0x80420002,
+	ERROR_SAS_INVALID_OUTPUT_MODE = 0x80420003,
+	ERROR_SAS_INVALID_SAMPLE_RATE = 0x80420004,
+	ERROR_SAS_BAD_ADDRESS = 0x80420005,
 	ERROR_SAS_INVALID_VOICE = 0x80420010,
 	ERROR_SAS_INVALID_ADSR_CURVE_MODE = 0x80420013,
 	ERROR_SAS_INVALID_PARAMETER = 0x80420014,
@@ -65,7 +70,23 @@ void __SasShutdown() {
 
 
 u32 sceSasInit(u32 core, u32 grainSize, u32 maxVoices, u32 outputMode, u32 sampleRate) {
-	INFO_LOG(HLE,"sceSasInit(%08x, %i, %i, %i, %i)", core, grainSize, maxVoices, outputMode, sampleRate);
+	if (!Memory::IsValidAddress(core) || (core & 0x3F) != 0) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad core address", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_BAD_ADDRESS;
+	}
+	if (maxVoices == 0 || maxVoices > 32) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad max voices", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_INVALID_MAX_VOICES;
+	}
+	if (grainSize < 0x40 || grainSize > 0x800 || (grainSize & 0x1F) != 0) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad grain size", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_INVALID_GRAIN;
+	}
+	if (outputMode != 0 && outputMode != 1) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad output mode", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_INVALID_OUTPUT_MODE;
+	}
+	INFO_LOG(HLE, "sceSasInit(%08x, %i, %i, %i, %i)", core, grainSize, maxVoices, outputMode, sampleRate);
 
 	sas->SetGrainSize(grainSize);
 	sas->maxVoices = maxVoices;
@@ -98,7 +119,9 @@ u32 _sceSasCore(u32 core, u32 outAddr) {
 	}
 
 	sas->Mix(outAddr);
-	return 0;
+	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
+	// Let's aim low for now.
+	return hleDelayResult(0, "sas core", 240);
 }
 
 // Another way of running the mixer, the inoutAddr should be both input and output
@@ -110,7 +133,9 @@ u32 _sceSasCoreWithMix(u32 core, u32 inoutAddr, int leftVolume, int rightVolume)
 	}
 
 	sas->Mix(inoutAddr, inoutAddr, leftVolume, rightVolume);
-	return 0;
+	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
+	// Let's aim low for now.
+	return hleDelayResult(0, "sas core", 240);
 }
 
 u32 sceSasSetVoice(u32 core, int voiceNum, u32 vagAddr, int size, int loop) {
@@ -240,7 +265,7 @@ u32 sceSasSetKeyOn(u32 core, int voiceNum) {
 		return ERROR_SAS_INVALID_VOICE;
 	}
 
-	if (sas->voices[voiceNum].paused) {
+	if (sas->voices[voiceNum].paused || sas->voices[voiceNum].on) {
 		return ERROR_SAS_VOICE_PAUSED;
 	}
 
@@ -261,7 +286,7 @@ u32 sceSasSetKeyOff(u32 core, int voiceNum) {
 	} else {
 		DEBUG_LOG(HLE,"sceSasSetKeyOff(%08x, %i)", core, voiceNum);
 
-		if (sas->voices[voiceNum].paused) {
+		if (sas->voices[voiceNum].paused || !sas->voices[voiceNum].on) {
 			return ERROR_SAS_VOICE_PAUSED;
 		}
 
@@ -432,18 +457,28 @@ u32 sceSasSetSteepWave(u32 sasCore, int voice, int unknown) {
 	return 0;
 }
 
-u32 __sceSasSetVoiceATRAC3(u32 core, int voice, int atrac3Context) {
-	ERROR_LOG_REPORT(HLE, "UNIMPL __sceSasSetVoiceATRAC3(%08x, %i, %i)", core, voice, atrac3Context);
+u32 __sceSasSetVoiceATRAC3(u32 core, int voiceNum, u32 atrac3Context) {
+	INFO_LOG_REPORT(HLE, "__sceSasSetVoiceATRAC3(%08x, %i, %08x)", core, voiceNum, atrac3Context);
+	SasVoice &v = sas->voices[voiceNum];
+	v.type = VOICETYPE_ATRAC3;
+	v.loop = false;
+	v.playing = true;
+	v.atrac3.setContext(atrac3Context);
+	Memory::Write_U32(atrac3Context, core + 56 * voiceNum + 20);
 	return 0;
 }
 
-u32 __sceSasConcatenateATRAC3(u32 core, int voice, u32 atrac3DataAddr, int atrac3DataLength) {
-	ERROR_LOG_REPORT(HLE, "UNIMPL __sceSasConcatenateATRAC3(%08x, %i, %08x, %i)", core, voice, atrac3DataAddr, atrac3DataLength);
+u32 __sceSasConcatenateATRAC3(u32 core, int voiceNum, u32 atrac3DataAddr, int atrac3DataLength) {
+	INFO_LOG_REPORT(HLE, "__sceSasConcatenateATRAC3(%08x, %i, %08x, %i)", core, voiceNum, atrac3DataAddr, atrac3DataLength);
+	SasVoice &v = sas->voices[voiceNum];
+	if (Memory::IsValidAddress(atrac3DataAddr))
+		v.atrac3.addStreamData(Memory::GetPointer(atrac3DataAddr), atrac3DataLength);
 	return 0;
 }
 
-u32 __sceSasUnsetATRAC3(u32 core, int voice) {
-	ERROR_LOG_REPORT(HLE, "UNIMPL __sceSasUnsetATRAC3(%08x, %i)", core, voice);
+u32 __sceSasUnsetATRAC3(u32 core, int voiceNum) {
+	INFO_LOG_REPORT(HLE, "__sceSasUnsetATRAC3(%08x, %i)", core, voiceNum);
+	Memory::Write_U32(0, core + 56 * voiceNum + 20);
 	return 0;
 }
 
@@ -478,7 +513,7 @@ const HLEFunction sceSasCore[] =
 	{0xe855bf76, WrapU_UU<sceSasSetOutputMode>, "__sceSasSetOutputmode"},
 	{0x07f58c24, WrapU_UU<sceSasGetAllEnvelopeHeights>, "__sceSasGetAllEnvelopeHeights"},
 	{0xE1CD9561, WrapU_UIUII<sceSasSetVoicePCM>, "__sceSasSetVoicePCM"},
-	{0x4AA9EAD6, WrapU_UII<__sceSasSetVoiceATRAC3>,"__sceSasSetVoiceATRAC3"},
+	{0x4AA9EAD6, WrapU_UIU<__sceSasSetVoiceATRAC3>,"__sceSasSetVoiceATRAC3"},
 	{0x7497EA85, WrapU_UIUI<__sceSasConcatenateATRAC3>,"__sceSasConcatenateATRAC3"},
 	{0xF6107F00, WrapU_UI<__sceSasUnsetATRAC3>,"__sceSasUnsetATRAC3"},
 };

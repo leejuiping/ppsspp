@@ -15,28 +15,45 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#pragma	once
+#pragma once
 
-enum EmuFileType
+typedef struct 
 {
-	FILETYPE_ERROR,
+	s32 unk0;
+	s32 unk4;
+	s32 err; // 8
+	s32 edramAddr; // 12
+	s32 neededMem; // 16
+	s32 unk20;
+	u32 inBuf; // 24
+	s32 unk28;
+	u32 outBuf; // 32
+	s32 unk36;
+	s8 unk40;
+	s8 unk41;
+	s8 unk42;
+	s8 unk43;
+	s8 unk44;
+	s8 unk45;
+	s8 unk46;
+	s8 unk47;
+	s32 unk48;
+	s32 unk52;
+	s32 unk56;
+	s32 unk60;
+	s32 unk64;
+	s32 unk68;
+	s32 unk72;
+	s32 unk76;
+	s32 unk80;
+	s32 unk84;
+	s32 unk88;
+	s32 unk92;
+	s32 unk96;
+	s32 unk100;
+	u32 allocMem; // 104
+	// make sure the size is 128
+	u8 unk[20];
+} SceAudiocodecCodec;
 
-	FILETYPE_PSP_PBP_DIRECTORY,
-
-	FILETYPE_PSP_PBP,
-	FILETYPE_PSP_ELF,
-	FILETYPE_PSP_ISO,
-	FILETYPE_PSP_ISO_NP,
-
-	FILETYPE_UNKNOWN_BIN,
-	FILETYPE_UNKNOWN_ELF,
-
-	FILETYPE_UNKNOWN
-};
-
-// This can modify the string, for example for stripping off the "/EBOOT.PBP"
-// for a FILETYPE_PSP_PBP_DIRECTORY.
-EmuFileType Identify_File(std::string &str);
-
-// Can modify the string filename, as it calls IdentifyFile above.
-bool LoadFile(std::string &filename, std::string *error_string);
+void Register_sceAudiocodec();

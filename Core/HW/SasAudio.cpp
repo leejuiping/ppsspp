@@ -18,6 +18,7 @@
 #include "base/basictypes.h"
 #include "../Globals.h"
 #include "../MemMap.h"
+#include "Core/HLE/sceAtrac.h"
 #include "SasAudio.h"
 
 // #define AUDIO_TO_FILE
@@ -150,6 +151,49 @@ void VagDecoder::DoState(PointerWrap &p)
 	p.Do(loopEnabled_);
 	p.Do(loopAtNextBlock_);
 	p.Do(end_);
+}
+
+int SasAtrac3::setContext(u32 context) {
+	contextAddr = context;
+	atracID = _AtracGetIDByContext(context);
+	if (!sampleQueue)
+		sampleQueue = new Atrac3plus_Decoder::BufferQueue;
+	sampleQueue->clear();
+	return 0;
+}
+
+int SasAtrac3::getNextSamples(s16* outbuf, int wantedSamples) {
+	if (atracID < 0)
+		return -1;
+	u32 finish = 0;
+	int wantedbytes = wantedSamples * sizeof(s16);
+	while (!finish && sampleQueue->getQueueSize() < wantedbytes) {
+		u32 numSamples = 0;
+		int remains = 0;
+		static s16 buf[0x800];
+		_AtracDecodeData(atracID, (u8*)buf, &numSamples, &finish, &remains);
+		if (numSamples > 0)
+			sampleQueue->push((u8*)buf, numSamples * sizeof(s16));
+		else 
+			finish = 1;
+	}
+	sampleQueue->pop_front((u8*)outbuf, wantedbytes);
+	return finish;
+}
+
+int SasAtrac3::addStreamData(u8* buf, u32 addbytes) {
+	if (atracID > 0) {
+		_AtracAddStreamData(atracID, buf, addbytes);
+	}
+	return 0;
+}
+
+void SasAtrac3::DoState(PointerWrap &p) {
+	p.Do(contextAddr);
+	p.Do(atracID);
+	if (p.mode == p.MODE_READ && atracID >= 0 && !sampleQueue) {
+		sampleQueue = new Atrac3plus_Decoder::BufferQueue;
+	}
 }
 
 // http://code.google.com/p/jpcsp/source/browse/trunk/src/jpcsp/HLE/modules150/sceSasCore.java
@@ -340,6 +384,16 @@ void SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 					}
 				}
 				break;
+			case VOICETYPE_ATRAC3:
+				{
+					int ret = voice.atrac3.getNextSamples(resampleBuffer + 2, numSamples);
+					if (ret) {
+						// Hit atrac3 voice end
+						voice.playing = false;
+						voice.on = false;  // ??
+					}
+				}
+				break;
 			default:
 				{
 					memset(resampleBuffer + 2, 0, numSamples * sizeof(s16));
@@ -360,12 +414,14 @@ void SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 				int sample = resampleBuffer[sampleFrac / PSP_SAS_PITCH_BASE + 2];
 				sampleFrac += voice.pitch;
 
-				// Reduce envelope to 15 bits, rounding down.
+				// The maximum envelope height (PSP_SAS_ENVELOPE_HEIGHT_MAX) is (1 << 30) - 1.
+				// Reduce it to 14 bits, by shifting off 15.  Round up by adding (1 << 14) first.
 				int envelopeValue = voice.envelope.GetHeight();
-				envelopeValue = ((envelopeValue >> 15) + 1) >> 1;
+				envelopeValue = (envelopeValue + (1 << 14)) >> 15;
 
 				// We just scale by the envelope before we scale by volumes.
-				sample = sample * (envelopeValue + 0x4000) >> 15;
+				// Again, we round up by adding (1 << 14) first (*after* multiplying.)
+				sample = ((sample * envelopeValue) + (1 << 14)) >> 15;
 
 				// We mix into this 32-bit temp buffer and clip in a second loop
 				// Ideally, the shift right should be there too but for now I'm concerned about
@@ -484,7 +540,6 @@ void SasVoice::KeyOn() {
 void SasVoice::KeyOff() {
 	on = false;
 	envelope.KeyOff();
-	vag.SetLoop(false);
 }
 
 void SasVoice::ChangedParams(bool changedVag) {
@@ -529,6 +584,7 @@ void SasVoice::DoState(PointerWrap &p)
 
 	envelope.DoState(p);
 	vag.DoState(p);
+	atrac3.DoState(p);
 }
 
 // This is horribly stolen from JPCSP.
@@ -682,6 +738,10 @@ void ADSREnvelope::Step() {
 		break;
 	case STATE_SUSTAIN:
 		WalkCurve(sustainRate, sustainType);
+		if (height_ <= 0) {
+			height_ = 0;
+			SetState(STATE_RELEASE);
+		}
 		break;
 	case STATE_RELEASE:
 		WalkCurve(releaseRate, releaseType);

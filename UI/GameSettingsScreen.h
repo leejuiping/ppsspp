@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,28 +15,28 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#pragma	once
+#pragma once
 
-enum EmuFileType
-{
-	FILETYPE_ERROR,
+#include "ui/ui_screen.h"
 
-	FILETYPE_PSP_PBP_DIRECTORY,
 
-	FILETYPE_PSP_PBP,
-	FILETYPE_PSP_ELF,
-	FILETYPE_PSP_ISO,
-	FILETYPE_PSP_ISO_NP,
+// Per-game settings screen - enables you to configure graphic options, control options, etc
+// per game.
+class GameSettingsScreen : public UIScreen {
+public:
+	GameSettingsScreen(std::string gamePath, std::string gameID) : gamePath_(gamePath), gameID_(gameID) {}
 
-	FILETYPE_UNKNOWN_BIN,
-	FILETYPE_UNKNOWN_ELF,
+protected:
+	virtual void CreateViews();
+ 	virtual void DrawBackground(UIContext &dc);
 
-	FILETYPE_UNKNOWN
+private:
+	// Event handlers
+	UI::EventReturn OnDownloadPlugin(UI::EventParams &e);
+
+	std::string gamePath_, gameID_;
+
+	// As we load metadata in the background, we need to be able to update these after the fact.
+	UI::TextView *tvTitle_;
+	UI::TextView *tvGameSize_;
 };
-
-// This can modify the string, for example for stripping off the "/EBOOT.PBP"
-// for a FILETYPE_PSP_PBP_DIRECTORY.
-EmuFileType Identify_File(std::string &str);
-
-// Can modify the string filename, as it calls IdentifyFile above.
-bool LoadFile(std::string &filename, std::string *error_string);

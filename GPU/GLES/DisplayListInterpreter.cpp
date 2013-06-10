@@ -1024,6 +1024,13 @@ void GLES_GPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type) {
 		textureCache_.Invalidate(addr, size, type);
 	else
 		textureCache_.InvalidateAll(type);
+
+	if (type != GPU_INVALIDATE_ALL)
+		framebufferManager_.UpdateFromMemory(addr, size);
+}
+
+void GLES_GPU::UpdateMemory(u32 dest, u32 src, int size) {
+	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 }
 
 void GLES_GPU::ClearCacheNextFrame() {

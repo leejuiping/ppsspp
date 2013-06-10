@@ -22,6 +22,8 @@
 #include "Core/HLE/scePsmf.h"
 #include "Core/HLE/sceMpeg.h"
 #include "Core/HW/MediaEngine.h"
+#include "GPU/GPUInterface.h"
+#include "GPU/GPUState.h"
 
 #include <map>
 
@@ -273,7 +275,7 @@ PsmfPlayer::PsmfPlayer(u32 data) {
 	audioStreamNum = Memory::Read_U32(data + 12);
 	playMode = Memory::Read_U32(data+ 16);
 	playSpeed = Memory::Read_U32(data + 20);
-	psmfPlayerLastTimestamp = bswap32(Memory::Read_U32(data + PSMF_LAST_TIMESTAMP_OFFSET)) ;
+	psmfPlayerLastTimestamp = getMpegTimeStamp(Memory::GetPointer(data + PSMF_LAST_TIMESTAMP_OFFSET)) ;
 	status = PSMF_PLAYER_STATUS_INIT;
 	mediaengine = new MediaEngine;
 }
@@ -553,17 +555,16 @@ u32 scePsmfQueryStreamOffset(u32 bufferAddr, u32 offsetAddr)
 {
 	ERROR_LOG(HLE, "UNIMPL scePsmfQueryStreamOffset(%08x, %08x)", bufferAddr, offsetAddr);
 	if (Memory::IsValidAddress(offsetAddr)) {
-		Memory::Write_U32(0, offsetAddr);
+		Memory::Write_U32(bswap32(Memory::Read_U32(bufferAddr + PSMF_STREAM_OFFSET_OFFSET)), offsetAddr);
 	}
-	// return 0 breaks history mode in Saint Seiya Omega
-	return 1; 
+	return 0;
 }
 
 u32 scePsmfQueryStreamSize(u32 bufferAddr, u32 sizeAddr)
 {
 	ERROR_LOG(HLE, "UNIMPL scePsmfQueryStreamSize(%08x, %08x)", bufferAddr, sizeAddr);
 	if (Memory::IsValidAddress(sizeAddr)) {
-		Memory::Write_U32(1, sizeAddr);
+		Memory::Write_U32(bswap32(Memory::Read_U32(bufferAddr + PSMF_STREAM_SIZE_OFFSET)), sizeAddr);
 	}
 	return 0;
 }
@@ -846,14 +847,11 @@ int scePsmfPlayerUpdate(u32 psmfPlayer)
 
 	if (psmfplayer->psmfPlayerAvcAu.pts > 0) {
 		if (psmfplayer->psmfPlayerAvcAu.pts >= psmfplayer->psmfPlayerLastTimestamp) {
+			INFO_LOG(HLE,"video end reach");
 			psmfplayer->status = PSMF_PLAYER_STATUS_PLAYING_FINISHED;
 		}
 	}
-	// TODO: Once we start increasing pts somewhere, and actually know the last timestamp, do this better.
-	psmfplayer->mediaengine->stepVideo(videoPixelMode);
-	psmfplayer->psmfPlayerAvcAu.pts = psmfplayer->mediaengine->getVideoTimeStamp();
-	// This seems to be crazy!
-	return  hleDelayResult(0, "psmfPlayer update", 30000);
+	return 0;
 }
 
 int scePsmfPlayerReleasePsmf(u32 psmfPlayer) 
@@ -878,12 +876,24 @@ int scePsmfPlayerGetVideoData(u32 psmfPlayer, u32 videoDataAddr)
 		int frameWidth = Memory::Read_U32(videoDataAddr);
         u32 displaybuf = Memory::Read_U32(videoDataAddr + 4);
         int displaypts = Memory::Read_U32(videoDataAddr + 8);
-
-		psmfplayer->mediaengine->writeVideoImage(Memory::GetPointer(displaybuf), frameWidth, videoPixelMode);
-		
+		if (psmfplayer->mediaengine->stepVideo(videoPixelMode)) {
+			int displaybufSize = psmfplayer->mediaengine->writeVideoImage(Memory::GetPointer(displaybuf), frameWidth, videoPixelMode);
+			gpu->InvalidateCache(displaybuf, displaybufSize, GPU_INVALIDATE_SAFE);
+		}
+		psmfplayer->psmfPlayerAvcAu.pts = psmfplayer->mediaengine->getVideoTimeStamp();
 		Memory::Write_U32(psmfplayer->psmfPlayerAvcAu.pts, videoDataAddr + 8);
 	}
-	return hleDelayResult(0, "psmfPlayer video decode", 3000);
+
+	int ret = psmfplayer->mediaengine->IsVideoEnd() ? ERROR_PSMFPLAYER_NO_MORE_DATA : 0;
+
+	s64 deltapts = psmfplayer->mediaengine->getVideoTimeStamp() - psmfplayer->mediaengine->getAudioTimeStamp();
+	int delaytime = 3000;
+	if (deltapts > 0 && !psmfplayer->mediaengine->IsAudioEnd())
+		delaytime = deltapts * 1000000 / 90000;
+	if (!ret)
+		return hleDelayResult(ret, "psmfPlayer video decode", delaytime);
+	else
+		return hleDelayResult(ret, "psmfPlayer all data decoded", 3000);
 }
 
 int scePsmfPlayerGetAudioData(u32 psmfPlayer, u32 audioDataAddr)
@@ -899,7 +909,8 @@ int scePsmfPlayerGetAudioData(u32 psmfPlayer, u32 audioDataAddr)
 		Memory::Memset(audioDataAddr, 0, audioSamplesBytes);
 		psmfplayer->mediaengine->getAudioSamples(Memory::GetPointer(audioDataAddr));
 	}
-	return hleDelayResult(0, "psmfPlayer audio decode", 3000);
+	int ret = psmfplayer->mediaengine->IsAudioEnd() ? ERROR_PSMFPLAYER_NO_MORE_DATA : 0;
+	return hleDelayResult(ret, "psmfPlayer audio decode", 3000);
 }
 
 int scePsmfPlayerGetCurrentStatus(u32 psmfPlayer) 
@@ -927,7 +938,7 @@ u32 scePsmfPlayerGetCurrentPts(u32 psmfPlayer, u32 currentPtsAddr)
 
 	if (Memory::IsValidAddress(currentPtsAddr)) {
 		//Comment out until psmfPlayerAvcAu.pts start increasing correctly, Ultimate Ghosts N Goblins relies on it .
-		Memory::Write_U64(psmfplayer->psmfPlayerAvcAu.pts, currentPtsAddr);
+		Memory::Write_U32(psmfplayer->psmfPlayerAvcAu.pts, currentPtsAddr);
 	}	
 	return 0;
 }
@@ -945,7 +956,13 @@ u32 scePsmfPlayerGetPsmfInfo(u32 psmfPlayer, u32 psmfInfoAddr)
 	}
 
 	if (Memory::IsValidAddress(psmfInfoAddr)) {
-		Memory::Write_U64(psmfplayer->psmfPlayerAvcAu.pts, psmfInfoAddr);
+		Memory::Write_U32(psmfplayer->psmfPlayerLastTimestamp, psmfInfoAddr);
+		Memory::Write_U32(psmfplayer->videoStreamNum, psmfInfoAddr + 4);
+		Memory::Write_U32(psmfplayer->audioStreamNum, psmfInfoAddr + 8);
+		// pcm stream num?
+		Memory::Write_U32(0, psmfInfoAddr + 12);
+		// Player version?
+		Memory::Write_U32(0, psmfInfoAddr + 16);
 	}
 	return 0;
 }

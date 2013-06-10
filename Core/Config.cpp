@@ -76,6 +76,9 @@ void Config::Load(const char *iniFileName)
 	general->Get("WindowX", &iWindowX, 40);
 	general->Get("WindowY", &iWindowY, 100);
 	general->Get("AutoSaveSymbolMap", &bAutoSaveSymbolMap, false);
+#ifdef _WIN32
+	general->Get("TopMost", &bTopMost);
+#endif
 
 	if (recentIsos.size() > iMaxRecent)
 		recentIsos.resize(iMaxRecent);
@@ -104,7 +107,6 @@ void Config::Load(const char *iniFileName)
 	graphics->Get("VBO", &bUseVBO, false);
 	graphics->Get("FrameSkip", &iFrameSkip, 0);
 	graphics->Get("FrameRate", &iFpsLimit, 60);
-	graphics->Get("UseMediaEngine", &bUseMediaEngine, true);
 #ifdef USING_GLES2
 	graphics->Get("AnisotropyLevel", &iAnisotropyLevel, 0);
 #else
@@ -187,6 +189,9 @@ void Config::Save()
 		general->Set("WindowX", iWindowX);
 		general->Set("WindowY", iWindowY);
 		general->Set("AutoSaveSymbolMap", bAutoSaveSymbolMap);
+#ifdef _WIN32
+		general->Set("TopMost", bTopMost);
+#endif
 		general->Set("Language", languageIni);
 		general->Set("NumWorkerThreads", iNumWorkerThreads);
 		general->Set("MaxRecent", iMaxRecent);
@@ -207,7 +212,6 @@ void Config::Save()
 		graphics->Set("VBO", bUseVBO);
 		graphics->Set("FrameSkip", iFrameSkip);
 		graphics->Set("FrameRate", iFpsLimit);
-		graphics->Set("UseMediaEngine", bUseMediaEngine);
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("VertexCache", bVertexCache);
 		graphics->Set("FullScreen", bFullScreen);

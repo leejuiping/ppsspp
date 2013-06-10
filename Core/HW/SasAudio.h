@@ -25,6 +25,8 @@
 #include "../Globals.h"
 #include "ChunkFile.h"
 
+#include "Core/HW/atrac3plus.h"
+
 enum {
 	PSP_SAS_VOICES_MAX = 32,
 
@@ -82,7 +84,6 @@ public:
 
 	void DecodeBlock(u8 *&readp);
 	bool End() const { return end_; }
-	void SetLoop(bool enabled) { loopEnabled_ = enabled; }
 
 	void DoState(PointerWrap &p);
 
@@ -104,6 +105,20 @@ private:
 	bool loopEnabled_;
 	bool loopAtNextBlock_;
 	bool end_;
+};
+
+class SasAtrac3 {
+public:
+	SasAtrac3() : contextAddr(0), atracID(-1), sampleQueue(0){}
+	~SasAtrac3() { if (sampleQueue) delete sampleQueue; }
+	int setContext(u32 context);
+	int getNextSamples(s16* outbuf, int wantedSamples);
+	int addStreamData(u8* buf, u32 addbytes);
+	void DoState(PointerWrap &p);
+private:
+	u32 contextAddr;
+	int atracID;
+	Atrac3plus_Decoder::BufferQueue *sampleQueue;
 };
 
 // Max height: 0x40000000 I think
@@ -218,6 +233,7 @@ struct SasVoice
 	ADSREnvelope envelope;
 
 	VagDecoder vag;
+	SasAtrac3 atrac3;
 };
 
 class SasInstance

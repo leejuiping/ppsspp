@@ -542,6 +542,10 @@ public:
 	// Compares against zero
 	void VCMP(ARMReg Vd);
 	void VCMPE(ARMReg Vd);
+
+	void VNMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm);
+	void VNMLS(ARMReg Vd, ARMReg Vn, ARMReg Vm);
+	void VNMUL(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VDIV(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VSQRT(ARMReg Vd, ARMReg Vm);
 
@@ -553,6 +557,7 @@ public:
 	void VMUL(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VMLA(ARMReg Vd, ARMReg Vn, ARMReg Vm);
 	void VMLS(ARMReg Vd, ARMReg Vn, ARMReg Vm);
+	void VMOV(ARMReg Dest, Operand2 op2);
 	void VMOV(ARMReg Dest, ARMReg Src, bool high);
 	void VMOV(ARMReg Dest, ARMReg Src);
 	void VCVT(ARMReg Dest, ARMReg Src, int flags);
@@ -565,7 +570,7 @@ public:
 
 	// Wrapper around MOVT/MOVW with fallbacks.
 	void MOVI2R(ARMReg reg, u32 val, bool optimize = true);
-	void MOVI2F(ARMReg dest, float val, ARMReg tempReg);
+	void MOVI2F(ARMReg dest, float val, ARMReg tempReg, bool negate = false);
 
 	void ADDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);
 	void ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch);

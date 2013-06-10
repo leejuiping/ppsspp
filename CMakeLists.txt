@@ -477,6 +477,9 @@ elseif(SDL_FOUND)
 	elseif(PANDORA OR MAEMO)
 		set(nativeExtraLibs ${nativeExtraLibs} pthread EGL X11)
 	endif()
+	# FFMPEG
+	add_definitions(-DUSE_FFMPEG)
+	set(nativeExtraLibs ${nativeExtraLibs} avformat avcodec swresample swscale)
 	set(TargetBin PPSSPPSDL)
 else()
     message(FATAL_ERROR "Could not find SDL. Failing.")
@@ -627,7 +630,11 @@ add_library(native STATIC
 	native/ext/rapidxml/rapidxml.hpp
 	native/ext/rapidxml/rapidxml_iterators.hpp
 	native/ext/rapidxml/rapidxml_print.hpp
-	native/ext/rapidxml/rapidxml_utils.hpp)
+	native/ext/rapidxml/rapidxml_utils.hpp
+	native/ext/vjson/json.cpp
+	native/ext/vjson/json.h
+	native/ext/vjson/block_allocator.cpp
+	native/ext/vjson/block_allocator.h)
 include_directories(native)
 # rapidxml is headers only so we can't make a lib specific for it
 include_directories(native/ext/rapidxml)
@@ -662,6 +669,7 @@ add_library(xbrz STATIC
 include_directories(ext/xbrz)
 
 set(CoreExtra)
+set(CoreExtraLibs)
 if(ARM)
 	set(CoreExtra ${CoreExtra}
 		Core/MIPS/ARM/ArmAsm.cpp
@@ -693,6 +701,12 @@ elseif(X86)
 		Core/MIPS/x86/RegCache.h
 		Core/MIPS/x86/RegCacheFPU.cpp
 		Core/MIPS/x86/RegCacheFPU.h)
+endif()
+
+# atrac3plus.cpp used dl* functions on non-win32 platforms
+# Core needs to be linked with dl on these platforms
+if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+  set(CoreExtraLibs ${CoreExtraLibs} ${CMAKE_DL_LIBS})
 endif()
 
 # 'ppsspp_jni' on ANDROID, 'Core' everywhere else
@@ -758,6 +772,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceAtrac.cpp
 	Core/HLE/sceAtrac.h
 	Core/HLE/sceAudio.cpp
+	Core/HLE/sceAudiocodec.cpp
+	Core/HLE/sceAudiocodec.h
 	Core/HLE/sceAudio.h
 	Core/HLE/sceChnnlsv.cpp
 	Core/HLE/sceChnnlsv.h
@@ -916,7 +932,7 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Globals.h
 	git-version.cpp)
 target_link_libraries(${CoreLibName} Common native kirk cityhash xbrz
-	${GLEW_LIBRARIES} ${OPENGL_LIBRARIES})
+	${CoreExtraLibs} ${GLEW_LIBRARIES} ${OPENGL_LIBRARIES})
 setup_target_project(${CoreLibName} Core)
 
 # Generate git-version.cpp at build time.
@@ -1053,9 +1069,12 @@ set(NativeAppSource
 	android/jni/TestRunner.cpp
 	UI/GameInfoCache.cpp
 	UI/MenuScreens.cpp
+	UI/GameScreen.cpp
+	UI/GameSettingsScreen.cpp
 	UI/GamepadEmu.cpp
 	UI/UIShader.cpp
 	UI/OnScreenDisplay.cpp
+	UI/PluginScreen.cpp
 	UI/ui_atlas.cpp)
 if(ANDROID)
 	set(NativeAppSource ${NativeAppSource} android/jni/ArmEmitterTest.cpp)

@@ -567,6 +567,11 @@ void FramebufferManager::EndFrame() {
 	}
 }
 
+void FramebufferManager::DeviceLost() {
+	DestroyAllFBOs();
+	resized_ = false;
+}
+
 void FramebufferManager::BeginFrame() {
 	DecimateFBOs();
 	// NOTE - this is all wrong. At the beginning of the frame is a TERRIBLE time to draw the fb.
@@ -648,6 +653,9 @@ void FramebufferManager::DecimateFBOs() {
 void FramebufferManager::DestroyAllFBOs() {
 	fbo_unbind();
 	currentRenderVfb_ = 0;
+	displayFramebuf_ = 0;
+	prevDisplayFramebuf_ = 0;
+	prevPrevDisplayFramebuf_ = 0;
 
 	for (auto iter = vfbs_.begin(); iter != vfbs_.end(); ++iter) {
 		VirtualFramebuffer *vfb = *iter;

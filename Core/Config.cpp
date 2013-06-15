@@ -76,6 +76,9 @@ void Config::Load(const char *iniFileName)
 	general->Get("WindowX", &iWindowX, 40);
 	general->Get("WindowY", &iWindowY, 100);
 	general->Get("AutoSaveSymbolMap", &bAutoSaveSymbolMap, false);
+#ifdef _WIN32
+	general->Get("TopMost", &bTopMost);
+#endif
 
 	if (recentIsos.size() > iMaxRecent)
 		recentIsos.resize(iMaxRecent);
@@ -142,6 +145,7 @@ void Config::Load(const char *iniFileName)
 	control->Get("KeyMapping",iMappingMap);
 	control->Get("AccelerometerToAnalogHoriz", &bAccelerometerToAnalogHoriz, false);
 	control->Get("ForceInputDevice", &iForceInputDevice, -1);
+	control->Get("RightStickBind", &iRightStickBind, 0);
 
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 	pspConfig->Get("NickName", &sNickName, "shadow");
@@ -186,6 +190,9 @@ void Config::Save()
 		general->Set("WindowX", iWindowX);
 		general->Set("WindowY", iWindowY);
 		general->Set("AutoSaveSymbolMap", bAutoSaveSymbolMap);
+#ifdef _WIN32
+		general->Set("TopMost", bTopMost);
+#endif
 		general->Set("Language", languageIni);
 		general->Set("NumWorkerThreads", iNumWorkerThreads);
 		general->Set("MaxRecent", iMaxRecent);
@@ -230,7 +237,8 @@ void Config::Save()
 		control->Set("KeyMapping",iMappingMap);
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
 		control->Set("ForceInputDevice", iForceInputDevice);
-		
+		control->Set("RightStickBind", iRightStickBind);
+
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("NickName", sNickName.c_str());

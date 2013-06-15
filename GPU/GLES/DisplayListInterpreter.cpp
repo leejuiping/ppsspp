@@ -233,6 +233,7 @@ void GLES_GPU::DeviceLost() {
 	// FBO:s appear to survive? Or no?
 	shaderManager_->ClearCache(false);
 	textureCache_.Clear(false);
+	framebufferManager_.DeviceLost();
 }
 
 void GLES_GPU::InitClear() {
@@ -1012,8 +1013,8 @@ void GLES_GPU::DoBlockTransfer() {
 	u32 backBuffer = framebufferManager_.PrevDisplayFramebufAddr();
 	u32 displayBuffer = framebufferManager_.DisplayFramebufAddr();
 
-	if ((backBuffer != 0 && dstBasePtr == backBuffer) ||
-		  (displayBuffer != 0 && dstBasePtr == displayBuffer) &&
+	if (((backBuffer != 0 && dstBasePtr == backBuffer) ||
+		  (displayBuffer != 0 && dstBasePtr == displayBuffer)) &&
 			dstStride == 512 && height == 272) {
 		framebufferManager_.DrawPixels(Memory::GetPointer(dstBasePtr), 3, 512);
 	}
@@ -1027,6 +1028,10 @@ void GLES_GPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type) {
 
 	if (type != GPU_INVALIDATE_ALL)
 		framebufferManager_.UpdateFromMemory(addr, size);
+}
+
+void GLES_GPU::UpdateMemory(u32 dest, u32 src, int size) {
+	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 }
 
 void GLES_GPU::ClearCacheNextFrame() {

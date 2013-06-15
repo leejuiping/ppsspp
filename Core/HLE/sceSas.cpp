@@ -35,6 +35,11 @@
 #include "sceKernel.h"
 
 enum {
+	ERROR_SAS_INVALID_GRAIN = 0x80420001,
+	ERROR_SAS_INVALID_MAX_VOICES = 0x80420002,
+	ERROR_SAS_INVALID_OUTPUT_MODE = 0x80420003,
+	ERROR_SAS_INVALID_SAMPLE_RATE = 0x80420004,
+	ERROR_SAS_BAD_ADDRESS = 0x80420005,
 	ERROR_SAS_INVALID_VOICE = 0x80420010,
 	ERROR_SAS_INVALID_ADSR_CURVE_MODE = 0x80420013,
 	ERROR_SAS_INVALID_PARAMETER = 0x80420014,
@@ -65,10 +70,27 @@ void __SasShutdown() {
 
 
 u32 sceSasInit(u32 core, u32 grainSize, u32 maxVoices, u32 outputMode, u32 sampleRate) {
-	INFO_LOG(HLE,"sceSasInit(%08x, %i, %i, %i, %i)", core, grainSize, maxVoices, outputMode, sampleRate);
+	if (!Memory::IsValidAddress(core) || (core & 0x3F) != 0) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad core address", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_BAD_ADDRESS;
+	}
+	if (maxVoices == 0 || maxVoices > PSP_SAS_VOICES_MAX) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad max voices", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_INVALID_MAX_VOICES;
+	}
+	if (grainSize < 0x40 || grainSize > 0x800 || (grainSize & 0x1F) != 0) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad grain size", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_INVALID_GRAIN;
+	}
+	if (outputMode != 0 && outputMode != 1) {
+		ERROR_LOG_REPORT(HLE, "sceSasInit(%08x, %i, %i, %i, %i): bad output mode", core, grainSize, maxVoices, outputMode, sampleRate);
+		return ERROR_SAS_INVALID_OUTPUT_MODE;
+	}
+	INFO_LOG(HLE, "sceSasInit(%08x, %i, %i, %i, %i)", core, grainSize, maxVoices, outputMode, sampleRate);
 
 	sas->SetGrainSize(grainSize);
-	sas->maxVoices = maxVoices;
+	// Seems like maxVoiecs is actually ignored for all intents and purposes.
+	sas->maxVoices = PSP_SAS_VOICES_MAX;
 	sas->outputMode = outputMode;
 	for (int i = 0; i < sas->maxVoices; i++) {
 		sas->voices[i].sampleRate = sampleRate;
@@ -98,7 +120,9 @@ u32 _sceSasCore(u32 core, u32 outAddr) {
 	}
 
 	sas->Mix(outAddr);
-	return 0;
+	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
+	// Let's aim low for now.
+	return hleDelayResult(0, "sas core", 240);
 }
 
 // Another way of running the mixer, the inoutAddr should be both input and output
@@ -110,7 +134,9 @@ u32 _sceSasCoreWithMix(u32 core, u32 inoutAddr, int leftVolume, int rightVolume)
 	}
 
 	sas->Mix(inoutAddr, inoutAddr, leftVolume, rightVolume);
-	return 0;
+	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
+	// Let's aim low for now.
+	return hleDelayResult(0, "sas core", 240);
 }
 
 u32 sceSasSetVoice(u32 core, int voiceNum, u32 vagAddr, int size, int loop) {
@@ -184,15 +210,14 @@ u32 sceSasGetPauseFlag(u32 core) {
 	return pauseFlag;
 }
 
-u32 sceSasSetPause(u32 core, int voicebit, int pause) {
+u32 sceSasSetPause(u32 core, u32 voicebit, int pause) {
 	DEBUG_LOG(HLE,"sceSasSetPause(%08x, %08x, %i)", core, voicebit, pause);
 
-	for (int i = 0; voicebit != 0; i++, voicebit >>= 1)	{
+	for (int i = 0; voicebit != 0; i++, voicebit >>= 1) {
 		if (i < PSP_SAS_VOICES_MAX && i >= 0) {
 			if ((voicebit & 1) != 0)
 				sas->voices[i].paused = pause ? true : false;
-		} else // TODO: Correct error code?  Mimana crashes otherwise.
-			return ERROR_SAS_INVALID_VOICE;
+		}
 	}
 
 	return 0;
@@ -240,7 +265,7 @@ u32 sceSasSetKeyOn(u32 core, int voiceNum) {
 		return ERROR_SAS_INVALID_VOICE;
 	}
 
-	if (sas->voices[voiceNum].paused) {
+	if (sas->voices[voiceNum].paused || sas->voices[voiceNum].on) {
 		return ERROR_SAS_VOICE_PAUSED;
 	}
 
@@ -261,7 +286,7 @@ u32 sceSasSetKeyOff(u32 core, int voiceNum) {
 	} else {
 		DEBUG_LOG(HLE,"sceSasSetKeyOff(%08x, %i)", core, voiceNum);
 
-		if (sas->voices[voiceNum].paused) {
+		if (sas->voices[voiceNum].paused || !sas->voices[voiceNum].on) {
 			return ERROR_SAS_VOICE_PAUSED;
 		}
 
@@ -379,8 +404,8 @@ u32 sceSasRevEVOL(u32 core, int lv, int rv) {
 
 u32 sceSasRevVON(u32 core, int dry, int wet) {
 	DEBUG_LOG(HLE,"sceSasRevVON(%08x, %i, %i)", core, dry, wet);
-	sas->waveformEffect.isDryOn = (dry > 0);
-	sas->waveformEffect.isWetOn = (wet > 0);
+	sas->waveformEffect.isDryOn = dry & 1;
+	sas->waveformEffect.isWetOn = wet & 1;
 	return 0;
 }
 
@@ -479,7 +504,7 @@ const HLEFunction sceSasCore[] =
 	{0x33d4ab37, WrapU_UI<sceSasRevType>, "__sceSasRevType"},
 	{0x267a6dd2, WrapU_UII<sceSasRevParam>, "__sceSasRevParam"},
 	{0x2c8e6ab3, WrapU_U<sceSasGetPauseFlag>, "__sceSasGetPauseFlag"},
-	{0x787d04d5, WrapU_UII<sceSasSetPause>, "__sceSasSetPause"},
+	{0x787d04d5, WrapU_UUI<sceSasSetPause>, "__sceSasSetPause"},
 	{0xa232cbe6, WrapU_UII<sceSasSetTriangularWave>, "__sceSasSetTrianglarWave"}, // Typo.
 	{0xd5ebbbcd, WrapU_UII<sceSasSetSteepWave>, "__sceSasSetSteepWave"},
 	{0xBD11B7C2, WrapU_U<sceSasGetGrain>, "__sceSasGetGrain"},

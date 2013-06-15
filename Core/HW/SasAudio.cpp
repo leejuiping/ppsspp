@@ -279,6 +279,9 @@ SasInstance::SasInstance()
 #ifdef AUDIO_TO_FILE
 	audioDump = fopen("D:\\audio.raw", "wb");
 #endif
+	memset(&waveformEffect, 0, sizeof(waveformEffect));
+	waveformEffect.type = -1;
+	waveformEffect.isDryOn = 1;
 }
 
 SasInstance::~SasInstance() {
@@ -414,12 +417,14 @@ void SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 				int sample = resampleBuffer[sampleFrac / PSP_SAS_PITCH_BASE + 2];
 				sampleFrac += voice.pitch;
 
-				// Reduce envelope to 15 bits, rounding down.
+				// The maximum envelope height (PSP_SAS_ENVELOPE_HEIGHT_MAX) is (1 << 30) - 1.
+				// Reduce it to 14 bits, by shifting off 15.  Round up by adding (1 << 14) first.
 				int envelopeValue = voice.envelope.GetHeight();
-				envelopeValue = ((envelopeValue >> 15) + 1) >> 1;
+				envelopeValue = (envelopeValue + (1 << 14)) >> 15;
 
 				// We just scale by the envelope before we scale by volumes.
-				sample = sample * (envelopeValue + 0x4000) >> 15;
+				// Again, we round up by adding (1 << 14) first (*after* multiplying.)
+				sample = ((sample * envelopeValue) + (1 << 14)) >> 15;
 
 				// We mix into this 32-bit temp buffer and clip in a second loop
 				// Ideally, the shift right should be there too but for now I'm concerned about
@@ -538,7 +543,6 @@ void SasVoice::KeyOn() {
 void SasVoice::KeyOff() {
 	on = false;
 	envelope.KeyOff();
-	vag.SetLoop(false);
 }
 
 void SasVoice::ChangedParams(bool changedVag) {
@@ -644,8 +648,14 @@ static int durationFromRate(int rate)
 
 const short expCurveReference = 0x7000;
 
+// This needs a rewrite / rethink. Doing all this per sample is insane.
 static int getExpCurveAt(int index, int duration) {
 	const short curveLength = sizeof(expCurve) / sizeof(short);
+
+	if (duration == 0) {
+		// Avoid division by zero, and thus undefined behaviour in conversion to int.
+		return 0;
+	}
 
 	float curveIndex = (index * curveLength) / (float) duration;
 	int curveIndex1 = (int) curveIndex;
@@ -668,14 +678,13 @@ ADSREnvelope::ADSREnvelope()
 		decayRate(0),
 		decayType(PSP_SAS_ADSR_CURVE_MODE_LINEAR_DECREASE),
 		sustainRate(0),
-		sustainType(PSP_SAS_ADSR_CURVE_MODE_LINEAR_DECREASE),
+		sustainType(PSP_SAS_ADSR_CURVE_MODE_LINEAR_INCREASE),
 		releaseRate(0),
 		releaseType(PSP_SAS_ADSR_CURVE_MODE_LINEAR_DECREASE),
-		sustainLevel(0),
+		sustainLevel(0x100),
 		state_(STATE_OFF),
 		steps_(0),
 		height_(0) {
-	memset(this, 0, sizeof(*this));
 }
 
 void ADSREnvelope::WalkCurve(int rate, int type) {
@@ -737,6 +746,10 @@ void ADSREnvelope::Step() {
 		break;
 	case STATE_SUSTAIN:
 		WalkCurve(sustainRate, sustainType);
+		if (height_ <= 0) {
+			height_ = 0;
+			SetState(STATE_RELEASE);
+		}
 		break;
 	case STATE_RELEASE:
 		WalkCurve(releaseRate, releaseType);

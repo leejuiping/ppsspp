@@ -88,6 +88,7 @@ MediaEngine::MediaEngine(): m_streamSize(0), m_readSize(0), m_decodedPos(0), m_p
 	m_pFrameRGB = 0;
 	m_pIOContext = 0;
 	m_videoStream = -1;
+	m_audioStream = -1;
 	m_buffer = 0;
 	m_demux = 0;
 	m_audioContext = 0;
@@ -126,7 +127,6 @@ void MediaEngine::closeMedia() {
 	m_pIOContext = 0;
 	m_pCodecCtx = 0;
 	m_pFormatCtx = 0;
-	m_videoStream = -1;
 	m_pdata = 0;
 	m_demux = 0;
 	Atrac3plus_Decoder::CloseContext(&m_audioContext);
@@ -138,7 +138,15 @@ int _MpegReadbuffer(void *opaque, uint8_t *buf, int buf_size)
 {
 	MediaEngine *mpeg = (MediaEngine*)opaque;
 	int size = std::min(mpeg->m_bufSize, buf_size);
-	size = std::max(std::min((mpeg->m_readSize - mpeg->m_decodeNextPos), size), 0);
+	int available = mpeg->m_readSize - mpeg->m_decodeNextPos;
+	int remaining = mpeg->m_streamSize - mpeg->m_decodeNextPos;
+
+	// There's more in the file, and there's not as much as requested available.
+	// Return nothing.  Partial packets will cause artifacts or green frames.
+	if (available < remaining && size > available)
+		return 0;
+
+	size = std::min(size, remaining);
 	if (size > 0)
 		memcpy(buf, mpeg->m_pdata + mpeg->m_decodeNextPos, size);
 	mpeg->m_decodeNextPos += size;
@@ -177,6 +185,8 @@ bool MediaEngine::openContext() {
 	av_log_set_level(AV_LOG_VERBOSE);
 	av_log_set_callback(&ffmpeg_logger);
 #endif 
+	if (m_readSize <= 0x2000 || m_pFormatCtx || !m_pdata)
+		return false;
 
 	u8* tempbuf = (u8*)av_malloc(m_bufSize);
 
@@ -191,15 +201,17 @@ bool MediaEngine::openContext() {
 	if(avformat_find_stream_info(m_pFormatCtx, NULL) < 0)
 		return false;
 
-	// Find the first video stream
-	for(int i = 0; i < (int)m_pFormatCtx->nb_streams; i++) {
-		if(m_pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-			m_videoStream = i;
-			break;
+	if (m_videoStream == -1) {
+		// Find the first video stream
+		for(int i = 0; i < (int)m_pFormatCtx->nb_streams; i++) {
+			if(m_pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+				m_videoStream = i;
+				break;
+			}
 		}
+		if(m_videoStream == -1)
+			return false;
 	}
-	if(m_videoStream == -1)
-		return false;
 
 	// Get a pointer to the codec context for the video stream
 	m_pCodecCtx = m_pFormatCtx->streams[m_videoStream]->codec;
@@ -218,7 +230,7 @@ bool MediaEngine::openContext() {
 	int mpegoffset = bswap32(*(int*)(m_pdata + 8));
 	m_demux = new MpegDemux(m_pdata, m_streamSize, mpegoffset);
 	m_demux->setReadSize(m_readSize);
-	m_demux->demux();
+	m_demux->demux(m_audioStream);
 	m_audioPos = 0;
 	m_audioContext = Atrac3plus_Decoder::OpenContext();
 	m_isVideoEnd = false;
@@ -245,8 +257,6 @@ bool MediaEngine::loadStream(u8* buffer, int readSize, int StreamSize)
 		return false;
 	memcpy(m_pdata, buffer, m_readSize);
 	
-	if (readSize > 0x2000)
-		openContext();
 	return true;
 }
 
@@ -272,9 +282,6 @@ bool MediaEngine::loadFile(const char* filename)
 	m_readSize = infosize;
 	m_streamSize = infosize;
 	m_pdata = buf;
-	
-	if (m_readSize > 0x2000)
-		openContext();
 
 	return true;
 }
@@ -284,11 +291,11 @@ int MediaEngine::addStreamData(u8* buffer, int addSize) {
 	if (size > 0 && m_pdata) {
 		memcpy(m_pdata + m_readSize, buffer, size);
 		m_readSize += size;
-		if (!m_pFormatCtx && m_readSize > 0x2000)
+		if (!m_pFormatCtx && (m_readSize > 0x20000 || m_readSize >= m_streamSize))
 			openContext();
 		if (m_demux) {
 			m_demux->setReadSize(m_readSize);
-			m_demux->demux();
+			m_demux->demux(m_audioStream);
 		}
 	}
 	return size;
@@ -399,7 +406,9 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 				bGetFrame = true;
 			}
 			if (result <= 0 && dataEnd) {
-				m_isVideoEnd = !bGetFrame && m_readSize >= m_streamSize;
+				// Sometimes, m_readSize is less than m_streamSize at the end, but not by much.
+				// This is kinda a hack, but the ringbuffer would have to be prematurely empty too.
+				m_isVideoEnd = !bGetFrame && m_readSize >= (m_streamSize - 4096);
 				if (m_isVideoEnd)
 					m_decodedPos = m_readSize;
 				break;
@@ -416,8 +425,8 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 int MediaEngine::writeVideoImage(u8* buffer, int frameWidth, int videoPixelMode) {
 	if ((!m_pFrame)||(!m_pFrameRGB))
 		return false;
-	int videoImageSize = 0;
 #ifdef USE_FFMPEG
+	int videoImageSize = 0;
 	// lock the image size
 	int height = m_desHeight;
 	int width = m_desWidth;
@@ -469,16 +478,17 @@ int MediaEngine::writeVideoImage(u8* buffer, int frameWidth, int videoPixelMode)
 		ERROR_LOG(ME, "Unsupported video pixel format %d", videoPixelMode);
 		break;
 	}
-#endif // USE_FFMPEG
 	return videoImageSize;
+#endif // USE_FFMPEG
+	return true;
 }
 
 int MediaEngine::writeVideoImageWithRange(u8* buffer, int frameWidth, int videoPixelMode, 
 	                             int xpos, int ypos, int width, int height) {
 	if ((!m_pFrame)||(!m_pFrameRGB))
 		return false;
-	int videoImageSize = 0;
 #ifdef USE_FFMPEG
+	int videoImageSize = 0;
 	// lock the image size
 	u8 *imgbuf = buffer;
 	u8 *data = m_pFrameRGB->data[0];
@@ -539,8 +549,9 @@ int MediaEngine::writeVideoImageWithRange(u8* buffer, int frameWidth, int videoP
 		ERROR_LOG(ME, "Unsupported video pixel format %d", videoPixelMode);
 		break;
 	}
-#endif // USE_FFMPEG
 	return videoImageSize;
+#endif // USE_FFMPEG
+	return true;
 }
 
 static bool isHeader(u8* audioStream, int offset)

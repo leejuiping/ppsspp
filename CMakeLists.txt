@@ -146,7 +146,7 @@ if(NOT MSVC)
 	endif()
 
 	if(BLACKBERRY)
-		add_definitions(-D_QNX_SOURCE=1 -D_C99=1 -O2 -mfpu=neon -mtune=cortex-a9)
+		add_definitions(-D_QNX_SOURCE=1 -D_C99=1 -O3 -mfpu=neon -mtune=cortex-a9)
 	endif()
 
 	if(X86 AND NOT MIPS)
@@ -448,6 +448,11 @@ elseif(IOS)
 		ios/iCade/iCadeReaderView.m
 		ios/iCade/iCadeState.h)
 	set(nativeExtraLibs ${nativeExtraLibs} "-framework Foundation -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework UIKit -framework GLKit -framework OpenAL")
+	# FFMPEG
+	add_definitions(-DUSE_FFMPEG)
+	include_directories(ffmpeg/ios/universal/include)
+	link_directories(ffmpeg/ios/universal/lib)
+	set(nativeExtraLibs ${nativeExtraLibs} iconv bz2 libavformat.a libavcodec.a libswresample.a libavutil.a libswscale.a)
 	set(TargetBin PPSSPP)
 elseif(USING_QT_UI)
 	# Currently unused
@@ -669,6 +674,7 @@ add_library(xbrz STATIC
 include_directories(ext/xbrz)
 
 set(CoreExtra)
+set(CoreExtraLibs)
 if(ARM)
 	set(CoreExtra ${CoreExtra}
 		Core/MIPS/ARM/ArmAsm.cpp
@@ -700,6 +706,12 @@ elseif(X86)
 		Core/MIPS/x86/RegCache.h
 		Core/MIPS/x86/RegCacheFPU.cpp
 		Core/MIPS/x86/RegCacheFPU.h)
+endif()
+
+# atrac3plus.cpp used dl* functions on non-win32 platforms
+# Core needs to be linked with dl on these platforms
+if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+  set(CoreExtraLibs ${CoreExtraLibs} ${CMAKE_DL_LIBS})
 endif()
 
 # 'ppsspp_jni' on ANDROID, 'Core' everywhere else
@@ -925,7 +937,7 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Globals.h
 	git-version.cpp)
 target_link_libraries(${CoreLibName} Common native kirk cityhash xbrz
-	${GLEW_LIBRARIES} ${OPENGL_LIBRARIES})
+	${CoreExtraLibs} ${GLEW_LIBRARIES} ${OPENGL_LIBRARIES})
 setup_target_project(${CoreLibName} Core)
 
 # Generate git-version.cpp at build time.

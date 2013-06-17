@@ -658,7 +658,7 @@ void DeveloperScreen::render() {
 	}
 
 	if (UIButton(GEN_ID, vlinear, w, 0, d->T("Save language ini"), ALIGN_LEFT)) {
-		i18nrepo.SaveIni(g_Config.languageIni);	
+		i18nrepo.SaveIni(g_Config.languageIni);
 	}
 
 	if (UIButton(GEN_ID, vlinear, w, 0, d->T("Run CPU tests"), ALIGN_LEFT)) {
@@ -746,6 +746,11 @@ void GraphicsScreenP1::render() {
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Stream VBO"), ALIGN_TOPLEFT, &g_Config.bUseVBO);
 #endif
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Mipmapping"), ALIGN_TOPLEFT, &g_Config.bMipMap);
+#ifdef _WIN32
+	bool Vsync = g_Config.iVSyncInterval != 0;
+	UICheckBox(GEN_ID, x, y += stride, gs->T("VSync"), ALIGN_TOPLEFT, &Vsync);
+	g_Config.iVSyncInterval = Vsync ? 1 : 0;
+#endif
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Display Raw Framebuffer"), ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
 	if (UICheckBox(GEN_ID, x, y += stride, gs->T("Buffered Rendering"), ALIGN_TOPLEFT, &g_Config.bBufferedRendering)) {
 		if (gpu)
@@ -955,16 +960,27 @@ void LanguageScreen::render() {
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *l = GetI18NCategory("Language");
 
-	ui_draw2d.SetFontScale(1.5f, 1.5f);
-	ui_draw2d.DrawText(UBUNTU24, s->T("Language"), dp_xres / 2, 10, 0xFFFFFFFF, ALIGN_HCENTER);
-	ui_draw2d.SetFontScale(1.0f, 1.0f);
+	bool small = dp_xres < 720;
+
+	if (!small) {
+		ui_draw2d.SetFontScale(1.5f, 1.5f);
+		ui_draw2d.DrawText(UBUNTU24, s->T("Language"), dp_xres / 2, 10, 0xFFFFFFFF, ALIGN_HCENTER);
+		ui_draw2d.SetFontScale(1.0f, 1.0f);
+	}
 
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, dp_yres-10), LARGE_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT | ALIGN_BOTTOM)) {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
-	VGrid vlang(50, 100, dp_yres - 50, 10, 10);
+	int buttonW = LARGE_BUTTON_WIDTH - 50;
+
+	if (small) {
+		buttonW = LARGE_BUTTON_WIDTH - 70;
+	}
+
+	VGrid vlang(20, small ? 20 : 100, dp_yres - 50, 10, 10);
 	std::string text;
+	
 	
 	for (size_t i = 0; i < langs_.size(); i++) {
 		std::string code;
@@ -1010,7 +1026,7 @@ void LanguageScreen::render() {
 			}
 		}
 
-		if (UIButton(GEN_ID_LOOP(i), vlang, LARGE_BUTTON_WIDTH - 30, 0, buttonTitle.c_str(), ALIGN_TOPLEFT)) {
+		if (UIButton(GEN_ID_LOOP(i), vlang, buttonW, 0, buttonTitle.c_str(), ALIGN_TOPLEFT)) {
 			std::string oldLang = g_Config.languageIni;
 			g_Config.languageIni = code;
 
@@ -1114,7 +1130,13 @@ void ControlsScreen::render() {
 	if (g_Config.bShowTouchControls) {
 		UICheckBox(GEN_ID, x, y += stride, c->T("Large Controls"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
 		UICheckBox(GEN_ID, x, y += stride, c->T("Show Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
-	} 
+		// This will be a slider in the new UI later
+		bool bTransparent = g_Config.iTouchButtonOpacity < 30;
+		bool prev = bTransparent;
+		UICheckBox(GEN_ID, x, y += stride, c->T("Transparent Buttons"), ALIGN_TOPLEFT, &bTransparent);
+		if (bTransparent != prev)
+			g_Config.iTouchButtonOpacity = bTransparent ? 15 : 65;
+	}
 	UICheckBox(GEN_ID, x, y += stride, c->T("Tilt", "Tilt to Analog (horizontal)"), ALIGN_TOPLEFT, &g_Config.bAccelerometerToAnalogHoriz);
 
 	UIEnd();
@@ -1231,7 +1253,11 @@ void FileSelectScreen::render() {
 		currentDirectory_ = getDir(currentDirectory_);
 		updateListing();
 	}
-	ui_draw2d.DrawTextShadow(UBUNTU24, currentDirectory_.c_str(), 20 + SMALL_BUTTON_WIDTH, 10 + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
+	if (UIButton(GEN_ID, Pos(SMALL_BUTTON_WIDTH + 20,10), SMALL_BUTTON_WIDTH, 0, g->T("Home"), ALIGN_TOPLEFT)) {
+		currentDirectory_ = g_Config.externalDirectory;
+		updateListing();
+	}
+	ui_draw2d.DrawTextShadow(UBUNTU24, currentDirectory_.c_str(), 30 + SMALL_BUTTON_WIDTH*2, 10 + 25, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
 	if (UIButton(GEN_ID, Pos(dp_xres - 10, 10), SMALL_BUTTON_WIDTH, 0, g->T("Back"), ALIGN_RIGHT)) {
 		g_Config.Save();
 		screenManager()->switchScreen(new MenuScreen());

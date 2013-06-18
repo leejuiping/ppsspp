@@ -489,14 +489,50 @@ void PauseScreen::render() {
 	} else 
 		g_Config.iFrameSkip = 0;
 
-	// TODO: Add UI for more than one slot.
-	HLinear hlinear2(x, y += 70, 20);
-	if (UIButton(GEN_ID, hlinear2, LARGE_BUTTON_WIDTH, 0, i->T("Save State"), ALIGN_LEFT)) {
+	ui_draw2d.DrawText(UBUNTU24, gs->T("Save State :"), 30, 360, 0xFFFFFFFF, ALIGN_LEFT);
+	HLinear hlinear4(x + 180 , y += 50, 10);
+	if (UIButton(GEN_ID, hlinear4, 60, 0, "1", ALIGN_LEFT)) {
 		SaveState::SaveSlot(0, 0, 0);
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
-	if (UIButton(GEN_ID, hlinear2, LARGE_BUTTON_WIDTH, 0, i->T("Load State"), ALIGN_LEFT)) {
+	if (UIButton(GEN_ID, hlinear4, 60, 0, "2", ALIGN_LEFT)) {
+		SaveState::SaveSlot(1, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear4, 60, 0, "3", ALIGN_LEFT)) {
+		SaveState::SaveSlot(2, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear4, 60, 0, "4", ALIGN_LEFT)) {
+		SaveState::SaveSlot(3, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear4, 60, 0, "5", ALIGN_LEFT)) {
+		SaveState::SaveSlot(4, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+
+
+	ui_draw2d.DrawText(UBUNTU24, gs->T("Load State :"), 30, 420, 0xFFFFFFFF, ALIGN_LEFT);
+	HLinear hlinear3(x + 180 , y += 60, 10);
+	if (UIButton(GEN_ID, hlinear3, 60, 0, "1", ALIGN_LEFT)) {
 		SaveState::LoadSlot(0, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear3, 60, 0, "2", ALIGN_LEFT)) {
+		SaveState::LoadSlot(1, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear3, 60, 0, "3", ALIGN_LEFT)) {
+		SaveState::LoadSlot(2, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear3, 60, 0, "4", ALIGN_LEFT)) {
+		SaveState::LoadSlot(3, 0, 0);
+		screenManager()->finishDialog(this, DR_CANCEL);
+	}
+	if (UIButton(GEN_ID, hlinear3, 60, 0, "5", ALIGN_LEFT)) {
+		SaveState::LoadSlot(4, 0, 0);
 		screenManager()->finishDialog(this, DR_CANCEL);
 	}
 
@@ -1094,13 +1130,16 @@ void SystemScreen::render() {
 		g_Config.itimeformat = tf ? 1 : 0;
 	}
 	UICheckBox(GEN_ID, x, y += stride, s->T("Enable Cheats"), ALIGN_TOPLEFT, &g_Config.bEnableCheats);
-	HLinear hlinear2(x, y += stride + 10, 20);
-	if (UIButton(GEN_ID, hlinear2, LARGE_BUTTON_WIDTH + 50, 0, s->T("Reload Cheats"), ALIGN_TOPLEFT)) {
-		g_Config.bReloadCheats = true;
+	if (g_Config.bEnableCheats) {
+		HLinear hlinear1(x + 60, y += stride + 10, 20);
+		if (UIButton(GEN_ID, hlinear1, LARGE_BUTTON_WIDTH + 50, 0, s->T("Reload Cheats"), ALIGN_TOPLEFT)) 
+			g_Config.bReloadCheats = true;
+		y += 10;
 	}
+	HLinear hlinear2(x, y += stride + 10, 20);
 	if (UIButton(GEN_ID, hlinear2, LARGE_BUTTON_WIDTH, 0, s->T("Language"), ALIGN_TOPLEFT)) {
 		screenManager()->push(new LanguageScreen());
-	} 
+	}  
 	
 	UIEnd();
 }
@@ -1128,12 +1167,42 @@ void ControlsScreen::render() {
 
 	UICheckBox(GEN_ID, x, y += stride, c->T("OnScreen", "On-Screen Touch Controls"), ALIGN_TOPLEFT, &g_Config.bShowTouchControls);
 	if (g_Config.bShowTouchControls) {
-		UICheckBox(GEN_ID, x, y += stride, c->T("Large Controls"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
+		UICheckBox(GEN_ID, x, y += stride, c->T("Buttons Scaling"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
+		if (g_Config.bLargeControls) {
+			char scale[256];
+			sprintf(scale, "%s %0.2f", c->T("Scale :"), g_Config.fButtonScale);
+			ui_draw2d.DrawText(UBUNTU24, scale, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
+			HLinear hlinear1(x + 250, y, 20);
+			if (UIButton(GEN_ID, hlinear1, 80, 0, c->T("Auto"), ALIGN_LEFT))
+				g_Config.fButtonScale = 1.15;
+			if (UIButton(GEN_ID, hlinear1, 60, 0, c->T("-0.1"), ALIGN_LEFT))
+				if (g_Config.fButtonScale > 1.15)
+					g_Config.fButtonScale -= 0.1;
+			if (UIButton(GEN_ID, hlinear1, 60, 0, c->T("+0.1"), ALIGN_LEFT))
+				if (g_Config.fButtonScale < 2.05)
+					g_Config.fButtonScale += 0.1;
+			y += 20;
+		}
 		UICheckBox(GEN_ID, x, y += stride, c->T("Show Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
 		// This will be a slider in the new UI later
-		bool bTransparent = g_Config.iTouchButtonOpacity < 30;
+		bool bTransparent = g_Config.iTouchButtonOpacity < 65;
 		bool prev = bTransparent;
 		UICheckBox(GEN_ID, x, y += stride, c->T("Transparent Buttons"), ALIGN_TOPLEFT, &bTransparent);
+		if (bTransparent) {
+			char opacity[256];
+			sprintf(opacity, "%s %d", c->T("Opacity :"), g_Config.iTouchButtonOpacity);
+			ui_draw2d.DrawText(UBUNTU24, opacity, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
+			HLinear hlinear1(x + 250, y, 20);
+			if (UIButton(GEN_ID, hlinear1, 80, 0, c->T("Auto"), ALIGN_LEFT))
+				g_Config.iTouchButtonOpacity = 15;
+			if (UIButton(GEN_ID, hlinear1, 40, 0, c->T("-5"), ALIGN_LEFT))
+				if (g_Config.iTouchButtonOpacity > 15)
+					g_Config.iTouchButtonOpacity -= 5;
+			if (UIButton(GEN_ID, hlinear1, 40, 0, c->T("+5"), ALIGN_LEFT))
+				if (g_Config.iTouchButtonOpacity < 65)
+					g_Config.iTouchButtonOpacity += 5;
+			y += 20;
+		}
 		if (bTransparent != prev)
 			g_Config.iTouchButtonOpacity = bTransparent ? 15 : 65;
 	}

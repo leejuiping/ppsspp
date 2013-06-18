@@ -110,6 +110,7 @@ public:
 	std::map<int,int> iMappingMap; // Can be used differently depending on systems
 	int iForceInputDevice;
 	int iTouchButtonOpacity;
+	float fButtonScale;
 
 	// SystemParam
 	std::string sNickName;
@@ -125,6 +126,7 @@ public:
 	bool bWlanPowerSave;
 
 	std::string currentDirectory;
+	std::string externalDirectory;
 	std::string memCardDirectory;
 	std::string flashDirectory;
 	std::string internalDataDirectory;

@@ -5,16 +5,22 @@ project(PPSSPP)
 if(ANDROID)
 	if(ARMEABI OR ARMEABI_V7A)
 		set(ARM ON)
+		set(FFMPEG ON)
 	endif()
+endif()
+
+if(BLACKBERRY)
+	set(CMAKE_SYSTEM_NAME "QNX")
 endif()
 
 if (IOS OR BLACKBERRY)
 	set(ARM ON)
+	set(FFMPEG ON)
 endif()
 
 if (MAEMO)
 	set(ARM ON)
-	#Maemo's gcc-4.7.2 is strickt
+	#Maemo's gcc-4.7.2 is strict
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive")
 endif()
 
@@ -28,8 +34,17 @@ else() # Assume x86
 	set(X86 ON)
 endif()
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+	set(LINUX ON)
+	if (NOT USING_GLES2)
+		# Not working yet.
+		#set(FFMPEG ON)
+	endif()
+endif()
+
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	set(MACOSX ON)
+	set(FFMPEG ON)
 endif()
 
 if(ANDROID OR BLACKBERRY OR IOS OR PANDORA OR MAEMO OR MACOSX)
@@ -49,6 +64,7 @@ option(MAEMO "Set to ON if targeting an Maemo (N900) device" ${MAEMO})
 option(IOS "Set to ON if targeting an iOS device" ${IOS})
 option(USING_GLES2 "Set to ON if target device uses OpenGL ES 2.0" ${USING_GLES2})
 option(USING_QT_UI "Set to ON if you wish to use the Qt frontend wrapper" ${USING_QT_UI})
+option(FFMPEG "Set to OFF to disable FFMPEG usage" ${FFMPEG})
 option(HEADLESS "Set to OFF to not generate the PPSSPPHeadless target" ${HEADLESS})
 
 if(ANDROID)
@@ -92,11 +108,7 @@ endif()
 include_directories("${CMAKE_SOURCE_DIR}")
 
 if(BLACKBERRY)
-	set(CMAKE_SYSTEM_NAME "QNX")
 	add_definitions(-DBLACKBERRY)
-	if(BLACKBERRY VERSION_GREATER 10)
-		add_definitions(-DBLACKBERRY10)
-	endif()
 endif()
 
 if(ANDROID)
@@ -161,6 +173,7 @@ if(NOT MSVC)
 
 	if(IOS)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
+		set(CMAKE_OSX_ARCHITECTURES "armv7")
 	elseif(APPLE)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -U__STRICT_ANSI__")
 		# Karen/angelXwind: --macosx-version-min=10.7 is needed in order to produce binaries that OS X 10.7 Lion can execute. However, it seems that PPSSPP won't support 10.6 or lower without getting rid of -stdlib=libc++ ...which probably won't end well. So I guess PPSSPP will strictly be a 10.7+ app.
@@ -453,11 +466,6 @@ elseif(IOS)
 		ios/iCade/iCadeReaderView.m
 		ios/iCade/iCadeState.h)
 	set(nativeExtraLibs ${nativeExtraLibs} "-framework Foundation -framework AudioToolbox -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework UIKit -framework GLKit -framework OpenAL")
-	# FFMPEG
-	add_definitions(-DUSE_FFMPEG)
-	include_directories(ffmpeg/ios/universal/include)
-	link_directories(ffmpeg/ios/universal/lib)
-	set(nativeExtraLibs ${nativeExtraLibs} iconv bz2 libavformat.a libavcodec.a libswresample.a libavutil.a libswscale.a)
 	set(TargetBin PPSSPP)
 elseif(USING_QT_UI)
 	# Currently unused
@@ -470,18 +478,8 @@ elseif(USING_QT_UI)
 elseif(BLACKBERRY)
 	set(nativeExtra ${nativeExtra} native/base/BlackberryMain.cpp native/base/BlackberryDisplay.cpp)
 	set(nativeExtraLibs ${nativeExtraLibs} OpenAL bps screen socket EGL)
-	# FFMPEG
-	add_definitions(-DUSE_FFMPEG)
-	include_directories(ffmpeg/blackberry/armv7/include)
-	link_directories(ffmpeg/blackberry/armv7/lib)
-	set(nativeExtraLibs ${nativeExtraLibs} iconv libavformat.a libavcodec.a libswresample.a libavutil.a libswscale.a)
 	set(TargetBin PPSSPPBlackberry)
 elseif(SDL_FOUND)
-	if(MACOSX)
-		include_directories(ffmpeg/macosx/x86_64/include)
-		link_directories(ffmpeg/macosx/x86_64/lib)
-		set(nativeExtraLibs ${nativeExtraLibs} libavformat.a libavcodec.a libswresample.a libavutil.a libswscale.a)
-	endif()
 	set(TargetBin PPSSPPSDL)
 	# Require SDL
 	include_directories(${SDL_INCLUDE_DIR})
@@ -493,12 +491,29 @@ elseif(SDL_FOUND)
 	elseif(PANDORA OR MAEMO)
 		set(nativeExtraLibs ${nativeExtraLibs} pthread EGL X11)
 	endif()
-	# FFMPEG
-	add_definitions(-DUSE_FFMPEG)
-	set(nativeExtraLibs ${nativeExtraLibs} avformat avcodec swresample swscale)
 	set(TargetBin PPSSPPSDL)
 else()
     message(FATAL_ERROR "Could not find SDL. Failing.")
+endif()
+
+if(FFMPEG)
+	add_definitions(-DUSE_FFMPEG)
+	set(PLATFORM_ARCH "")
+	if (BLACKBERRY)
+		set(PLATFORM_ARCH "blackberry/armv7")
+		set(nativeExtraLibs ${nativeExtraLibs} iconv)
+	elseif(IOS)
+		set(PLATFORM_ARCH "ios/universal")
+		set(nativeExtraLibs ${nativeExtraLibs} iconv bz2)
+	elseif(MACOSX)
+		set(PLATFORM_ARCH "macosx/x86_64")
+	elseif(LINUX)
+		# Note: Only 64-bit is supported
+		set(PLATFORM_ARCH "linux/x86_64")
+	endif()
+	include_directories(ffmpeg/${PLATFORM_ARCH}/include)
+	link_directories(ffmpeg/${PLATFORM_ARCH}/lib)
+	set(nativeExtraLibs ${nativeExtraLibs} libavformat.a libavcodec.a libswresample.a libavutil.a libswscale.a)
 endif()
 
 if(X86)
@@ -721,7 +736,7 @@ endif()
 
 # atrac3plus.cpp used dl* functions on non-win32 platforms
 # Core needs to be linked with dl on these platforms
-if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+if(LINUX)
   set(CoreExtraLibs ${CoreExtraLibs} ${CMAKE_DL_LIBS})
 endif()
 

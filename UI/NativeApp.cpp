@@ -234,6 +234,16 @@ void NativeInit(int argc, const char *argv[],
 
 	config_filename = user_data_path + "/ppsspp.ini";
 	g_Config.Load(config_filename.c_str());
+	g_Config.externalDirectory = external_directory;
+#endif
+
+#ifdef ANDROID
+	// On Android, create a PSP directory tree in the external_directory,
+	// to hopefully reduce confusion a bit. 
+	ILOG("Creating %s", (g_Config.externalDirectory + "/PSP").c_str());
+	mkDir((g_Config.externalDirectory + "/PSP").c_str());
+	mkDir((g_Config.externalDirectory + "/PSP/SAVEDATA").c_str());
+	mkDir((g_Config.externalDirectory + "/PSP/GAME").c_str());
 #endif
 
 	const char *fileToLog = 0;

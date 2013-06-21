@@ -63,7 +63,7 @@ public:
 	bool bBufferedRendering;
 	bool bLinearFiltering;
 	bool bUseVBO;
-#ifdef BLACKBERRY10
+#ifdef BLACKBERRY
 	bool bPartialStretch;
 #endif
 	bool bStretchToDisplay;
@@ -90,12 +90,12 @@ public:
 	// Sound
 	bool bEnableSound;
 	bool bEnableAtrac3plus;
-	
+
 	// UI
 	bool bShowTouchControls;
 	bool bShowDebuggerOnLoad;
 	bool bShowAnalogStick;
-	bool bShowFPSCounter;
+	int iShowFPSCounter;
 	bool bShowDebugStats;
 	bool bLargeControls;
 	bool bAccelerometerToAnalogHoriz;
@@ -109,21 +109,25 @@ public:
 	// Control
 	std::map<int,int> iMappingMap; // Can be used differently depending on systems
 	int iForceInputDevice;
+	int iTouchButtonOpacity;
+	float fButtonScale;
 
 	// SystemParam
 	std::string sNickName;
 	int ilanguage;
-	int itimeformat;
+	int iTimeFormat;
 	int iDateFormat;
 	int iTimeZone;
 	bool bDayLightSavings;
 	bool bButtonPreference;
+	int iButtonPreference;
 	int iLockParentalLevel;
 	bool bEncryptSave;
 	int iWlanAdhocChannel;
 	bool bWlanPowerSave;
 
 	std::string currentDirectory;
+	std::string externalDirectory; 
 	std::string memCardDirectory;
 	std::string flashDirectory;
 	std::string internalDataDirectory;

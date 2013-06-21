@@ -16,8 +16,9 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "GamepadEmu.h"
+#include "base/colorutil.h"
 #include "ui/virtual_input.h"
-#include "../../Core/Config.h"
+#include "Core/Config.h"
 #include "ui_atlas.h"
 
 TouchButton buttonX(&ui_atlas, I_ROUND, I_CROSS, PAD_BUTTON_A);
@@ -39,7 +40,7 @@ TouchStick leftStick(&ui_atlas, I_STICKBG, I_STICK, 0);
 
 void LayoutGamepad(int w, int h)
 {
-	float controlScale = g_Config.bLargeControls ? 1.6 : 1.15;
+	float controlScale = g_Config.bLargeControls ? g_Config.fButtonScale : 1.15;
 
 	const int button_spacing = 50 * controlScale;
 	const int arrow_spacing = 40 * controlScale;
@@ -112,10 +113,11 @@ void UpdateGamepad(InputState &input_state)
 		leftStick.update(input_state);
 }
 
-void DrawGamepad(DrawBuffer &db)
+void DrawGamepad(DrawBuffer &db, float opacity)
 {
-	uint32_t color = 0xa0c0b080;
-	uint32_t colorOverlay = 0xa0FFFFFF;
+	uint32_t color = colorAlpha(0xc0b080, opacity);
+	uint32_t colorOverlay = colorAlpha(0xFFFFFF, opacity);
+
 	buttonO.draw(db, color, colorOverlay);
 	buttonX.draw(db, color, colorOverlay);
 	buttonTri.draw(db, color, colorOverlay);

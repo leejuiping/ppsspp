@@ -25,18 +25,12 @@
 
 Config g_Config;
 
-
 #ifdef IOS
 extern bool isJailed;
 #endif
 
-Config::Config()
-{
-}
-
-Config::~Config()
-{
-}
+Config::Config() { }
+Config::~Config() { }
 
 void Config::Load(const char *iniFileName)
 {
@@ -93,7 +87,7 @@ void Config::Load(const char *iniFileName)
 	cpu->Get("FastMemory", &bFastMemory, false);
 
 	IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
-	graphics->Get("ShowFPSCounter", &bShowFPSCounter, false);
+	graphics->Get("ShowFPSCounter", &iShowFPSCounter, false);
 	graphics->Get("DisplayFramebuffer", &bDisplayFramebuffer, false);
 #ifdef _WIN32
 	graphics->Get("ResolutionScale", &iWindowZoom, 2);
@@ -114,7 +108,7 @@ void Config::Load(const char *iniFileName)
 #endif
 	graphics->Get("VertexCache", &bVertexCache, true);
 	graphics->Get("FullScreen", &bFullScreen, false);
-#ifdef BLACKBERRY10
+#ifdef BLACKBERRY
 	graphics->Get("PartialStretch", &bPartialStretch, pixel_xres == pixel_yres);
 #endif
 	graphics->Get("StretchToDisplay", &bStretchToDisplay, false);
@@ -131,7 +125,7 @@ void Config::Load(const char *iniFileName)
 	
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 	control->Get("ShowStick", &bShowAnalogStick, false);
-#ifdef BLACKBERRY10
+#ifdef BLACKBERRY
 	control->Get("ShowTouchControls", &bShowTouchControls, pixel_xres != pixel_yres);
 #elif defined(USING_GLES2)
 	control->Get("ShowTouchControls", &bShowTouchControls, true);
@@ -143,15 +137,17 @@ void Config::Load(const char *iniFileName)
 	control->Get("AccelerometerToAnalogHoriz", &bAccelerometerToAnalogHoriz, false);
 	control->Get("ForceInputDevice", &iForceInputDevice, -1);
 	control->Get("RightStickBind", &iRightStickBind, 0);
+	control->Get("TouchButtonOpacity", &iTouchButtonOpacity, 65);
+	control->Get("ButtonScale", &fButtonScale, 1.15);
 
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 	pspConfig->Get("NickName", &sNickName, "shadow");
 	pspConfig->Get("Language", &ilanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
-	pspConfig->Get("TimeFormat", &itimeformat, PSP_SYSTEMPARAM_TIME_FORMAT_24HR);
+	pspConfig->Get("TimeFormat", &iTimeFormat, PSP_SYSTEMPARAM_TIME_FORMAT_24HR);
 	pspConfig->Get("DateFormat", &iDateFormat, PSP_SYSTEMPARAM_DATE_FORMAT_YYYYMMDD);
 	pspConfig->Get("TimeZone", &iTimeZone, 0);
 	pspConfig->Get("DayLightSavings", &bDayLightSavings, PSP_SYSTEMPARAM_DAYLIGHTSAVINGS_STD);
-	pspConfig->Get("ButtonPreference", &bButtonPreference, PSP_SYSTEMPARAM_BUTTON_CROSS);
+	pspConfig->Get("ButtonPreference", &iButtonPreference, PSP_SYSTEMPARAM_BUTTON_CROSS);
 	pspConfig->Get("LockParentalLevel", &iLockParentalLevel, 0);
 	pspConfig->Get("WlanAdhocChannel", &iWlanAdhocChannel, PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC);
 	pspConfig->Get("WlanPowerSave", &bWlanPowerSave, PSP_SYSTEMPARAM_WLAN_POWERSAVE_OFF);
@@ -200,7 +196,7 @@ void Config::Save()
 		cpu->Set("FastMemory", bFastMemory);
 
 		IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
-		graphics->Set("ShowFPSCounter", bShowFPSCounter);
+		graphics->Set("ShowFPSCounter", iShowFPSCounter);
 		graphics->Set("DisplayFramebuffer", bDisplayFramebuffer);
 		graphics->Set("ResolutionScale", iWindowZoom);
 		graphics->Set("BufferedRendering", bBufferedRendering);
@@ -213,7 +209,7 @@ void Config::Save()
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("VertexCache", bVertexCache);
 		graphics->Set("FullScreen", bFullScreen);
-#ifdef BLACKBERRY10
+#ifdef BLACKBERRY
 		graphics->Set("PartialStretch", bPartialStretch);
 #endif
 		graphics->Set("StretchToDisplay", bStretchToDisplay);
@@ -236,16 +232,17 @@ void Config::Save()
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
 		control->Set("ForceInputDevice", iForceInputDevice);
 		control->Set("RightStickBind", iRightStickBind);
-
+		control->Set("TouchButtonOpacity", iTouchButtonOpacity);
+		control->Set("ButtonScale", fButtonScale);
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("NickName", sNickName.c_str());
 		pspConfig->Set("Language", ilanguage);
-		pspConfig->Set("TimeFormat", itimeformat);
+		pspConfig->Set("TimeFormat", iTimeFormat);
 		pspConfig->Set("DateFormat", iDateFormat);
 		pspConfig->Set("TimeZone", iTimeZone);
 		pspConfig->Set("DayLightSavings", bDayLightSavings);
-		pspConfig->Set("ButtonPreference", bButtonPreference);
+		pspConfig->Set("ButtonPreference", iButtonPreference);
 		pspConfig->Set("LockParentalLevel", iLockParentalLevel);
 		pspConfig->Set("WlanAdhocChannel", iWlanAdhocChannel);
 		pspConfig->Set("WlanPowerSave", bWlanPowerSave);

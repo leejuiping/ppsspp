@@ -306,7 +306,7 @@ void MenuScreen::render() {
 		// This might create a texture so we must flush first.
 		UIFlush();
 		GameInfo *ginfo = g_gameInfoCache.GetInfo(g_Config.recentIsos[i], false);
-		if (ginfo && ginfo->fileType != FILETYPE_PSP_ELF) {
+		if (ginfo) {
 			u32 color;
 			if (ginfo->iconTexture == 0) {
 				color = 0;
@@ -894,7 +894,12 @@ void GraphicsScreenP2::render() {
 			g_Config.iTexScalingLevel = 2;
 		if (UIButton(GEN_ID, hlinear2, 45, 0, gs->T("3x"), ALIGN_LEFT))
 			g_Config.iTexScalingLevel = 3;
-
+#ifdef _WIN32
+		if (UIButton(GEN_ID, hlinear2, 45, 0, gs->T("4x"), ALIGN_LEFT))
+			g_Config.iTexScalingLevel = 4;
+		if (UIButton(GEN_ID, hlinear2, 45, 0, gs->T("5x"), ALIGN_LEFT))
+			g_Config.iTexScalingLevel = 5;
+#endif
 		UICheckBox(GEN_ID, x + 60, y += stride + 20, gs->T("Deposterize"), ALIGN_LEFT, &g_Config.bTexDeposterize);
 	} else 
 		g_Config.iTexScalingLevel = 1;

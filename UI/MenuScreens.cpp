@@ -1038,10 +1038,10 @@ void LanguageScreen::render() {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
-	int buttonW = LARGE_BUTTON_WIDTH - 50;
+	int buttonW = LARGE_BUTTON_WIDTH - 30;
 
 	if (small) {
-		buttonW = LARGE_BUTTON_WIDTH - 70;
+		buttonW = LARGE_BUTTON_WIDTH - 50;
 	}
 
 	VGrid vlang(20, small ? 20 : 100, dp_yres - 50, 10, 10);
@@ -1160,24 +1160,33 @@ void SystemScreen::render() {
 	if (g_Config.bJit)
 		UICheckBox(GEN_ID, x, y += stride, s->T("Fast Memory", "Fast Memory (unstable)"), ALIGN_TOPLEFT, &g_Config.bFastMemory);
 
-	UICheckBox(GEN_ID, x, y += stride, s->T("Daylight Savings"), ALIGN_TOPLEFT, &g_Config.bDayLightSavings);
-	UICheckBox(GEN_ID, x, y += stride, s->T("Button Preference"), ALIGN_TOPLEFT, &g_Config.bButtonPreference); 
-	if (g_Config.bButtonPreference) {
-			char button[256];
-			std::string type;
-			switch (g_Config.iButtonPreference) {
-				case 0:	type = "O to Enter";break;
-				case 1: type = "X to Enter";break;
-			}
-			sprintf(button, "%s %s", s->T("Type :"), type.c_str());
-			ui_draw2d.DrawText(UBUNTU24, button, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
-			HLinear hlinear1(x + 280, y, 20);
-			if (UIButton(GEN_ID, hlinear1, 90, 0, s->T("Use O"), ALIGN_LEFT))
-					g_Config.iButtonPreference = 0;
-			if (UIButton(GEN_ID, hlinear1, 90, 0, s->T("Use X"), ALIGN_LEFT))
-					g_Config.iButtonPreference = 1;
-			y += 10;
+	//UICheckBox(GEN_ID, x, y += stride, s->T("Daylight Savings"), ALIGN_TOPLEFT, &g_Config.bDayLightSavings);
+
+	const char *buttonPreferenceTitle;
+	switch (g_Config.iButtonPreference) {
+	case PSP_SYSTEMPARAM_BUTTON_CIRCLE:
+		buttonPreferenceTitle = s->T("Button Preference - O to Confirm");
+		break;
+	case PSP_SYSTEMPARAM_BUTTON_CROSS:
+	default:
+		buttonPreferenceTitle = s->T("Button Preference - X to Confirm");
+		break;
 	}
+
+#ifdef _WIN32
+	const int checkboxH = 32;
+#else
+	const int checkboxH = 48;
+#endif
+	ui_draw2d.DrawTextShadow(UBUNTU24, buttonPreferenceTitle, x + UI_SPACE + 29, (y += stride) + checkboxH / 2, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
+	y += stride;
+	// 29 is the width of the checkbox, new UI will replace.
+	HLinear hlinearButtonPref(x + UI_SPACE + 29, y, 20);
+	if (UIButton(GEN_ID, hlinearButtonPref, 90, 0, s->T("Use O"), ALIGN_LEFT))
+		g_Config.iButtonPreference = PSP_SYSTEMPARAM_BUTTON_CIRCLE;
+	if (UIButton(GEN_ID, hlinearButtonPref, 90, 0, s->T("Use X"), ALIGN_LEFT))
+		g_Config.iButtonPreference = PSP_SYSTEMPARAM_BUTTON_CROSS;
+	y += 20 + 6;
 
 	/*
 	bool time = g_Config.iTimeFormat > 0 ;
@@ -1266,9 +1275,9 @@ void ControlsScreen::render() {
 	int columnw = 440;
 
 	UICheckBox(GEN_ID, x, y += stride, c->T("OnScreen", "On-Screen Touch Controls"), ALIGN_TOPLEFT, &g_Config.bShowTouchControls);
-	UICheckBox(GEN_ID, x, y += stride, c->T("Show Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
 	UICheckBox(GEN_ID, x, y += stride, c->T("Tilt", "Tilt to Analog (horizontal)"), ALIGN_TOPLEFT, &g_Config.bAccelerometerToAnalogHoriz);
 	if (g_Config.bShowTouchControls) {
+		UICheckBox(GEN_ID, x, y += stride, c->T("Show Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
 		UICheckBox(GEN_ID, x, y += stride, c->T("Buttons Scaling"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
 		if (g_Config.bLargeControls) {
 			char scale[256];

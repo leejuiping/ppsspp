@@ -59,6 +59,7 @@ class CtrlDisAsmView
 	char searchQuery[256];
 	int matchAddress;
 	bool searching;
+	bool dontRedraw;
 
 	void disassembleToFile();
 	void search(bool continueSearch);
@@ -82,9 +83,11 @@ public:
 	void onMouseUp(WPARAM wParam, LPARAM lParam, int button);
 	void onMouseMove(WPARAM wParam, LPARAM lParam, int button);
 	void redraw();
-
+	
+	void getOpcodeText(u32 address, char* dest);
 	int yToAddress(int y);
 
+	void setDontRedraw(bool b) { dontRedraw = b; };
 	void setDebugger(DebugInterface *deb)
 	{
 		debugger=deb;

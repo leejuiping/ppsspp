@@ -81,11 +81,13 @@ public:
 	static void RemoveBreakPoint(u32 _iAddress);
 
 	static void ClearAllBreakPoints();
+	static void ClearTemporaryBreakPoints();
 
 	static void InvalidateJit(u32 _iAddress);
 	static void InvalidateJit();
 
 	static int GetNumBreakpoints();
+	static BreakPoint GetBreakpoint(int i);
 	static int GetBreakpointAddress(int i);
 };
 

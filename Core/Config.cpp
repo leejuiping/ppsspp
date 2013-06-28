@@ -48,6 +48,7 @@ void Config::Load(const char *iniFileName)
 
 	bSpeedLimit = false;
 	general->Get("FirstRun", &bFirstRun, true);
+	general->Get("NewUI", &bNewUI, false);
 	general->Get("AutoLoadLast", &bAutoLoadLast, false);
 	general->Get("AutoRun", &bAutoRun, true);
 	general->Get("Browse", &bBrowse, false);

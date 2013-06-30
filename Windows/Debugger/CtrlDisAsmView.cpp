@@ -9,6 +9,7 @@
 
 #include "CtrlDisAsmView.h"
 #include "Debugger_MemoryDlg.h"
+#include "ExpressionParser.h"
 #include "../../Core/Debugger/SymbolMap.h"
 #include "../../globals.h"
 #include "../main.h"
@@ -193,9 +194,6 @@ bool CtrlDisAsmView::getDisasmAddressText(u32 address, char* dest, bool abbrevia
 		const char* addressSymbol = debugger->findSymbolForAddress(address);
 		if (addressSymbol != NULL)
 		{
-			if (memcmp(addressSymbol,"z_",2) == 0) addressSymbol += 2;
-			if (memcmp(addressSymbol,"zz_",3) == 0) addressSymbol += 3;
-
 			for (int k = 0; addressSymbol[k] != 0; k++)
 			{
 				// abbreviate long names
@@ -249,8 +247,6 @@ void CtrlDisAsmView::parseDisasm(const char* disasm, char* opcode, char* argumen
 			const char* addressSymbol = debugger->findSymbolForAddress(branchTarget);
 			if (addressSymbol != NULL && displaySymbols)
 			{
-				if (memcmp(addressSymbol,"z_",2) == 0) addressSymbol += 2;
-				if (memcmp(addressSymbol,"zz_",3) == 0) addressSymbol += 3;
 				arguments += sprintf(arguments,"%s",addressSymbol);
 			} else {
 				arguments += sprintf(arguments,"0x%08X",branchTarget);
@@ -489,19 +485,24 @@ void CtrlDisAsmView::onKeyDown(WPARAM wParam, LPARAM lParam)
 
 	if (controlHeld)
 	{
-		switch (wParam & 0xFFFF)
+		switch (tolower(wParam & 0xFFFF))
 		{
-		case 'S':
 		case 's':
 			search(false);
 			break;
-		case 'C':
 		case 'c':
 			search(true);
 			break;
 		case 'x':
-		case 'X':
 			disassembleToFile();
+			break;
+		case 'g':
+			{
+				u32 addr;
+				controlHeld = false;
+				if (executeExpressionWindow(wnd,debugger,addr) == false) return;
+				gotoAddr(addr);
+			}
 			break;
 		}
 	} else {
@@ -812,7 +813,7 @@ void CtrlDisAsmView::disassembleToFile()
 	u32 size;
 
 	// get size
-	if (InputBox_GetHex(MainWindow::GetHInstance(), MainWindow::GetHWND(), "Size in hex",0,size) == false) return;
+	if (executeExpressionWindow(wnd,debugger,size) == false) return;
 	if (size == 0 || size > 10*1024*1024)
 	{
 		MessageBox(wnd,"Invalid size!","Error",MB_OK);
@@ -845,7 +846,7 @@ void CtrlDisAsmView::disassembleToFile()
 
 	// gather all branch targets without labels
 	std::set<u32> branchAddresses;
-	for (int i = 0; i < size; i += instructionSize)
+	for (u32 i = 0; i < size; i += instructionSize)
 	{
 		char opcode[64],arguments[256];
 		const char *dis = debugger->disasm(curAddress+i, instructionSize);
@@ -861,7 +862,7 @@ void CtrlDisAsmView::disassembleToFile()
 	}
 
 	bool previousLabel = true;
-	for (int i = 0; i < size; i += instructionSize)
+	for (u32 i = 0; i < size; i += instructionSize)
 	{
 		u32 disAddress = curAddress+i;
 
@@ -896,7 +897,7 @@ void CtrlDisAsmView::disassembleToFile()
 
 void CtrlDisAsmView::getOpcodeText(u32 address, char* dest)
 {
-	char addressText[64],opcode[64],arguments[256];
+	char opcode[64],arguments[256];
 	const char *dis = debugger->disasm(address, instructionSize);
 	parseDisasm(dis,opcode,arguments);
 

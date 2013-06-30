@@ -237,6 +237,24 @@ const char* SymbolMap::getDirectSymbol(u32 address)
 	return NULL;
 }
 
+bool SymbolMap::getSymbolValue(char* symbol, u32& dest)
+{
+	for (size_t i = 0, n = entries.size(); i < n; i++)
+	{
+		MapEntry &entry = entries[i];
+#ifdef _WIN32
+		if (stricmp(entry.name,symbol) == 0)
+#else
+		if (strcasecmp(entry.name,symbol) == 0)
+#endif
+		{
+			dest = entries[i].vaddress;
+			return true;
+		}
+	}
+	return false;
+}
+
 char descriptionTemp[256];
 
 char *SymbolMap::GetDescription(unsigned int address)

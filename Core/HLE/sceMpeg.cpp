@@ -651,13 +651,13 @@ u32 sceMpegAvcDecode(u32 mpeg, u32 auAddr, u32 frameWidth, u32 bufferAddr, u32 i
 
 	avcAu.pts = ctx->mediaengine->getVideoTimeStamp() + ctx->mpegFirstTimestamp;
 
-	ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
-
 	// Flush structs back to memory
 	avcAu.write(auAddr);
 	Memory::WriteStruct(ctx->mpegRingbufferAddr, &ringbuffer);
 
-	Memory::Write_U32(ctx->avc.avcFrameStatus, initAddr);  // 1 = showing, 0 = not showing
+	// return 0 in first call, and then return 1, as PSPSDK mentioned
+	Memory::Write_U32(ctx->avc.avcDecodeResult ? 1 : 0, initAddr);
+	ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
 
 	DEBUG_LOG(HLE, "sceMpegAvcDecode(%08x, %08x, %i, %08x, %08x)", mpeg, auAddr, frameWidth, bufferAddr, initAddr);
 
@@ -796,13 +796,13 @@ int sceMpegAvcDecodeYCbCr(u32 mpeg, u32 auAddr, u32 bufferAddr, u32 initAddr)
 
 	avcAu.pts = ctx->mediaengine->getVideoTimeStamp() + ctx->mpegFirstTimestamp;
 
-	ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
-
 	// Flush structs back to memory
 	avcAu.write(auAddr);
 	Memory::WriteStruct(ctx->mpegRingbufferAddr, &ringbuffer);
 
-	Memory::Write_U32(ctx->avc.avcFrameStatus, initAddr);  // 1 = showing, 0 = not showing
+	// return 0 in first call, and then return 1, as PSPSDK mentioned
+	Memory::Write_U32(ctx->avc.avcDecodeResult ? 1 : 0, initAddr);
+	ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
 
 	DEBUG_LOG(HLE, "sceMpegAvcDecodeYCbCr(%08x, %08x, %08x, %08x)", mpeg, auAddr, bufferAddr, initAddr);
 
@@ -965,11 +965,6 @@ int sceMpegGetAvcAu(u32 mpeg, u32 streamId, u32 auAddr, u32 attrAddr)
 	SceMpegAu sceAu;
 	sceAu.read(auAddr);
 
-	if (ctx->avc.avcDecodeResult == 0) {
-		// return PSP_ERROR_MPEG_NO_DATA at first call before mpegAvcDecode
-		ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
-		return hleDelayResult(PSP_ERROR_MPEG_NO_DATA, "mpeg get avc", mpegDecodeErrorDelayMs);
-	}
 	if (mpegRingbuffer.packetsRead == 0 || mpegRingbuffer.packetsFree == mpegRingbuffer.packets) {
 		DEBUG_LOG(HLE, "PSP_ERROR_MPEG_NO_DATA=sceMpegGetAvcAu(%08x, %08x, %08x, %08x)", mpeg, streamId, auAddr, attrAddr);
 		sceAu.pts = -1;
@@ -1408,6 +1403,11 @@ const HLEFunction sceMpeg[] =
 	{0xab0e9556,0,"sceMpegAvcDecodeDetailIndex"},
 	{0xcf3547a2,0,"sceMpegAvcDecodeDetail2"},
 	{0x921fcccf,0,"sceMpegGetAvcEsAu"},
+	{0xd4dd6e75,0,"sceMpeg_D4DD6E75"},
+	{0x11cab459,0,"sceMpeg_11CAB459"},
+	{0xc345ded2,0,"sceMpeg_C345DED2"},
+	{0xb27711a8,0,"sceMpeg_B27711A8"},
+	{0x988e9e12,0,"sceMpeg_988E9E12"},
 };
 
 void Register_sceMpeg()

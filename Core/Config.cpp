@@ -98,13 +98,12 @@ void Config::Load(const char *iniFileName)
 #endif
 	graphics->Get("BufferedRendering", &bBufferedRendering, true);
 	graphics->Get("HardwareTransform", &bHardwareTransform, true);
-	graphics->Get("NearestFiltering", &bNearestFiltering, false);
-	graphics->Get("LinearFiltering", &bLinearFiltering, false);
-	graphics->Get("LinearFilteringCG", &bLinearFilteringCG, false);
+	graphics->Get("TextureFiltering", &iTexFiltering, false);
 	graphics->Get("SSAA", &SSAntiAliasing, 0);
 	graphics->Get("VBO", &bUseVBO, false);
 	graphics->Get("FrameSkip", &iFrameSkip, 0);
 	graphics->Get("FrameRate", &iFpsLimit, 60);
+	graphics->Get("ForceMaxEmulatedFPS", &iForceMaxEmulatedFPS, 0);
 #ifdef USING_GLES2
 	graphics->Get("AnisotropyLevel", &iAnisotropyLevel, 0);
 #else
@@ -215,13 +214,12 @@ void Config::Save()
 		graphics->Set("ResolutionScale", iWindowZoom);
 		graphics->Set("BufferedRendering", bBufferedRendering);
 		graphics->Set("HardwareTransform", bHardwareTransform);
-		graphics->Set("NearestFiltering", bNearestFiltering);
-		graphics->Set("LinearFiltering", bLinearFiltering);
-		graphics->Set("LinearFilteringCG", bLinearFilteringCG);
+		graphics->Set("TextureFiltering", iTexFiltering);
 		graphics->Set("SSAA", SSAntiAliasing);
 		graphics->Set("VBO", bUseVBO);
 		graphics->Set("FrameSkip", iFrameSkip);
 		graphics->Set("FrameRate", iFpsLimit);
+		graphics->Set("ForceMaxEmulatedFPS", iForceMaxEmulatedFPS);
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("VertexCache", bVertexCache);
 		graphics->Set("FullScreen", bFullScreen);

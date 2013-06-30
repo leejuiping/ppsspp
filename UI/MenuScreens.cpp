@@ -510,7 +510,6 @@ void PauseScreen::render() {
 	} else 
 		g_Config.iFrameSkip = 0;
 
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Linear Filtering"), ALIGN_TOPLEFT, &g_Config.bLinearFiltering);
 	ui_draw2d.DrawText(UBUNTU24, gs->T("Save State :"), 30, y += 40, 0xFFFFFFFF, ALIGN_LEFT);
 	HLinear hlinear4(x + 180 , y , 10);
 	if (UIButton(GEN_ID, hlinear4, 60, 0, "1", ALIGN_LEFT)) {
@@ -857,14 +856,6 @@ void GraphicsScreenP2::render() {
 	int stride = 40;
 	int columnw = 400;
 
-	if ( UICheckBox(GEN_ID, x, y += stride, gs->T("Force Nearest Filtering"), ALIGN_TOPLEFT, &g_Config.bNearestFiltering) ) {
-		g_Config.bLinearFiltering = false; // disable linear filtering if someone turns on nearest
-	}
-	if ( UICheckBox(GEN_ID, x, y += stride, gs->T("Force Linear Filtering"), ALIGN_TOPLEFT, &g_Config.bLinearFiltering) ) {
-		g_Config.bNearestFiltering = false; // and vice versa
-	}
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Linear Filtering (CG)"), ALIGN_TOPLEFT, &g_Config.bLinearFilteringCG);
-
 	bool AnisotropicFiltering = g_Config.iAnisotropyLevel != 0;
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Anisotropic Filtering"), ALIGN_TOPLEFT, &AnisotropicFiltering);
 	if (AnisotropicFiltering) {
@@ -888,9 +879,34 @@ void GraphicsScreenP2::render() {
 	} else 
 		g_Config.iAnisotropyLevel = 0;
 	
+	bool TexFiltering = g_Config.iTexFiltering > 1;
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Texture Filtering"), ALIGN_TOPLEFT, &TexFiltering);
+	if (TexFiltering) {
+		if (g_Config.iTexFiltering <= 1)
+			g_Config.iTexFiltering = 2;
+
+		char showType[256];
+		std::string type;
+		switch (g_Config.iTexFiltering) {
+		case 2:	type = "Nearest";break;
+		case 3: type = "Linear";break;
+		case 4:	type = "Linear(CG)";break;
+		}
+		sprintf(showType, "%s %s", gs->T("Type :"), type.c_str());
+		ui_draw2d.DrawText(UBUNTU24, showType, x + 60, (y += stride) , 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 300, y, 20);
+		if (UIButton(GEN_ID, hlinear1, 120, 0, gs->T("Nearest"), ALIGN_LEFT)) 
+			g_Config.iTexFiltering = 2;
+		if (UIButton(GEN_ID, hlinear1, 120, 0, gs->T("Linear"), ALIGN_LEFT))
+			g_Config.iTexFiltering = 3;
+		if (UIButton(GEN_ID, hlinear1, 150, 0, gs->T("Linear(CG)"), ALIGN_LEFT))
+			g_Config.iTexFiltering = 4;
+		y += 20;
+	} else
+		g_Config.iTexFiltering = 0;
 
 	bool TexScaling = g_Config.iTexScalingLevel > 1;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("xBRZ Texture Scaling"), ALIGN_TOPLEFT, &TexScaling);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Texture Scaling"), ALIGN_TOPLEFT, &TexScaling);
 	if (TexScaling) {
 		if (g_Config.iTexScalingLevel <= 1)
 			g_Config.iTexScalingLevel = 2;
@@ -966,51 +982,60 @@ void GraphicsScreenP3::render() {
 	int stride = 40;
 	int columnw = 400;
 	
+	bool ForceMaxEmulatedFPS60 = g_Config.iForceMaxEmulatedFPS == 60;
+	if (UICheckBox(GEN_ID, x, y += stride, gs->T("Force 60 FPS or less"), ALIGN_TOPLEFT, &ForceMaxEmulatedFPS60))
+		g_Config.iForceMaxEmulatedFPS = ForceMaxEmulatedFPS60 ? 60 : 0;
+
 	bool ShowCounter = g_Config.iShowFPSCounter > 0;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Show VPS/FPS"), ALIGN_TOPLEFT, &ShowCounter);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Show speed / internal FPS"), ALIGN_TOPLEFT, &ShowCounter);
 	if (ShowCounter) {
+#ifdef _WIN32
+	const int checkboxH = 32;
+#else
+	const int checkboxH = 48;
+#endif
+		ui_draw2d.DrawTextShadow(UBUNTU24, gs->T("(60.0 is full speed, internal FPS depends on game)"), x + UI_SPACE + 29, (y += stride) + checkboxH / 2, 0xFFFFFFFF, ALIGN_LEFT | ALIGN_VCENTER);
+
 		if (g_Config.iShowFPSCounter <= 0)
 			g_Config.iShowFPSCounter = 1;
 
-		char counter[256];
-		std::string type;
-
+		const char *type;
 		switch (g_Config.iShowFPSCounter) {
-		case 1: type = "VPS";break;
-		case 2:	type = "FPS";break;
-		case 3: type = "Both";break;
+		case 1: type = gs->T("Display: Speed"); break;
+		case 2:	type = gs->T("Display: FPS"); break;
+		case 3: type = gs->T("Display: Both"); break;
 		}
-		sprintf(counter, "%s %s", gs->T("Format :"), type.c_str());
-		ui_draw2d.DrawText(UBUNTU24, counter, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
-		HLinear hlinear1(x + 250, y, 20);
-		if (UIButton(GEN_ID, hlinear1, 80, 0, gs->T("VPS"), ALIGN_LEFT))
+
+		ui_draw2d.DrawText(UBUNTU24, type, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 260, y, 20);
+		if (UIButton(GEN_ID, hlinear1, 100, 0, gs->T("Speed"), ALIGN_LEFT))
 			g_Config.iShowFPSCounter = 1;
-		if (UIButton(GEN_ID, hlinear1, 80, 0, gs->T("FPS"), ALIGN_LEFT))
+		if (UIButton(GEN_ID, hlinear1, 100, 0, gs->T("FPS"), ALIGN_LEFT))
 			g_Config.iShowFPSCounter = 2;
-		if (UIButton(GEN_ID, hlinear1, 90, 0, gs->T("Both"), ALIGN_LEFT))
+		if (UIButton(GEN_ID, hlinear1, 100, 0, gs->T("Both"), ALIGN_LEFT))
 			g_Config.iShowFPSCounter = 3;
 
 		y += 20;
 	} else 
 		g_Config.iShowFPSCounter = 0;
-		
+
 	bool FpsLimit = g_Config.iFpsLimit != 0;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("FPS Limit"), ALIGN_TOPLEFT, &FpsLimit);
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Toggled Speed Limit"), ALIGN_TOPLEFT, &FpsLimit);
 	if (FpsLimit) {
 		if (g_Config.iFpsLimit == 0)
 			g_Config.iFpsLimit = 60;
 		
 		char showFps[256];
-		sprintf(showFps, "%s %d", gs->T("FPS :"), g_Config.iFpsLimit);
+		sprintf(showFps, "%s %d", gs->T("Speed :"), g_Config.iFpsLimit);
 		ui_draw2d.DrawText(UBUNTU24, showFps, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
-		HLinear hlinear1(x + 250, y, 20);
-		if (UIButton(GEN_ID, hlinear1, 80, 0, gs->T("Auto"), ALIGN_LEFT))
+		HLinear hlinear1(x + 260, y, 20);
+		if (UIButton(GEN_ID, hlinear1, 100, 0, gs->T("Auto"), ALIGN_LEFT))
 			g_Config.iFpsLimit = 60;
-		if (UIButton(GEN_ID, hlinear1, 40, 0, gs->T("-1"), ALIGN_LEFT))
-			if(g_Config.iFpsLimit > 30)
+		if (UIButton(GEN_ID, hlinear1, 50, 0, gs->T("-1"), ALIGN_LEFT))
+			if(g_Config.iFpsLimit > 10)
 				g_Config.iFpsLimit -= 1;
-		if (UIButton(GEN_ID, hlinear1, 40, 0, gs->T("+1"), ALIGN_LEFT))
-			if(g_Config.iFrameSkip != 120)
+		if (UIButton(GEN_ID, hlinear1, 50, 0, gs->T("+1"), ALIGN_LEFT))
+			if(g_Config.iFrameSkip < 240)
 				g_Config.iFpsLimit += 1;
 
 		y += 20;
@@ -1502,86 +1527,92 @@ void CreditsScreen::update(InputState &input_state) {
 	frames_++;
 }
 
-static const char * credits[] = {
-	"PPSSPP",
-	"",
-	"",
-	"A fast and portable PSP emulator",
-	"",
-	"Created by Henrik Rydgård",
-	"(aka hrydgard, ector)"
-	"",
-	"",
-	"Contributors:",
-	"unknownbrackets",
-	"oioitff",
-	"xsacha",
-	"raven02",
-	"tpunix",
-	"orphis",
-	"sum2012",
-	"mikusp",
-	"aquanull",
-	"The Dax",
-	"tmaul",
-	"artart78",
-	"ced2911",
-	"soywiz",
-	"kovensky",
-	"xele",
-	"chaserhjk",
-	"evilcorn",
-	"daniel dressler",
-	"makotech222",
-	"CPkmn",
-	"mgaver",
-	"jeid3",
-	"cinaera/BeaR",
-	"jtraynham",
-	"Kingcom",
-	"aquanull",
-	"arnastia",
-	"lioncash",
-	"Written in C++ for speed and portability",
-	"",
-	"",
-	"Free tools used:",
-#ifdef ANDROID
-	"Android SDK + NDK",
-#elif defined(BLACKBERRY)
-	"Blackberry NDK",
-#endif
-#if defined(USING_QT_UI)
-	"Qt",
-#else
-	"SDL",
-#endif
-	"CMake",
-	"freetype2",
-	"zlib",
-	"PSP SDK",
-	"",
-	"",
-	"Check out the website:",
-	"www.ppsspp.org",
-	"compatibility lists, forums, and development info",
-	"",
-	"",
-	"Also check out Dolphin, the best Wii/GC emu around:",
-	"http://www.dolphin-emu.org",
-	"",
-	"",
-	"PPSSPP is intended for educational purposes only.",
-	"",
-	"Please make sure that you own the rights to any games",
-	"you play by owning the UMD or by buying the digital",
-	"download from the PSN store on your real PSP.",
-	"",
-	"",
-	"PSP is a trademark by Sony, Inc.",
-};
 
 void CreditsScreen::render() {
+	
+	I18NCategory *c = GetI18NCategory("PSPCredits");
+
+	const char * credits[] = {
+		"PPSSPP",
+		"",
+		"",
+		c->T("title", "A fast and portable PSP emulator"),	
+		"",
+		c->T("created", "Created by"),
+		"Henrik Rydgård",
+		"(aka hrydgard, ector)",
+		"",
+		"",
+		c->T("contributors", "Contributors:"),
+		"unknownbrackets",
+		"oioitff",
+		"xsacha",
+		"raven02",
+		"tpunix",
+		"orphis",
+		"sum2012",
+		"mikusp",
+		"aquanull",
+		"The Dax",
+		"tmaul",
+		"artart78",
+		"ced2911",
+		"soywiz",
+		"kovensky",
+		"xele",
+		"chaserhjk",
+		"evilcorn",
+		"daniel dressler",
+		"makotech222",
+		"CPkmn",
+		"mgaver",
+		"jeid3",
+		"cinaera/BeaR",
+		"jtraynham",
+		"Kingcom",
+		"aquanull",
+		"arnastia",
+		"lioncash",		
+		"",
+		c->T("written", "Written in C++ for speed and portability"),
+		"",
+		"",
+		c->T("tools", "Free tools used:"),
+	#ifdef ANDROID
+		"Android SDK + NDK",
+	#elif defined(BLACKBERRY)
+		"Blackberry NDK",
+	#endif
+	#if defined(USING_QT_UI)
+		"Qt",
+	#else
+		"SDL",
+	#endif
+		"CMake",
+		"freetype2",
+		"zlib",
+		"PSP SDK",
+		"",
+		"",
+		c->T("website", "Check out the website:"),
+		"www.ppsspp.org",
+		c->T("list", "compatibility lists, forums, and development info"),
+		"",
+		"",
+		c->T("check", "Also check out Dolphin, the best Wii/GC emu around:"),
+		"http://www.dolphin-emu.org",
+		"",
+		"",
+		c->T("info1", "PPSSPP is intended for educational purposes only."),
+		"",
+		c->T("info2", "Please make sure that you own the rights to any games"),
+		c->T("info3", "you play by owning the UMD or by buying the digital"),
+		c->T("info4", "download from the PSN store on your real PSP."),
+		"",	
+		"",
+		c->T("info5", "PSP is a trademark by Sony, Inc."),
+	};
+	
 	// TODO: This is kinda ugly, done on every frame...
 	char temp[256];
 	sprintf(temp, "PPSSPP %s", PPSSPP_GIT_VERSION);

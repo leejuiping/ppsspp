@@ -790,6 +790,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceAudiocodec.cpp
 	Core/HLE/sceAudiocodec.h
 	Core/HLE/sceAudio.h
+	Core/HLE/sceCcc.h
+	Core/HLE/sceCcc.cpp
 	Core/HLE/sceChnnlsv.cpp
 	Core/HLE/sceChnnlsv.h
 	Core/HLE/sceCtrl.cpp
@@ -1011,6 +1013,7 @@ if(WIN32)
 		Windows/Debugger/CtrlRegisterList.cpp
 		Windows/Debugger/CtrlRegisterList.h
 		Windows/Debugger/Debugger.h
+		Windows/Debugger/DebuggerShared.h
 		Windows/Debugger/Debugger_Disasm.cpp
 		Windows/Debugger/Debugger_Disasm.h
 		Windows/Debugger/Debugger_MemoryDlg.cpp

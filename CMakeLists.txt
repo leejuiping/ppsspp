@@ -585,6 +585,8 @@ add_library(native STATIC
 	native/json/json_writer.h
 	native/math/curves.cpp
 	native/math/curves.h
+	native/math/expression_parser.cpp
+	native/math/expression_parser.h
 	native/math/lin/aabb.cpp
 	native/math/lin/aabb.h
 	native/math/lin/matrix4x4.cpp
@@ -1013,6 +1015,7 @@ if(WIN32)
 		Windows/Debugger/CtrlRegisterList.cpp
 		Windows/Debugger/CtrlRegisterList.h
 		Windows/Debugger/Debugger.h
+		Windows/Debugger/DebuggerShared.cpp
 		Windows/Debugger/DebuggerShared.h
 		Windows/Debugger/Debugger_Disasm.cpp
 		Windows/Debugger/Debugger_Disasm.h
@@ -1025,8 +1028,6 @@ if(WIN32)
 		Windows/Debugger/Debugger_SymbolMap.h
 		Windows/Debugger/Debugger_VFPUDlg.cpp
 		Windows/Debugger/Debugger_VFPUDlg.h
-		Windows/Debugger/ExpressionParser.cpp
-		Windows/Debugger/ExpressionParser.h
 		Windows/Debugger/SimpleELF.h
 #		Windows/DlgDynaView.cpp
 #		Windows/DlgDynaView.h
@@ -1119,9 +1120,36 @@ if(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
 		link_directories(ffmpeg/${PLATFORM_ARCH}/lib)
 		set(FFMPEG_LIBRARIES libavformat.a libavcodec.a libavutil.a libswresample.a libswscale.a)
 	else()
-		message(WARNING "FFMPEG_BUILDDIR variable is required to enable FFmpeg. Disabling it.")
-		unset(USE_FFMPEG)
-	endif()
+		# Manual definition of system library locations by the user.
+		if (DEFINED FFMPEG_INCLUDE_PATH)
+			include_directories(ffmpeg ${FFMPEG_INCLUDE_PATH})
+		endif()
+		if (DEFINED AVFORMAT_PATH)
+			add_library(libavformat STATIC IMPORTED)
+			set_target_properties(libavformat PROPERTIES IMPORTED_LOCATION ${AVFORMAT_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavformat)
+		endif()
+		if (DEFINED AVCODEC_PATH)
+			add_library(libavcodec STATIC IMPORTED)
+			set_target_properties(libavcodec PROPERTIES IMPORTED_LOCATION ${AVCODEC_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavcodec)
+		endif()
+		if (DEFINED AVUTIL_PATH)
+			add_library(libavutil STATIC IMPORTED)
+			set_target_properties(libavutil PROPERTIES IMPORTED_LOCATION ${AVUTIL_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavutil)
+		endif()
+		if (DEFINED SWRESAMPLE_PATH)
+			add_library(libswresample STATIC IMPORTED)
+			set_target_properties(libswresample PROPERTIES IMPORTED_LOCATION ${SWRESAMPLE_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libswresample)
+		endif()
+		if (DEFINED SWSCALE_PATH)
+			add_library(libswscale STATIC IMPORTED)
+			set_target_properties(libswscale PROPERTIES IMPORTED_LOCATION ${SWSCALE_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libswscale)
+		endif()
+	endif(DEFINED PLATFORM_ARCH)
 endif(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
 
 if(USE_FFMPEG)
@@ -1148,6 +1176,7 @@ if(USE_FFMPEG)
 			libswscale
 		)
 	endif()
+	
 	if(IOS OR BLACKBERRY)
 		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} iconv)
 	endif()
@@ -1158,10 +1187,39 @@ if(USE_FFMPEG)
     		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} "-framework VideoDecodeAcceleration")
 		endif()
 	endif(APPLE)
-
+	
 	set(LinkCommon ${LinkCommon} ${FFMPEG_LIBRARIES})
 	add_definitions(-DUSE_FFMPEG)
 endif(USE_FFMPEG)
+
+# Modification to show where we are pulling the ffmpeg libraries from.
+if(USE_FFMPEG AND DEFINED FFMPEG_LIBRARIES)
+	target_link_libraries(Common ${FFMPEG_LIBRARIES})
+	message(STATUS "FFMPEG library locations:")
+	if(DEFINED PLATFORM_ARCH)
+		set(TEMP ${CMAKE_SOURCE_DIR}/ffmpeg/${PLATFORM_ARCH}/lib)
+		message(STATUS "libavcodec location: ${TEMP}/libavcodec.a")
+		message(STATUS "libavformat location: ${TEMP}/libavformat.a")
+		message(STATUS "libavutil location: ${TEMP}/libavutil.a")
+		message(STATUS "libswresample location: ${TEMP}/libswresample.a")
+		message(STATUS "libswscale location: ${TEMP}/libswscale.a")
+	else()
+		get_target_property(TEMP libavcodec IMPORTED_LOCATION)
+		message(STATUS "libavcodec location: ${TEMP}")
+		get_target_property(TEMP libavformat IMPORTED_LOCATION)
+		message(STATUS "libavformat location: ${TEMP}")
+		get_target_property(TEMP libavutil IMPORTED_LOCATION)
+		message(STATUS "libavutil location: ${TEMP}")
+		get_target_property(TEMP libswresample IMPORTED_LOCATION)
+		message(STATUS "libswresample location: ${TEMP}")
+		get_target_property(TEMP libswscale IMPORTED_LOCATION)
+		message(STATUS "libswscale location: ${TEMP}")
+	endif(DEFINED PLATFORM_ARCH)
+endif()
+if(USE_FFMPEG AND NOT DEFINED FFMPEG_LIBRARIES)
+	message(WARNING "FFMPEG_BUILDDIR variable or manual path definition is required to enable FFmpeg. Disabling it.")
+	unset(USE_FFMPEG)
+endif()
 
 if (TargetBin)
 	if (IOS)

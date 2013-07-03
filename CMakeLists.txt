@@ -1008,6 +1008,8 @@ if(WIN32)
 		Windows/DSoundStream.cpp
 		Windows/DSoundStream.h
 		Windows/Debugger/CPURegsInterface.h
+		Windows/Debugger/BreakpointWindow.cpp
+		Windows/Debugger/BreakpointWindow.h
 		Windows/Debugger/CtrlDisAsmView.cpp
 		Windows/Debugger/CtrlDisAsmView.h
 		Windows/Debugger/CtrlMemView.cpp
@@ -1021,6 +1023,8 @@ if(WIN32)
 		Windows/Debugger/Debugger_Disasm.h
 		Windows/Debugger/Debugger_MemoryDlg.cpp
 		Windows/Debugger/Debugger_MemoryDlg.h
+		Windows/Debugger/Debugger_Lists.cpp
+		Windows/Debugger/Debugger_Lists.h
 		Windows/Debugger/Debugger_Misc.cpp
 		Windows/Debugger/Debugger_Misc.h
 #		Windows/Debugger/Debugger_Profiler.cpp

@@ -30,14 +30,18 @@ struct DefaultKeyMap {
 	static std::map<int,int> init()
 	{
 		std::map<int,int> m;
-		m[KEYCODE_X] = CTRL_SQUARE;
-		m[KEYCODE_Z] = CTRL_TRIANGLE;
-		m[KEYCODE_S] = CTRL_CIRCLE;
-		m[KEYCODE_A] = CTRL_CROSS;
+		m[KEYCODE_A] = CTRL_SQUARE;
+		m[KEYCODE_S] = CTRL_TRIANGLE;
+		m[KEYCODE_X] = CTRL_CIRCLE;
+		m[KEYCODE_Z] = CTRL_CROSS;
 		m[KEYCODE_Q] = CTRL_LTRIGGER;
 		m[KEYCODE_W] = CTRL_RTRIGGER;
 		m[KEYCODE_SPACE] = CTRL_START;
+#ifdef _WIN32
+		m[KEYCODE_V] = CTRL_SELECT;
+#else
 		m[KEYCODE_ENTER] = CTRL_SELECT;
+#endif
 		m[KEYCODE_DPAD_UP] = CTRL_UP;
 		m[KEYCODE_DPAD_DOWN] = CTRL_DOWN;
 		m[KEYCODE_DPAD_LEFT] = CTRL_LEFT;
@@ -211,6 +215,15 @@ int KeyMap::KeyToPspButton(const int key)
 bool KeyMap::IsMappedKey(int key)
 {
 	return KeyMap::KeyToPspButton(key) != KEYMAP_ERROR_UNKNOWN_KEY;
+}
+
+
+bool KeyMap::IsUserDefined(int key)
+{
+	int layer = 0;
+	int ignored;
+	FindKeyMapping(key, &layer, &ignored);
+	return layer == 0; // key found in user settings
 }
 
 

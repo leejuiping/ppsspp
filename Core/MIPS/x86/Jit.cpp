@@ -469,8 +469,8 @@ bool Jit::CheckJitBreakpoint(u32 addr, int downcountOffset)
 	return false;
 }
 
-Jit::JitSafeMem::JitSafeMem(Jit *jit, int raddr, s32 offset)
-	: jit_(jit), raddr_(raddr), offset_(offset), needsCheck_(false), needsSkip_(false)
+Jit::JitSafeMem::JitSafeMem(Jit *jit, int raddr, s32 offset, u32 alignMask)
+	: jit_(jit), raddr_(raddr), offset_(offset), needsCheck_(false), needsSkip_(false), alignMask_(alignMask)
 {
 	// This makes it more instructions, so let's play it safe and say we need a far jump.
 	far_ = !g_Config.bIgnoreBadMemAccess || !CBreakPoints::GetMemChecks().empty();
@@ -497,9 +497,9 @@ bool Jit::JitSafeMem::PrepareWrite(OpArg &dest, int size)
 			MemCheckImm(MEM_WRITE);
 
 #ifdef _M_IX86
-			dest = M(Memory::base + (iaddr_ & Memory::MEMVIEW32_MASK));
+			dest = M(Memory::base + (iaddr_ & Memory::MEMVIEW32_MASK & alignMask_));
 #else
-			dest = MDisp(RBX, iaddr_);
+			dest = MDisp(RBX, iaddr_ & alignMask_);
 #endif
 			return true;
 		}
@@ -522,9 +522,9 @@ bool Jit::JitSafeMem::PrepareRead(OpArg &src, int size)
 			MemCheckImm(MEM_READ);
 
 #ifdef _M_IX86
-			src = M(Memory::base + (iaddr_ & Memory::MEMVIEW32_MASK));
+			src = M(Memory::base + (iaddr_ & Memory::MEMVIEW32_MASK & alignMask_));
 #else
-			src = MDisp(RBX, iaddr_);
+			src = MDisp(RBX, iaddr_ & alignMask_);
 #endif
 			return true;
 		}
@@ -540,7 +540,7 @@ OpArg Jit::JitSafeMem::NextFastAddress(int suboffset)
 {
 	if (jit_->gpr.IsImmediate(raddr_))
 	{
-		u32 addr = jit_->gpr.GetImmediate32(raddr_) + offset_ + suboffset;
+		u32 addr = (jit_->gpr.GetImmediate32(raddr_) + offset_ + suboffset) & alignMask_;
 
 #ifdef _M_IX86
 		return M(Memory::base + (addr & Memory::MEMVIEW32_MASK));
@@ -548,6 +548,8 @@ OpArg Jit::JitSafeMem::NextFastAddress(int suboffset)
 		return MDisp(RBX, addr);
 #endif
 	}
+
+	_dbg_assert_msg_(HLE, (suboffset & alignMask_) == suboffset, "suboffset must be aligned");
 
 #ifdef _M_IX86
 	return MDisp(xaddr_, (u32) Memory::base + offset_ + suboffset);
@@ -559,8 +561,13 @@ OpArg Jit::JitSafeMem::NextFastAddress(int suboffset)
 OpArg Jit::JitSafeMem::PrepareMemoryOpArg(ReadType type)
 {
 	// We may not even need to move into EAX as a temporary.
-	// TODO: Except on x86 in fastmem mode.
-	if (jit_->gpr.R(raddr_).IsSimpleReg())
+	bool needTemp = alignMask_ != 0xFFFFFFFF;
+#ifdef _M_IX86
+	// We always mask on 32 bit in fast memory mode.
+	needTemp = needTemp || g_Config.bFastMemory;
+#endif
+
+	if (jit_->gpr.R(raddr_).IsSimpleReg() && !needTemp)
 	{
 		jit_->gpr.BindToRegister(raddr_, true, false);
 		xaddr_ = jit_->gpr.RX(raddr_);
@@ -587,18 +594,24 @@ OpArg Jit::JitSafeMem::PrepareMemoryOpArg(ReadType type)
 	else
 	{
 #ifdef _M_IX86
-		// Need to modify it, too bad.
-		if (xaddr_ != EAX)
-			jit_->MOV(32, R(EAX), R(xaddr_));
 		jit_->AND(32, R(EAX), Imm32(Memory::MEMVIEW32_MASK));
-		xaddr_ = EAX;
 #endif
 	}
 
+	// TODO: This could be more optimal, but the common case is that we want xaddr_ not to include offset_.
+	// Since we need to align them after add, we add and subtract.
+	if (alignMask_ != 0xFFFFFFFF)
+	{
+		jit_->ADD(32, R(xaddr_), Imm32(offset_));
+		jit_->AND(32, R(xaddr_), Imm32(alignMask_));
+		jit_->SUB(32, R(xaddr_), Imm32(offset_));
+	}
+
+
 #ifdef _M_IX86
-		return MDisp(xaddr_, (u32) Memory::base + offset_);
+	return MDisp(xaddr_, (u32) Memory::base + offset_);
 #else
-		return MComplex(RBX, xaddr_, SCALE_1, offset_);
+	return MComplex(RBX, xaddr_, SCALE_1, offset_);
 #endif
 }
 
@@ -636,9 +649,13 @@ bool Jit::JitSafeMem::PrepareSlowWrite()
 void Jit::JitSafeMem::DoSlowWrite(void *safeFunc, const OpArg src, int suboffset)
 {
 	if (iaddr_ != (u32) -1)
-		jit_->MOV(32, R(EAX), Imm32(iaddr_ + suboffset));
+		jit_->MOV(32, R(EAX), Imm32((iaddr_ + suboffset) & alignMask_));
 	else
+	{
 		jit_->LEA(32, EAX, MDisp(xaddr_, offset_ + suboffset));
+		if (alignMask_ != 0xFFFFFFFF)
+			jit_->AND(32, R(EAX), Imm32(alignMask_));
+	}
 
 	jit_->ABI_CallFunctionAA(jit_->thunks.ProtectFunction(safeFunc, 2), src, R(EAX));
 	needsCheck_ = true;
@@ -653,12 +670,14 @@ bool Jit::JitSafeMem::PrepareSlowRead(void *safeFunc)
 			// No slow read necessary.
 			if (ImmValid())
 				return false;
-			jit_->MOV(32, R(EAX), Imm32(iaddr_));
+			jit_->MOV(32, R(EAX), Imm32(iaddr_ & alignMask_));
 		}
 		else
 		{
 			PrepareSlowAccess();
 			jit_->LEA(32, EAX, MDisp(xaddr_, offset_));
+			if (alignMask_ != 0xFFFFFFFF)
+				jit_->AND(32, R(EAX), Imm32(alignMask_));
 		}
 
 		jit_->ABI_CallFunctionA(jit_->thunks.ProtectFunction(safeFunc, 1), R(EAX));
@@ -679,13 +698,17 @@ void Jit::JitSafeMem::NextSlowRead(void *safeFunc, int suboffset)
 
 	if (jit_->gpr.IsImmediate(raddr_))
 	{
-		_dbg_assert_msg_(JIT, !Memory::IsValidAddress(iaddr_ + suboffset), "NextSlowRead() for a valid immediate address?");
+		_dbg_assert_msg_(JIT, !Memory::IsValidAddress(iaddr_ + suboffset), "NextSlowRead() for an invalid immediate address?");
 
-		jit_->MOV(32, R(EAX), Imm32(iaddr_ + suboffset));
+		jit_->MOV(32, R(EAX), Imm32((iaddr_ + suboffset) & alignMask_));
 	}
 	// For GPR, if xaddr_ was the dest register, this will be wrong.  Don't use in GPR.
 	else
+	{
 		jit_->LEA(32, EAX, MDisp(xaddr_, offset_ + suboffset));
+		if (alignMask_ != 0xFFFFFFFF)
+			jit_->AND(32, R(EAX), Imm32(alignMask_));
+	}
 
 	jit_->ABI_CallFunctionA(jit_->thunks.ProtectFunction(safeFunc, 1), R(EAX));
 }
@@ -712,6 +735,10 @@ void JitMemCheck(u32 addr, int size, int isWrite)
 	if (CBreakPoints::CheckSkipFirst() == currentMIPS->pc)
 		return;
 
+	// Did we already hit one?
+	if (coreState != CORE_RUNNING)
+		return;
+
 	MemCheck *check = CBreakPoints::GetMemCheck(addr, size);
 	if (check)
 		check->Action(addr, isWrite == 1, size, currentMIPS->pc);
@@ -732,26 +759,29 @@ void Jit::JitSafeMem::MemCheckImm(ReadType type)
 
 		jit_->CMP(32, M((void*)&coreState), Imm32(0));
 		skipChecks_.push_back(jit_->J_CC(CC_NE, true));
-		jit_->js.afterOp = JitState::AFTER_CORE_STATE | JitState::AFTER_REWIND_PC_BAD_STATE;
+		jit_->js.afterOp |= JitState::AFTER_CORE_STATE | JitState::AFTER_REWIND_PC_BAD_STATE;
 	}
 }
 
 void Jit::JitSafeMem::MemCheckAsm(ReadType type)
 {
-	auto memchecks = CBreakPoints::GetMemChecks();
+	const auto memchecks = CBreakPoints::GetMemChecks();
+	bool possible = false;
 	for (auto it = memchecks.begin(), end = memchecks.end(); it != end; ++it)
 	{
 		if (!(it->cond & MEMCHECK_READ) && type == MEM_READ)
-			return;
+			continue;
 		if (!(it->cond & MEMCHECK_WRITE) && type == MEM_WRITE)
-			return;
+			continue;
+
+		possible = true;
 
 		FixupBranch skipNext, skipNextRange;
 		if (it->end != 0)
 		{
-			jit_->CMP(32, R(xaddr_), Imm32(it->start - offset_));
+			jit_->CMP(32, R(xaddr_), Imm32(it->start - offset_ - size_));
 			skipNext = jit_->J_CC(CC_B);
-			jit_->CMP(32, R(xaddr_), Imm32(it->end - offset_ - size_));
+			jit_->CMP(32, R(xaddr_), Imm32(it->end - offset_));
 			skipNextRange = jit_->J_CC(CC_AE);
 		}
 		else
@@ -766,13 +796,16 @@ void Jit::JitSafeMem::MemCheckAsm(ReadType type)
 		jit_->ABI_CallFunctionACC(jit_->thunks.ProtectFunction((void *)&JitMemCheck, 3), R(xaddr_), size_, type == MEM_WRITE ? 1 : 0);
 		jit_->POP(xaddr_);
 
-		jit_->CMP(32, M((void*)&coreState), Imm32(0));
-		skipChecks_.push_back(jit_->J_CC(CC_NE, true));
-		jit_->js.afterOp = JitState::AFTER_CORE_STATE | JitState::AFTER_REWIND_PC_BAD_STATE;
-
 		jit_->SetJumpTarget(skipNext);
 		if (it->end != 0)
 			jit_->SetJumpTarget(skipNextRange);
+	}
+
+	if (possible)
+	{
+		jit_->CMP(32, M((void*)&coreState), Imm32(0));
+		skipChecks_.push_back(jit_->J_CC(CC_NE, true));
+		jit_->js.afterOp |= JitState::AFTER_CORE_STATE | JitState::AFTER_REWIND_PC_BAD_STATE;
 	}
 }
 

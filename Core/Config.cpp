@@ -117,6 +117,7 @@ void Config::Load(const char *iniFileName)
 	graphics->Get("StretchToDisplay", &bStretchToDisplay, false);
 	graphics->Get("TrueColor", &bTrueColor, true);
 	graphics->Get("FramebuffersToMem", &bFramebuffersToMem, false);
+	graphics->Get("FramebuffersCPUConvert", &bFramebuffersCPUConvert, false);
 	graphics->Get("MipMap", &bMipMap, true);
 	graphics->Get("TexScalingLevel", &iTexScalingLevel, 1);
 	graphics->Get("TexScalingType", &iTexScalingType, 0);
@@ -141,6 +142,7 @@ void Config::Load(const char *iniFileName)
 	control->Get("AccelerometerToAnalogHoriz", &bAccelerometerToAnalogHoriz, false);
 	control->Get("ForceInputDevice", &iForceInputDevice, -1);
 	control->Get("RightStickBind", &iRightStickBind, 0);
+	control->Get("SwapDInputRightAxes", &iSwapRightAxes, 0);
 	control->Get("TouchButtonOpacity", &iTouchButtonOpacity, 65);
 	control->Get("ButtonScale", &fButtonScale, 1.15);
 
@@ -229,6 +231,7 @@ void Config::Save()
 		graphics->Set("StretchToDisplay", bStretchToDisplay);
 		graphics->Set("TrueColor", bTrueColor);
 		graphics->Set("FramebuffersToMem", bFramebuffersToMem);
+		graphics->Set("FramebuffersCPUConvert", bFramebuffersCPUConvert);
 		graphics->Set("MipMap", bMipMap);
 		graphics->Set("TexScalingLevel", iTexScalingLevel);
 		graphics->Set("TexScalingType", iTexScalingType);
@@ -247,6 +250,7 @@ void Config::Save()
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
 		control->Set("ForceInputDevice", iForceInputDevice);
 		control->Set("RightStickBind", iRightStickBind);
+		control->Set("SwapDInputRightAxes", iSwapRightAxes);
 		control->Set("TouchButtonOpacity", iTouchButtonOpacity);
 		control->Set("ButtonScale", fButtonScale);
 

@@ -252,13 +252,13 @@ void MetaFileSystem::Shutdown()
 	startingDirectory = "";
 }
 
-u32 MetaFileSystem::OpenFile(std::string filename, FileAccess access)
+u32 MetaFileSystem::OpenFile(std::string filename, FileAccess access, const char *devicename)
 {
 	std::string of;
-	IFileSystem *system;
-	if (MapFilePath(filename, of, &system))
+	MountPoint *mount;
+	if (MapFilePath(filename, of, &mount))
 	{
-		return system->OpenFile(of, access);
+		return mount->system->OpenFile(of, access, mount->prefix.c_str());
 	}
 	else
 	{
@@ -383,7 +383,7 @@ int MetaFileSystem::RenameFile(const std::string &from, const std::string &to)
 	if (MapFilePath(from, of, &osystem))
 	{
 		// If it's a relative path, it seems to always use from's filesystem.
-		if (to.find(':/') != to.npos)
+		if (to.find(":/") != to.npos)
 		{
 			if (!MapFilePath(to, rf, &rsystem))
 				return -1;

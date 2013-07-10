@@ -78,6 +78,14 @@ bool CBreakPoints::IsAddressBreakPoint(u32 addr)
 	return bp != INVALID_BREAKPOINT && breakPoints_[bp].enabled;
 }
 
+bool CBreakPoints::IsAddressBreakPoint(u32 addr, bool* enabled)
+{
+	size_t bp = FindBreakpoint(addr);
+	if (bp == INVALID_BREAKPOINT) return false;
+	if (enabled != NULL) *enabled = breakPoints_[bp].enabled;
+	return true;
+}
+
 bool CBreakPoints::IsTempBreakPoint(u32 addr)
 {
 	size_t bp = FindBreakpoint(addr, true, true);
@@ -248,7 +256,7 @@ MemCheck *CBreakPoints::GetMemCheck(u32 address, int size)
 		MemCheck &check = *iter;
 		if (check.end != 0)
 		{
-			if (address + size >= check.start && address < check.end)
+			if (address + size > check.start && address < check.end)
 				return &check;
 		}
 		else

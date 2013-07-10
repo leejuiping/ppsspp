@@ -135,8 +135,10 @@ void CenterRect(float *x, float *y, float *w, float *h,
 
 FramebufferManager::FramebufferManager() :
 	ramDisplayFramebufPtr_(0),
-	displayFramebuf_(0),
 	displayFramebufPtr_(0),
+	displayStride_(0),
+	displayFormat_(0),
+	displayFramebuf_(0),
 	prevDisplayFramebuf_(0),
 	prevPrevDisplayFramebuf_(0),
 	frameLastFramebufUsed(0),
@@ -375,22 +377,26 @@ void GetViewportDimensions(int &w, int &h) {
 void GuessDrawingSize(int &drawing_width, int &drawing_height) {
 	GetViewportDimensions(drawing_width, drawing_height);
 
-	// HACK for first frame where some games don't init things right
-	if (drawing_width <= 1 && drawing_height <= 1) {
-		drawing_width = 480;
-		drawing_height = 272;
-	}
-
 	// Now, cap using scissor. Hm, no, this doesn't work so well.
 	/*
 	if (drawing_width > gstate.getScissorX2() + 1)
 		drawing_width = gstate.getScissorX2() + 1;
 	if (drawing_height > gstate.getScissorY2() + 1)
 		drawing_height = gstate.getScissorY2() + 1;*/
-	
-	// Cap at maximum texture size for now. Don't see much point in drawing bigger.
-	drawing_width = std::min(drawing_width, 512);
-	drawing_height = std::min(drawing_height, 512);
+
+	// Bit hacky but it works pretty well
+	if (!g_Config.bBufferedRendering || g_iNumVideos || (drawing_width <= 1 && drawing_height <= 1) ) {
+		drawing_width = 480;
+		drawing_height = 272;
+	} else {
+		// New attempt: Use the max of region and scissor. Round to even number as games are highly inconsistent .
+		int scissorX2 = (gstate.getScissorX2() + 1) & ~1;
+		int regionX2 = (gstate.getRegionX2() + 1) & ~1;
+		int scissorY2 = (gstate.getScissorY2() + 1) & ~1;
+		int regionY2 = (gstate.getRegionY2() + 1) & ~1;
+		drawing_width = std::min(512, std::max(scissorX2, regionX2));
+		drawing_height = std::min(512, std::max(scissorY2, regionY2));
+	}
 }
 
 void FramebufferManager::DestroyFramebuf(VirtualFramebuffer *v) {
@@ -430,7 +436,7 @@ void FramebufferManager::SetRenderFrameBuffer() {
 	// Yeah this is not completely right. but it'll do for now.
 	//int drawing_width = ((gstate.region2) & 0x3FF) + 1;
 	//int drawing_height = ((gstate.region2 >> 10) & 0x3FF) + 1;
-
+		
 	// As there are no clear "framebuffer width" and "framebuffer height" registers,
 	// we need to infer the size of the current framebuffer somehow. Let's try the viewport.
 	
@@ -831,6 +837,7 @@ void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *src, VirtualFrameb
 	fbo_unbind();
 }
 
+// TODO: SSE/NEON
 void ConvertFromRGBA8888(u8 *dst, u8 *src, u32 stride, u32 height, int format) {
 	if(format == GE_FORMAT_8888) {
 		if(src == dst) {
@@ -839,8 +846,8 @@ void ConvertFromRGBA8888(u8 *dst, u8 *src, u32 stride, u32 height, int format) {
 			memcpy(dst, src, stride * height * 4);
 		}
 	} else { // But here it shouldn't matter if they do
-		u32 size = height * stride;
-		u32 *src32 = (u32 *)src;
+		int size = height * stride;
+		const u32 *src32 = (const u32 *)src;
 		u16 *dst16 = (u16 *)dst;
 		switch (format) {
 			case GE_FORMAT_565: // BGR 565
@@ -1031,8 +1038,8 @@ void FramebufferManager::PackFramebufferGLES_(VirtualFramebuffer *vfb) {
 	}
 
 	if(packed) {
-		DEBUG_LOG(HLE, "Reading framebuffer to mem, bufSize = %u, packed = %08x, fb_address = %08x", 
-			bufSize, packed, fb_address);
+		DEBUG_LOG(HLE, "Reading framebuffer to mem, bufSize = %u, packed = %p, fb_address = %08x", 
+			(u32)bufSize, packed, fb_address);
 
 		glPixelStorei(GL_PACK_ALIGNMENT, 4);
 		glReadPixels(0, 0, vfb->fb_stride, vfb->height, GL_RGBA, GL_UNSIGNED_BYTE, packed);

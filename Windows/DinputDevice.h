@@ -22,8 +22,6 @@
 #include "InputDevice.h"
 #include "dinput.h"
 
-struct RawInputState;
-
 class DinputDevice :
 	public InputDevice
 {
@@ -32,9 +30,17 @@ public:
 	~DinputDevice();
 	virtual int UpdateState(InputState &input_state);
 	virtual bool IsPad() { return true; }
-	int UpdateRawStateSingle(RawInputState &rawState);
 private:
+	void ApplyButtons(DIJOYSTATE2 &state, InputState &input_state);
 	LPDIRECTINPUT8			pDI;
 	LPDIRECTINPUTDEVICE8    pJoystick;
 	bool					analog;
+	BYTE                    lastButtons_[128];
+	WORD                    lastPOV_[4];
+	short                   last_lX_;
+	short                   last_lY_;
+	short                   last_lZ_;
+	short                   last_lRx_;
+	short                   last_lRy_;
+	short                   last_lRz_;
 };

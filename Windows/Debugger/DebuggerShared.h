@@ -2,10 +2,10 @@
 #include <Windows.h>
 #include "..\..\Core\Debugger\DebugInterface.h"
 
+extern HMENU g_hPopupMenus;
+
 enum { WM_DEB_RUNTOWPARAM = WM_USER+2,
 	WM_DEB_GOTOWPARAM,
-	WM_DEB_GOTOBREAKPOINT,
-	WM_DEB_REMOVEBREAKPOINT,
 	WM_DEB_GOTOADDRESSEDIT,
 	WM_DEB_MAPLOADED,
 	WM_DEB_TABPRESSED,

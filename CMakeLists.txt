@@ -580,7 +580,6 @@ add_library(native STATIC
 	native/image/zim_save.h
 	native/input/gesture_detector.cpp
 	native/input/gesture_detector.h
-	native/input/input_state.cpp
 	native/input/keycodes.h
 	native/input/input_state.h
 	native/input/input_state.cpp
@@ -1269,7 +1268,7 @@ if(IOS)
 
 	file(GLOB IOSAssets ios/assets/*.png)
 	file(INSTALL ${IOSAssets} DESTINATION assets)
-	file(INSTALL flash0 DESTINATION assets)
+	file(INSTALL flash DESTINATION assets)
 	file(INSTALL lang DESTINATION assets)
 	if (IOS_DEBUG)
 		file(INSTALL pspautotests DESTINATION assets)

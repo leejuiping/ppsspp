@@ -23,6 +23,7 @@
 #include "Core/MIPS/MIPS.h"
 #include "Core/CoreTiming.h"
 #include "Core/Reporting.h"
+#include "Core/Config.h"
 #include "Common/ChunkFile.h"
 
 #include "sceKernel.h"
@@ -61,6 +62,8 @@ const int PSP_ATRAC_LOOP_STREAM_DATA_IS_ON_MEMORY = -3;
 
 const u32 ATRAC3_MAX_SAMPLES = 0x400;
 const u32 ATRAC3PLUS_MAX_SAMPLES = 0x800;
+
+static const int atracDecodeDelay = 2300;
 
 #ifdef USE_FFMPEG
 
@@ -612,7 +615,7 @@ u32 _AtracDecodeData(int atracID, u8* outbuf, u32 *SamplesNum, u32* finish, int 
 
 			if (atrac->decoder_context) {
 				static u8 buf[0x8000];
-				if (atrac->sampleQueue.getQueueSize() < ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracChannels) {
+				if ((size_t)atrac->sampleQueue.getQueueSize() < ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracChannels) {
 					int decodebytes = 0;
 					atrac->decodePos = atrac->getDecodePosBySample(atrac->currentSample);
 					int inbytes = std::max((int)atrac->first.size - (int)atrac->decodePos, 0);
@@ -622,16 +625,19 @@ u32 _AtracDecodeData(int atracID, u8* outbuf, u32 *SamplesNum, u32* finish, int 
 						atrac->sampleQueue.push(buf, decodebytes);
 					}
 				}
+				const int MAX_CONFIG_VOLUME = 5;
 				s16* out = (s16*)outbuf;
 				memset(out, 0, ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracOutputChannels);
 				int gotsize = atrac->sampleQueue.pop_front(buf, ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracChannels);
 				numSamples = gotsize / sizeof(s16) / atrac->atracChannels;
 				s16* in = (s16*)buf;
+				int volumeShift = (MAX_CONFIG_VOLUME - g_Config.iBGMVolume);
+				if (volumeShift < 0) volumeShift = 0;
 				for (u32 i = 0; i < numSamples; i++) {
-					s16 sampleL = *in++;
+					s16 sampleL = *in++ >> volumeShift; // Max = 4 and Min = 0(no shift)
 					s16 sampleR = sampleL;
 					if (atrac->atracChannels == 2)
-						sampleR = *in++;
+						sampleR = *in++ >> volumeShift; // Max = 4 and Min = 0(no shift)
 					*out++ = sampleL;
 					if (atrac->atracOutputChannels == 2)
 						*out++ = sampleR;
@@ -658,7 +664,7 @@ u32 _AtracDecodeData(int atracID, u8* outbuf, u32 *SamplesNum, u32* finish, int 
 			atrac->decodePos = atrac->getDecodePosBySample(atrac->currentSample);
 
 			int finishFlag = 0;
-			if (atrac->loopNum != 0 && (atrac->currentSample + atracSamplesPerFrame > atrac->loopEndSample ||
+			if (atrac->loopNum != 0 && (atrac->currentSample + (int)atracSamplesPerFrame > atrac->loopEndSample ||
 				(numSamples == 0 && atrac->first.size >= atrac->first.filesize))) {
 				atrac->currentSample = atrac->loopStartSample;
 				if (atrac->loopNum > 0)
@@ -695,6 +701,10 @@ u32 sceAtracDecodeData(int atracID, u32 outAddr, u32 numSamplesAddr, u32 finishF
 	Memory::Write_U32(numSamples, numSamplesAddr);
 	Memory::Write_U32(finish, finishFlagAddr);
 	Memory::Write_U32(remains, remainAddr);
+	if (!ret) {
+		// decode data successfully, delay thread
+		return hleDelayResult(ret, "atrac decode data", atracDecodeDelay);
+	}
 	return ret;
 }
 
@@ -1385,7 +1395,7 @@ int sceAtracSetMOutHalfwayBufferAndGetID(u32 halfBuffer, u32 readSize, u32 halfB
 		delete atrac;
 		return atracID;
 	}
-	INFO_LOG(HLE, "sceAtracSetMOutHalfwayBufferAndGetID(%08x, %08x, %08x)", atracID, halfBuffer, readSize, halfBufferSize);
+	INFO_LOG(HLE, "%d=sceAtracSetMOutHalfwayBufferAndGetID(%08x, %08x, %08x)", atracID, halfBuffer, readSize, halfBufferSize);
 	int ret = _AtracSetData(atracID, halfBuffer, halfBufferSize, true);
 	if (ret < 0)
 		return ret;
@@ -1673,7 +1683,7 @@ int sceAtracLowLevelDecode(int atracID, u32 sourceAddr, u32 sourceBytesConsumedA
 			else
 				atrac->first.writableBytes = 0;
 			Memory::Write_U32(atrac->first.writableBytes, sourceBytesConsumedAddr);
-			return 0;
+			return hleDelayResult(0, "low level atrac decode data", atracDecodeDelay);
 	}
 #endif // USE_FFMPEG
 
@@ -1686,29 +1696,32 @@ int sceAtracLowLevelDecode(int atracID, u32 sourceAddr, u32 sourceBytesConsumedA
 				Atrac3plus_Decoder::Decode(atrac->decoder_context, Memory::GetPointer(sourceAddr), sourcebytes, &decodebytes, buf);
 				atrac->sampleQueue.push(buf, decodebytes);
 			}
+			const int MAX_CONFIG_VOLUME = 5;
 			s16* out = (s16*)Memory::GetPointer(samplesAddr);
 			memset(out, 0, ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracOutputChannels);
 			int gotsize = atrac->sampleQueue.pop_front(buf, ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracChannels);
 			int numSamples = gotsize / sizeof(s16) / atrac->atracChannels;
 			s16* in = (s16*)buf;
+			int volumeShift = (MAX_CONFIG_VOLUME - g_Config.iBGMVolume);
+			if (volumeShift < 0) volumeShift = 0;
 			for (int i = 0; i < numSamples; i++) {
-				s16 sampleL = *in++;
+				s16 sampleL = *in++ >> volumeShift; // Max = 4 and Min = 0(no shift)
 				s16 sampleR = sampleL;
 				if (atrac->atracChannels == 2)
-					sampleR = *in++;
+					sampleR = *in++ >> volumeShift; // Max = 4 and Min = 0(no shift)
 				*out++ = sampleL;
 				if (atrac->atracOutputChannels == 2)
 					*out++ = sampleR;
 			}
 			numSamples = ATRAC3PLUS_MAX_SAMPLES;
 			Memory::Write_U32(numSamples * sizeof(s16) * atrac->atracOutputChannels, sampleBytesAddr);
-			int space = atrac->sampleQueue.getQueueSize();
+			size_t space = atrac->sampleQueue.getQueueSize();
 			if (space < ATRAC3PLUS_MAX_SAMPLES * sizeof(s16) * atrac->atracChannels)
 				atrac->first.writableBytes = atrac->atracBytesPerFrame;
 			else
 				atrac->first.writableBytes = 0;
 			Memory::Write_U32(atrac->first.writableBytes, sourceBytesConsumedAddr);
-			return 0;
+			return hleDelayResult(0, "low level atrac decode data", atracDecodeDelay);
 	}
 
 	return 0;

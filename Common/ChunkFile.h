@@ -170,7 +170,7 @@ public:
 	template<class K, class T>
 	void Do(std::map<K, T> &x)
 	{
-		T dv;
+		T dv = T();
 		DoMap(x, dv);
 	}
 
@@ -185,7 +185,7 @@ public:
 				x.clear();
 				while (number > 0)
 				{
-					K first = 0;
+					K first = K();
 					Do(first);
 					T second = default_val;
 					Do(second);
@@ -201,7 +201,8 @@ public:
 				typename std::map<K, T>::iterator itr = x.begin();
 				while (number > 0)
 				{
-					Do(itr->first);
+					K first = itr->first;
+					Do(first);
 					Do(itr->second);
 					--number;
 					++itr;
@@ -229,7 +230,7 @@ public:
 	template<class K, class T>
 	void Do(std::multimap<K, T> &x)
 	{
-		T dv;
+		T dv = T();
 		DoMultimap(x, dv);
 	}
 

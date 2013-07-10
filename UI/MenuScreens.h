@@ -135,23 +135,38 @@ public:
 class KeyMappingScreen : public Screen
 {
 public:
+	KeyMappingScreen() : currentMap_(0) {}
 	void update(InputState &input);
 	void render();
+private:
+	int currentMap_;
 };
 
 // Dialog box, meant to be pushed
 class KeyMappingNewKeyDialog : public Screen
 {
-private:
-	int pspBtn;
-	int last_kb_key;
 public:
-	KeyMappingNewKeyDialog(int btn) {
+	KeyMappingNewKeyDialog(int btn, int currentMap) {
 		pspBtn = btn;
+		last_kb_deviceid = 0;
 		last_kb_key = 0;
+		last_axis_deviceid = 0;
+		last_axis_id = -1;
+		currentMap_ = currentMap;
 	}
 	void update(InputState &input);
 	void render();
+	void key(const KeyInput &key);
+	void axis(const AxisInput &axis);
+
+private:
+	int pspBtn;
+	int last_kb_deviceid;
+	int last_kb_key;
+	int last_axis_deviceid;
+	int last_axis_id;
+	int last_axis_direction;
+	int currentMap_;
 };
 
 struct FileSelectScreenOptions {
@@ -172,6 +187,7 @@ public:
 	// Override these to for example write the current directory to a config file.
 	virtual void onSelectFile() {}
 	virtual void onCancel() {}
+	void key(const KeyInput &key);
 
 private:
 	void updateListing();

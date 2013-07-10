@@ -1,6 +1,8 @@
 ﻿#include <limits.h>
+#include "base/NativeApp.h"
 #include "Core/Config.h"
 #include "input/input_state.h"
+#include "input/keycodes.h"
 #include "XinputDevice.h"
 #include "ControlMapping.h"
 
@@ -9,27 +11,27 @@
 #define XUSER_MAX_COUNT 4
 #endif
 
-// Yes, this maps more than the PSP has, but that's fine as this lets us
-// map buttons to extra functionality like speedup.
-unsigned int xinput_ctrl_map[] = {
-	XBOX_CODE_LEFTTRIGER,          PAD_BUTTON_UNTHROTTLE,
-	XBOX_CODE_RIGHTTRIGER,         PAD_BUTTON_BACK,
-	XINPUT_GAMEPAD_A,              PAD_BUTTON_A,
-	XINPUT_GAMEPAD_B,              PAD_BUTTON_B,
-	XINPUT_GAMEPAD_X,              PAD_BUTTON_X,
-	XINPUT_GAMEPAD_Y,              PAD_BUTTON_Y,
-	XINPUT_GAMEPAD_BACK,           PAD_BUTTON_SELECT,
-	XINPUT_GAMEPAD_START,          PAD_BUTTON_START,
-	XINPUT_GAMEPAD_LEFT_SHOULDER,  PAD_BUTTON_LBUMPER,
-	XINPUT_GAMEPAD_RIGHT_SHOULDER, PAD_BUTTON_RBUMPER,
-	XINPUT_GAMEPAD_LEFT_THUMB,     PAD_BUTTON_LEFT_THUMB,  // Turbo
-	XINPUT_GAMEPAD_RIGHT_THUMB,    PAD_BUTTON_RIGHT_THUMB, // Open PauseScreen
-	XINPUT_GAMEPAD_DPAD_UP,        PAD_BUTTON_UP,
-	XINPUT_GAMEPAD_DPAD_DOWN,      PAD_BUTTON_DOWN,
-	XINPUT_GAMEPAD_DPAD_LEFT,      PAD_BUTTON_LEFT,
-	XINPUT_GAMEPAD_DPAD_RIGHT,     PAD_BUTTON_RIGHT,
+// Permanent map. Actual mapping happens elsewhere.
+static const struct {int from, to;} xinput_ctrl_map[] = {
+	{XBOX_CODE_LEFTTRIGGER,         KEYCODE_BUTTON_L2},
+	{XBOX_CODE_RIGHTTRIGGER,        KEYCODE_BUTTON_R2},
+	{XINPUT_GAMEPAD_A,              KEYCODE_BUTTON_A},
+	{XINPUT_GAMEPAD_B,              KEYCODE_BUTTON_B},
+	{XINPUT_GAMEPAD_X,              KEYCODE_BUTTON_X},
+	{XINPUT_GAMEPAD_Y,              KEYCODE_BUTTON_Y},
+	{XINPUT_GAMEPAD_BACK,           KEYCODE_BACK},
+	{XINPUT_GAMEPAD_START,          KEYCODE_BUTTON_START},
+	{XINPUT_GAMEPAD_LEFT_SHOULDER,  KEYCODE_BUTTON_L1},
+	{XINPUT_GAMEPAD_RIGHT_SHOULDER, KEYCODE_BUTTON_R1},
+	{XINPUT_GAMEPAD_LEFT_THUMB,     KEYCODE_BUTTON_THUMBL},
+	{XINPUT_GAMEPAD_RIGHT_THUMB,    KEYCODE_BUTTON_THUMBR},
+	{XINPUT_GAMEPAD_DPAD_UP,        KEYCODE_DPAD_UP},
+	{XINPUT_GAMEPAD_DPAD_DOWN,      KEYCODE_DPAD_DOWN},
+	{XINPUT_GAMEPAD_DPAD_LEFT,      KEYCODE_DPAD_LEFT},
+	{XINPUT_GAMEPAD_DPAD_RIGHT,     KEYCODE_DPAD_RIGHT},
 };
-static const unsigned int xinput_ctrl_map_size = sizeof(xinput_ctrl_map);
+
+static const unsigned int xinput_ctrl_map_size = sizeof(xinput_ctrl_map) / sizeof(xinput_ctrl_map[0]);
 
 XinputDevice::XinputDevice() {
 	ZeroMemory( &this->prevState, sizeof(this->prevState) );
@@ -44,7 +46,6 @@ struct Stick {
 static Stick NormalizedDeadzoneFilter(short x, short y);
 
 int XinputDevice::UpdateState(InputState &input_state) {
-	if (g_Config.iForceInputDevice > 0) return -1;
 	if (this->check_delay-- > 0) return -1;
 	XINPUT_STATE state;
 	ZeroMemory( &state, sizeof(XINPUT_STATE) );
@@ -64,17 +65,33 @@ int XinputDevice::UpdateState(InputState &input_state) {
 	}
 	
 	if ( dwResult == ERROR_SUCCESS ) {
-		ApplyDiff(state, input_state);
-		Stick left = NormalizedDeadzoneFilter(state.Gamepad.sThumbLX, state.Gamepad.sThumbLY);
-		Stick right = NormalizedDeadzoneFilter(state.Gamepad.sThumbRX, state.Gamepad.sThumbRY);
-		input_state.pad_lstick_x += left.x;
-		input_state.pad_lstick_y += left.y;
-		input_state.pad_rstick_x += right.x;
-		input_state.pad_rstick_y += right.y;
+		ApplyButtons(state, input_state);
 
-		// Also convert the analog triggers.
-		input_state.pad_ltrigger = state.Gamepad.bLeftTrigger / 255.0f;
-		input_state.pad_rtrigger = state.Gamepad.bRightTrigger / 255.0f;
+		if (prevState.Gamepad.sThumbLX != state.Gamepad.sThumbLX || prevState.Gamepad.sThumbLY != state.Gamepad.sThumbLY) {
+			Stick left = NormalizedDeadzoneFilter(state.Gamepad.sThumbLX, state.Gamepad.sThumbLY);
+
+			AxisInput axis;
+			axis.deviceId = DEVICE_ID_X360_0;
+			axis.axisId = JOYSTICK_AXIS_X;
+			axis.value = left.x;
+			NativeAxis(axis);
+			axis.axisId = JOYSTICK_AXIS_Y;
+			axis.value = left.y;
+			NativeAxis(axis);
+		}
+
+		if (prevState.Gamepad.sThumbRX != state.Gamepad.sThumbRX || prevState.Gamepad.sThumbRY != state.Gamepad.sThumbRY) {
+			Stick right = NormalizedDeadzoneFilter(state.Gamepad.sThumbRX, state.Gamepad.sThumbRY);
+
+			AxisInput axis;
+			axis.deviceId = DEVICE_ID_X360_0;
+			axis.axisId = JOYSTICK_AXIS_Z;
+			axis.value = right.x;
+			NativeAxis(axis);
+			axis.axisId = JOYSTICK_AXIS_RZ;
+			axis.value = right.y;
+			NativeAxis(axis);
+		}
 
 		this->prevState = state;
 		this->check_delay = 0;
@@ -96,7 +113,6 @@ inline float Clampf(float val, float min, float max) {
 	return val;
 }
 
-// We only filter the left stick since PSP has no analog triggers or right stick
 static Stick NormalizedDeadzoneFilter(short x, short y) {
 	static const float DEADZONE = (float)XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE / 32767.0f;
 	Stick s;
@@ -121,125 +137,32 @@ static Stick NormalizedDeadzoneFilter(short x, short y) {
 	return s;
 }
 
+void XinputDevice::ApplyButtons(XINPUT_STATE &state, InputState &input_state) {
+	u32 buttons = state.Gamepad.wButtons;
 
-struct xinput_button_name {
-	unsigned int button;
-	char name[10];
-};
+	if (state.Gamepad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+		buttons |= XBOX_CODE_LEFTTRIGGER;
+	if (state.Gamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+		buttons |= XBOX_CODE_RIGHTTRIGGER;
 
-const xinput_button_name xinput_name_map[] = {
-	{XBOX_CODE_LEFTTRIGER,          "LT"},
-	{XBOX_CODE_RIGHTTRIGER,         "RT"},
-	{XINPUT_GAMEPAD_A,              "A"},
-	{XINPUT_GAMEPAD_B,              "B"},
-	{XINPUT_GAMEPAD_X,              "X"},
-	{XINPUT_GAMEPAD_Y,              "Y"},
-	{XINPUT_GAMEPAD_BACK,           "Back"},
-	{XINPUT_GAMEPAD_START,          "Start"},
-	{XINPUT_GAMEPAD_LEFT_SHOULDER,  "LB"},
-	{XINPUT_GAMEPAD_RIGHT_SHOULDER, "RB"},
-	{XINPUT_GAMEPAD_LEFT_THUMB,     "LThumb"},
-	{XINPUT_GAMEPAD_RIGHT_THUMB,    "RThumb"},
-	{XINPUT_GAMEPAD_DPAD_UP,        "Up"},
-	{XINPUT_GAMEPAD_DPAD_DOWN,      "Down"},
-	{XINPUT_GAMEPAD_DPAD_LEFT,      "Left"},
-	{XINPUT_GAMEPAD_DPAD_RIGHT,     "Right"},
-};
-static const int xbutton_name_map_size = sizeof(xinput_name_map) / sizeof(xinput_button_name);
-
-const char * getXinputButtonName(unsigned int button) {
-	for (int i = 0; i < xbutton_name_map_size; i++) {
-		if (xinput_name_map[i].button == button)
-			return xinput_name_map[i].name;
-	}
-	return 0;
-}
-
-void XinputDevice::ApplyDiff(XINPUT_STATE &state, InputState &input_state) {
-	// Skip XBOX_CODE_LIFT/RIGHT TRIGER. it's virtual code for Mapping.
-	for (int i = 0; i < sizeof(xinput_ctrl_map)/sizeof(xinput_ctrl_map[0]); i += 2) {
-		if (state.Gamepad.wButtons & (WORD)(xinput_ctrl_map[i])) {
-			input_state.pad_buttons |= (int)xinput_ctrl_map[i + 1];
-		}
-		// Effective use of triggers that are not used.
-		if (xinput_ctrl_map[i] == XBOX_CODE_LEFTTRIGER &&
-			state.Gamepad.bLeftTrigger >  XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
-			input_state.pad_buttons |= xinput_ctrl_map[i + 1];
-		}
-		if (xinput_ctrl_map[i] == XBOX_CODE_RIGHTTRIGER &&
-			state.Gamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
-			input_state.pad_buttons |= xinput_ctrl_map[i + 1];
-		}
-	}
-
-	const SHORT rthreshold = 22000;
-
-	switch (g_Config.iRightStickBind) {
-	case 0:
-		break;
-	case 1:
-		if      (state.Gamepad.sThumbRX >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_RIGHT;
-		else if (state.Gamepad.sThumbRX < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_LEFT;
-		if      (state.Gamepad.sThumbRY >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_UP;
-		else if (state.Gamepad.sThumbRY < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_DOWN;
-		break;
-	case 2:
-		if      (state.Gamepad.sThumbRX >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_B;
-		else if (state.Gamepad.sThumbRX < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_X;
-		if      (state.Gamepad.sThumbRY >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_Y;
-		else if (state.Gamepad.sThumbRY < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_A;
-		break;
-	case 3:
-		if      (state.Gamepad.sThumbRX >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_RBUMPER;
-		else if (state.Gamepad.sThumbRX < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_LBUMPER;
-		break;
-	case 4:
-		if      (state.Gamepad.sThumbRX >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_RBUMPER;
-		else if (state.Gamepad.sThumbRX < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_LBUMPER;
-		if      (state.Gamepad.sThumbRY >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_Y;
-		else if (state.Gamepad.sThumbRY < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_A;
-		break;
-	case 5:
-		if      (state.Gamepad.sThumbRX >  rthreshold) input_state.pad_buttons |= PAD_BUTTON_RIGHT;
-		else if (state.Gamepad.sThumbRX < -rthreshold) input_state.pad_buttons |= PAD_BUTTON_LEFT;
-		break;
-	}
-}
-
-int XinputDevice::UpdateRawStateSingle(RawInputState &rawState)
-{
-	if (g_Config.iForceInputDevice > 0) return -1;
-
-	XINPUT_STATE state;
-	ZeroMemory( &state, sizeof(XINPUT_STATE) );
-
-	DWORD dwResult;
-	if (this->gamepad_idx >= 0)
-		dwResult = XInputGetState( this->gamepad_idx, &state );
-	else {
-		// use the first gamepad that responds
-		for (int i = 0; i < XUSER_MAX_COUNT; i++) {
-			dwResult = XInputGetState( i, &state );
-			if (dwResult == ERROR_SUCCESS) {
-				this->gamepad_idx = i;
-				break;
-			}
-		}
-	}
+	u32 downMask = buttons & (~prevButtons);
+	u32 upMask = (~buttons) & prevButtons;
+	prevButtons = buttons;
 	
-	if ( dwResult == ERROR_SUCCESS ) {
-		for (UINT bit = XINPUT_GAMEPAD_DPAD_UP; bit <= XINPUT_GAMEPAD_Y; bit <<= 1) {
-			if (state.Gamepad.wButtons & bit) {
-				rawState.button = bit;
-				break;
-			}
+	for (int i = 0; i < xinput_ctrl_map_size; i++) {
+		if (downMask & xinput_ctrl_map[i].from) {
+			KeyInput key;
+			key.deviceId = DEVICE_ID_X360_0;
+			key.flags = KEY_DOWN;
+			key.keyCode = xinput_ctrl_map[i].to;
+			NativeKey(key);
 		}
-		if (state.Gamepad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
-			rawState.button = XBOX_CODE_LEFTTRIGER;
-		} else if (state.Gamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
-			rawState.button = XBOX_CODE_RIGHTTRIGER;
+		if (upMask & xinput_ctrl_map[i].from) {
+			KeyInput key;
+			key.deviceId = DEVICE_ID_X360_0;
+			key.flags = KEY_UP;
+			key.keyCode = xinput_ctrl_map[i].to;
+			NativeKey(key);
 		}
-		return TRUE;
 	}
-	return FALSE;
 }

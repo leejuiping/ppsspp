@@ -7,6 +7,7 @@
 #include "../WndMainWindow.h"
 #include "../InputBox.h"
 
+#include "Core/Config.h"
 #include "CtrlDisAsmView.h"
 #include "Debugger_MemoryDlg.h"
 #include "DebuggerShared.h"
@@ -146,12 +147,15 @@ CtrlDisAsmView::CtrlDisAsmView(HWND _wnd)
 	SetWindowLongPtr(wnd, GWLP_USERDATA, (LONG)this);
 	SetWindowLong(wnd, GWL_STYLE, GetWindowLong(wnd,GWL_STYLE) | WS_VSCROLL);
 	SetScrollRange(wnd, SB_VERT, -1,1,TRUE);
-	font = CreateFont(12,8,0,0,FW_DONTCARE,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,
+
+	charWidth = g_Config.iFontWidth;
+	rowHeight = g_Config.iFontHeight+2;
+
+	font = CreateFont(rowHeight-2,charWidth,0,0,FW_DONTCARE,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,
 		"Lucida Console");
-	boldfont = CreateFont(12,8,0,0,FW_DEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,
+	boldfont = CreateFont(rowHeight-2,charWidth,0,0,FW_DEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,
 		"Lucida Console");
 	curAddress=0;
-	rowHeight=14;
 	instructionSize=4;
 	showHex=false;
 	hasFocus = false;
@@ -350,10 +354,12 @@ void CtrlDisAsmView::onPaint(WPARAM wParam, LPARAM lParam)
 		DeleteObject(backgroundPen);
 
 		// display address/symbol
-		if (debugger->isBreakpoint(address))
+		bool enabled;
+		if (CBreakPoints::IsAddressBreakPoint(address,&enabled))
 		{
-			textColor = 0x0000FF;
-			DrawIconEx(hdc,2,rowY1+1,breakPoint,32,32,0,0,DI_NORMAL);
+			if (enabled) textColor = 0x0000FF;
+			int yOffset = max(-1,(rowHeight-14+1)/2);
+			DrawIconEx(hdc,2,rowY1+1+yOffset,enabled ? breakPoint : breakPointDisable,32,32,0,0,DI_NORMAL);
 		}
 		SetTextColor(hdc,textColor);
 
@@ -441,19 +447,15 @@ void CtrlDisAsmView::onVScroll(WPARAM wParam, LPARAM lParam)
 	{
 	case SB_LINEDOWN:
 		windowStart += instructionSize;
-		curAddress += instructionSize;
 		break;
 	case SB_LINEUP:
 		windowStart -= instructionSize;
-		curAddress -= instructionSize;
 		break;
 	case SB_PAGEDOWN:
 		windowStart += visibleRows*instructionSize;
-		curAddress += visibleRows*instructionSize;
 		break;
 	case SB_PAGEUP:
 		windowStart -= visibleRows*instructionSize;
-		curAddress -= visibleRows*instructionSize;
 		break;
 	default:
 		return;
@@ -509,35 +511,29 @@ void CtrlDisAsmView::onKeyDown(WPARAM wParam, LPARAM lParam)
 		switch (wParam & 0xFFFF)
 		{
 		case VK_DOWN:
-			if (curAddress == windowEnd-instructionSize)
-			{
-				windowStart += instructionSize;
-			}
 			curAddress += instructionSize;
+			scrollAddressIntoView();
 			break;
 		case VK_UP:
-			if (curAddress == windowStart)
-			{
-				windowStart -= instructionSize;
-			}
 			curAddress-=instructionSize;
+			scrollAddressIntoView();
 			break;
 		case VK_NEXT:
-			if (curAddress != windowEnd-instructionSize)
-			{
+			if (curAddress != windowEnd-instructionSize && curAddressIsVisible()) {
 				curAddress = windowEnd-instructionSize;
+				scrollAddressIntoView();
 			} else {
-				windowStart += visibleRows*instructionSize;
 				curAddress += visibleRows*instructionSize;
+				scrollAddressIntoView();
 			}
 			break;
 		case VK_PRIOR:
-			if (curAddress != windowStart)
-			{
+			if (curAddress != windowStart && curAddressIsVisible()) {
 				curAddress = windowStart;
+				scrollAddressIntoView();
 			} else {
-				windowStart -= visibleRows*instructionSize;
 				curAddress -= visibleRows*instructionSize;
+				scrollAddressIntoView();
 			}
 			break;
 		case VK_LEFT:
@@ -591,6 +587,22 @@ void CtrlDisAsmView::onKeyUp(WPARAM wParam, LPARAM lParam)
 	}
 }
 
+void CtrlDisAsmView::scrollAddressIntoView()
+{
+	u32 windowEnd = windowStart + visibleRows * instructionSize;
+
+	if (curAddress < windowStart)
+		windowStart = curAddress;
+	else if (curAddress >= windowEnd)
+		windowStart = curAddress - visibleRows * instructionSize + instructionSize;
+}
+
+bool CtrlDisAsmView::curAddressIsVisible()
+{
+	u32 windowEnd = windowStart + visibleRows * instructionSize;
+	return curAddress >= windowStart && curAddress < windowEnd;
+}
+
 void CtrlDisAsmView::redraw()
 {
 	if (dontRedraw == true) return;
@@ -602,6 +614,29 @@ void CtrlDisAsmView::redraw()
 	UpdateWindow(wnd); 
 }
 
+void CtrlDisAsmView::toggleBreakpoint()
+{
+	bool enabled;
+	if (CBreakPoints::IsAddressBreakPoint(curAddress,&enabled))
+	{
+		if (!enabled)
+		{
+			// enable disabled breakpoints
+			CBreakPoints::ChangeBreakPoint(curAddress,true);
+		} else if (CBreakPoints::GetBreakPointCondition(curAddress) != NULL)
+		{
+			// don't just delete a breakpoint with a custom condition
+			int ret = MessageBox(wnd,"This breakpoint has a custom condition.\nDo you want to remove it?","Confirmation",MB_YESNO);
+			if (ret != IDYES) return;
+			CBreakPoints::RemoveBreakPoint(curAddress);
+		} else {
+			// otherwise just remove breakpoint
+			CBreakPoints::RemoveBreakPoint(curAddress);
+		}
+	} else {
+		CBreakPoints::AddBreakPoint(curAddress);
+	}
+}
 
 void CtrlDisAsmView::onMouseDown(WPARAM wParam, LPARAM lParam, int button)
 {
@@ -613,7 +648,7 @@ void CtrlDisAsmView::onMouseDown(WPARAM wParam, LPARAM lParam, int button)
 	{
 		if (newAddress == curAddress && hasFocus)
 		{
-			debugger->toggleBreakpoint(curAddress);
+			toggleBreakpoint();
 		}
 	}
 
@@ -639,7 +674,7 @@ void CtrlDisAsmView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 		case ID_DISASM_ADDHLE:
 			break;
 		case ID_DISASM_TOGGLEBREAKPOINT:
-			debugger->toggleBreakpoint(curAddress);
+			toggleBreakpoint();
 			redraw();
 			break;
 		case ID_DISASM_COPYINSTRUCTIONDISASM:
@@ -726,9 +761,9 @@ int CtrlDisAsmView::yToAddress(int y)
 void CtrlDisAsmView::calculatePixelPositions()
 {
 	pixelPositions.addressStart = 16;
-	pixelPositions.opcodeStart = pixelPositions.addressStart + 18*8;
-	pixelPositions.argumentsStart = pixelPositions.opcodeStart + 9*8;
-	pixelPositions.arrowsStart = pixelPositions.argumentsStart + 30*8;
+	pixelPositions.opcodeStart = pixelPositions.addressStart + 18*charWidth;
+	pixelPositions.argumentsStart = pixelPositions.opcodeStart + 9*charWidth;
+	pixelPositions.arrowsStart = pixelPositions.argumentsStart + 30*charWidth;
 }
 
 void CtrlDisAsmView::search(bool continueSearch)

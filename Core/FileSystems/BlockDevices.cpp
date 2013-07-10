@@ -24,7 +24,7 @@ extern "C"
 {
 #include "zlib.h"
 #include "ext/libkirk/amctrl.h"
-
+#include "ext/libkirk/kirk_engine.h"
 };
 
 BlockDevice *constructBlockDevice(const char *filename) {
@@ -107,7 +107,7 @@ CISOFileBlockDevice::CISOFileBlockDevice(FILE *file)
 	}
 	else
 	{
-		DEBUG_LOG(LOADER, "Valid CSO!");
+		VERBOSE_LOG(LOADER, "Valid CSO!");
 	}
 	if (hdr.ver > 1)
 	{
@@ -124,7 +124,7 @@ CISOFileBlockDevice::CISOFileBlockDevice(FILE *file)
 	indexShift = hdr.align;
 	u64 totalSize = hdr.total_bytes;
 	numBlocks = (u32)(totalSize / blockSize);
-	DEBUG_LOG(LOADER, "hdrSize=%i numBlocks=%i align=%i", hdrSize, numBlocks, indexShift);
+	VERBOSE_LOG(LOADER, "CSO hdrSize=%i numBlocks=%i align=%i", hdrSize, numBlocks, indexShift);
 
 	u32 indexSize = numBlocks + 1;
 
@@ -222,6 +222,8 @@ NPDRMDemoBlockDevice::NPDRMDemoBlockDevice(FILE *file)
 		ERROR_LOG(LOADER, "Invalid NPUMDIMG header!");
 	}
 
+	kirk_init();
+
 	// getkey
 	sceDrmBBMacInit(&mkey, 3);
 	sceDrmBBMacUpdate(&mkey, np_header, 0xc0);
@@ -314,7 +316,7 @@ bool NPDRMDemoBlockDevice::ReadBlock(int blockNumber, u8 *outPtr)
 		readBuf = blockBuf;
 
 	readSize = fread(readBuf, 1, table[block].size, f);
-	if(readSize!=table[block].size){
+	if(readSize != (size_t)table[block].size){
 		if(block==(numBlocks-1))
 			return true;
 		else

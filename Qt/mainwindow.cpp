@@ -36,9 +36,6 @@ MainWindow::MainWindow(QWidget *parent) :
 	ui->setupUi(this);
 
 	controls = new Controls(this);
-#if QT_HAS_SDL
-	gamePadDlg = new GamePadDialog(&input_state, this);
-#endif
 
 	host = new QtHost(this);
 	emugl = ui->widget;
@@ -82,6 +79,12 @@ void MainWindow::ShowMemory(u32 addr)
 		memoryWindow->Goto(addr);
 }
 
+inline float clamp1(float x) {
+	if (x > 1.0f) return 1.0f;
+	if (x < -1.0f) return -1.0f;
+	return x;
+}
+
 void MainWindow::Update()
 {
 	emugl->updateGL();
@@ -94,7 +97,10 @@ void MainWindow::Update()
 		else
 			__CtrlButtonUp(controllist[i].psp_id);
 	}
-	__CtrlSetAnalog(input_state.pad_lstick_x, input_state.pad_lstick_y);
+	__CtrlSetAnalogX(clamp1(input_state.pad_lstick_x), 0);
+	__CtrlSetAnalogY(clamp1(input_state.pad_lstick_y), 0);
+	__CtrlSetAnalogX(clamp1(input_state.pad_rstick_x), 1);
+	__CtrlSetAnalogY(clamp1(input_state.pad_rstick_y), 1);
 
 	if (lastUIState != globalUIState) {
 		lastUIState = globalUIState;
@@ -451,15 +457,6 @@ void MainWindow::on_action_OptionsIgnoreIllegalReadsWrites_triggered()
 void MainWindow::on_action_OptionsControls_triggered()
 {
 	controls->show();
-}
-
-void MainWindow::on_action_OptionsGamePadControls_triggered()
-{
-#if QT_HAS_SDL
-	gamePadDlg->show();
-#else
-	QMessageBox::information(this,tr("Gamepad"),tr("You need to compile with SDL to have Gamepad support."), QMessageBox::Ok);
-#endif
 }
 
 void MainWindow::on_action_AFOff_triggered()

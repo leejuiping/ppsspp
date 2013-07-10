@@ -1,4 +1,6 @@
+#include "base/NativeApp.h"
 #include "input/input_state.h"
+#include "input/keycodes.h"
 #include "util/const_map.h"
 #include "KeyMap.h"
 #include "ControlMapping.h"
@@ -8,32 +10,6 @@
 #include "../Core/HLE/sceCtrl.h"
 #include "WinUser.h"
 
-unsigned int key_pad_map[] = {
-	VK_ESCAPE,PAD_BUTTON_MENU,        // Open PauseScreen
-	VK_BACK,  PAD_BUTTON_BACK,        // Toggle PauseScreen & Back Setting Page
-	'S',      PAD_BUTTON_A,
-	'D',      PAD_BUTTON_B,
-	'A',      PAD_BUTTON_X,
-	'W',      PAD_BUTTON_Y,
-	VK_SPACE, PAD_BUTTON_SELECT,
-	VK_RETURN, PAD_BUTTON_START,
-	'Q',      PAD_BUTTON_LBUMPER,
-	'E',      PAD_BUTTON_RBUMPER,
-	VK_F3,   PAD_BUTTON_LEFT_THUMB,  // Toggle Turbo
-	VK_PAUSE, PAD_BUTTON_RIGHT_THUMB, // Open PauseScreen
-	VK_UP,    PAD_BUTTON_UP,
-	VK_DOWN,  PAD_BUTTON_DOWN,
-	VK_LEFT,  PAD_BUTTON_LEFT,
-	VK_RIGHT, PAD_BUTTON_RIGHT,
-};
-const unsigned int key_pad_map_size = sizeof(key_pad_map);
-
-unsigned short analog_ctrl_map[] = {
-	'I', CTRL_UP,
-	'K', CTRL_DOWN,
-	'J', CTRL_LEFT,
-	'L', CTRL_RIGHT,
-};
 
 // TODO: More keys need to be added, but this is more than
 // a fair start.
@@ -74,6 +50,8 @@ std::map<int, int> windowsTransTable = InitConstMap<int, int>
 	('7', KEYCODE_7)
 	('8', KEYCODE_8)
 	('9', KEYCODE_9)
+	(VK_OEM_PERIOD, KEYCODE_PERIOD)
+	(VK_OEM_COMMA, KEYCODE_COMMA)
 	(VK_NUMPAD0, KEYCODE_NUMPAD_0)
 	(VK_NUMPAD1, KEYCODE_NUMPAD_1)
 	(VK_NUMPAD2, KEYCODE_NUMPAD_2)
@@ -84,6 +62,7 @@ std::map<int, int> windowsTransTable = InitConstMap<int, int>
 	(VK_NUMPAD7, KEYCODE_NUMPAD_7)
 	(VK_NUMPAD8, KEYCODE_NUMPAD_8)
 	(VK_NUMPAD9, KEYCODE_NUMPAD_9)
+	(VK_DECIMAL, KEYCODE_NUMPAD_DOT)
 	(VK_DIVIDE, KEYCODE_NUMPAD_DIVIDE)
 	(VK_MULTIPLY, KEYCODE_NUMPAD_MULTIPLY)
 	(VK_SUBTRACT, KEYCODE_NUMPAD_SUBTRACT)
@@ -93,6 +72,10 @@ std::map<int, int> windowsTransTable = InitConstMap<int, int>
 	(VK_OEM_PLUS, KEYCODE_PLUS)
 	(VK_LCONTROL, KEYCODE_CTRL_LEFT)
 	(VK_RCONTROL, KEYCODE_CTRL_RIGHT)
+	(VK_LSHIFT, KEYCODE_SHIFT_LEFT)
+	(VK_RSHIFT, KEYCODE_SHIFT_RIGHT)
+	(VK_LMENU, KEYCODE_ALT_LEFT)
+	(VK_RMENU, KEYCODE_ALT_RIGHT)
 	(VK_BACK, KEYCODE_BACK)
 	(VK_SPACE, KEYCODE_SPACE)
 	(VK_ESCAPE, KEYCODE_ESCAPE)
@@ -108,193 +91,34 @@ std::map<int, int> windowsTransTable = InitConstMap<int, int>
 	(VK_LEFT, KEYCODE_DPAD_LEFT)
 	(VK_RIGHT, KEYCODE_DPAD_RIGHT)
 	(VK_CAPITAL, KEYCODE_CAPS_LOCK)
-	(VK_TAB, KEYCODE_TAB)
 	(VK_CLEAR, KEYCODE_CLEAR)
-	(VK_PRINT, KEYCODE_SYSRQ)
+	(VK_SNAPSHOT, KEYCODE_SYSRQ)
 	(VK_SCROLL, KEYCODE_SCROLL_LOCK)
 	(VK_OEM_1, KEYCODE_SEMICOLON)
 	(VK_OEM_2, KEYCODE_SLASH)
+	(VK_OEM_3, KEYCODE_GRAVE)
 	(VK_OEM_4, KEYCODE_LEFT_BRACKET)
+	(VK_OEM_5, KEYCODE_BACKSLASH)
 	(VK_OEM_6, KEYCODE_RIGHT_BRACKET)
-	(VK_MENU, KEYCODE_MENU);
-
-const unsigned int analog_ctrl_map_size = sizeof(analog_ctrl_map);
+	(VK_OEM_7, KEYCODE_APOSTROPHE)
+	(VK_RETURN, KEYCODE_ENTER)
+	(VK_APPS, KEYCODE_MENU) // Context menu key, let's call this "menu".
+	(VK_PAUSE, KEYCODE_BREAK)
+	(VK_F1, KEYCODE_F1)
+	(VK_F2, KEYCODE_F2)
+	(VK_F3, KEYCODE_F3)
+	(VK_F4, KEYCODE_F4)
+	(VK_F5, KEYCODE_F5)
+	(VK_F6, KEYCODE_F6)
+	(VK_F7, KEYCODE_F7)
+	(VK_F8, KEYCODE_F8)
+	(VK_F9, KEYCODE_F9)
+	(VK_F10, KEYCODE_F10)
+	(VK_F11, KEYCODE_F11)
+	(VK_F12, KEYCODE_F12)
+	(VK_OEM_102, KEYCODE_EXT_PIPE);
 
 int KeyboardDevice::UpdateState(InputState &input_state) {
-	if (MainWindow::GetHWND() != GetForegroundWindow()) return -1;
-	bool alternate = GetAsyncKeyState(VK_SHIFT) != 0;
-	KeyQueueBlank(input_state.key_queue);
-	static u32 alternator = 0;
-	bool doAlternate = alternate && (alternator++ % 10) < 5;
-
-	// This button isn't customizable.  Also, if alt is held, we ignore it (alt-tab is common.)
-	if (GetAsyncKeyState(VK_TAB) && !GetAsyncKeyState(VK_MENU)) {
-		input_state.pad_buttons |= PAD_BUTTON_UNTHROTTLE;
-	}
-
-	for (int i = 0; i < sizeof(key_pad_map)/sizeof(key_pad_map[0]); i += 2) {
-		if (!GetAsyncKeyState(key_pad_map[i])) {
-			continue;
-		}
-
-		if (!doAlternate || key_pad_map[i + 1] > PAD_BUTTON_SELECT) {
-			// TODO: remove once EmuScreen supports virtual keys
-			switch (key_pad_map[i]) {
-				case VK_ESCAPE:
-				case VK_F3:
-				case VK_PAUSE:
-				case VK_BACK:
-					input_state.pad_buttons |= key_pad_map[i + 1];
-					break;
-			}
-
-			KeyQueueAttemptTranslatedAdd(input_state.key_queue, windowsTransTable, key_pad_map[i]);
-		}
-	}
-
-	float analogX = 0;
-	float analogY = 0;
-	for (int i = 0; i < sizeof(analog_ctrl_map)/sizeof(analog_ctrl_map[0]); i += 2) {
-		if (!GetAsyncKeyState(analog_ctrl_map[i])) {
-			continue;
-		}
-
-		switch (analog_ctrl_map[i + 1]) {
-		case CTRL_UP:
-			analogY += 1.0f;
-			break;
-		case CTRL_DOWN:
-			analogY -= 1.0f;
-			break;
-		case CTRL_LEFT:
-			analogX -= 1.0f;
-			break;
-		case CTRL_RIGHT:
-			analogX += 1.0f;
-			break;
-		}
-	}
-	
-	// keyboard device
-	input_state.pad_lstick_x += analogX;
-	input_state.pad_lstick_y += analogY;
-	return 0;
-}
-
-struct key_name {
-	unsigned char key;
-	char name[10];
-};
-
-const key_name key_name_map[] = {
-	{'A', "A"},
-	{'B', "B"},
-	{'C', "C"},
-	{'D', "D"},
-	{'E', "E"},
-	{'F', "F"},
-	{'G', "G"},
-	{'H', "H"},
-	{'I', "I"},
-	{'J', "J"},
-	{'K', "K"},
-	{'L', "L"},
-	{'M', "M"},
-	{'N', "N"},
-	{'O', "O"},
-	{'P', "P"},
-	{'Q', "Q"},
-	{'R', "R"},
-	{'S', "S"},
-	{'T', "T"},
-	{'U', "U"},
-	{'V', "V"},
-	{'W', "W"},
-	{'X', "X"},
-	{'Y', "Y"},
-	{'Z', "Z"},
-	{'1', "1"},
-	{'2', "2"},
-	{'3', "3"},
-	{'4', "4"},
-	{'5', "5"},
-	{'6', "6"},
-	{'7', "7"},
-	{'8', "8"},
-	{'9', "9"},
-	{'0', "0"},
-	{VK_BACK, "Backspace"},
-	{VK_TAB, "Tab"},
-	{VK_CLEAR, "Clear"},
-	{VK_RETURN, "Return"},
-	{VK_SHIFT, "Shift"},
-	{VK_CONTROL, "Ctrl"},
-	{VK_MENU, "Alt"},
-	{VK_PAUSE, "Pause"},
-	{VK_CAPITAL, "Caps"},
-	{VK_ESCAPE, "Esc"},
-	{VK_SPACE, "Space"},
-	{VK_PRIOR, "PgUp"},
-	{VK_NEXT, "PgDown"},
-	{VK_END, "End"},
-	{VK_HOME, "Home"},
-	{VK_LEFT, "Left"},
-	{VK_UP, "Up"},
-	{VK_RIGHT, "Right"},
-	{VK_DOWN, "Down"},
-	{VK_SELECT, "Select"},
-	{VK_INSERT, "Insert"},
-	{VK_DELETE, "Delete"},
-	{VK_HELP, "Help"},
-	{VK_NUMPAD0, "Num 0"},
-	{VK_NUMPAD1, "Num 1"},
-	{VK_NUMPAD2, "Num 2"},
-	{VK_NUMPAD3, "Num 3"},
-	{VK_NUMPAD4, "Num 4"},
-	{VK_NUMPAD5, "Num 5"},
-	{VK_NUMPAD6, "Num 6"},
-	{VK_NUMPAD7, "Num 7"},
-	{VK_NUMPAD8, "Num 8"},
-	{VK_NUMPAD9, "Num 9"},
-	{VK_MULTIPLY, "Num *"},
-	{VK_ADD, "Num +"},
-	{VK_SEPARATOR, "Num Sep"},
-	{VK_SUBTRACT, "Num -"},
-	{VK_DECIMAL, "Num ."},
-	{VK_DIVIDE, "Num /"},
-	{VK_F1, "F1"},
-	{VK_F2, "F2"},
-	{VK_F3, "F3"},
-	{VK_F4, "F4"},
-	{VK_F5, "F5"},
-	{VK_F6, "F6"},
-	{VK_F7, "F7"},
-	{VK_F8, "F8"},
-	{VK_F9, "F9"},
-	{VK_F10, "F10"},
-	{VK_F11, "F11"},
-	{VK_F12, "F12"},
-	{VK_OEM_NEC_EQUAL, "Num ="},
-	{VK_OEM_1, ";"},
-	{VK_OEM_PLUS, "+"},
-	{VK_OEM_COMMA, ","},
-	{VK_OEM_MINUS, "-"},
-	{VK_OEM_PERIOD, "."},
-	{VK_OEM_2, "?"},
-	{VK_OEM_3, "~"},
-	{VK_OEM_4, "["},
-	{VK_OEM_5, "|"},
-	{VK_OEM_6, "]"},
-	{VK_OEM_7, "'"}
-};
-
-const int key_name_map_size = sizeof(key_name_map) / sizeof(key_name);
-
-const char * getVirtualKeyName(unsigned char key)
-{
-	for (int i = 0; i < key_name_map_size; i++) {
-		if (key_name_map[i].key == key)
-			return key_name_map[i].name;
-	}
+	// Nothing to do, all done in WM_INPUT
 	return 0;
 }

@@ -72,10 +72,9 @@ void InitMemoryForGameISO(std::string fileToStart) {
 		{
 			gameID = g_paramSFO.GetValueString("DISC_ID");
 
-			for(int i = 0; i < ARRAY_SIZE(g_HDRemasters); i++) {
+			for (size_t i = 0; i < ARRAY_SIZE(g_HDRemasters); i++) {
 				if(g_HDRemasters[i].gameID == gameID) {
 					g_RemasterMode = true;
-					Memory::g_MemoryEnd = g_HDRemasters[i].MemoryEnd;
 					Memory::g_MemorySize = g_HDRemasters[i].MemorySize;
 					if(g_HDRemasters[i].DoubleTextureCoordinates)
 						g_DoubleTextureCoordinates = true;
@@ -150,6 +149,9 @@ bool Load_PSP_ISO(const char *filename, std::string *error_string)
 	}
 	if (pspFileSystem.GetFileInfo("disc0:/PSP_GAME/SYSDIR/EBOOT.Z.Y").exists) {
 		bootpath = "disc0:/PSP_GAME/SYSDIR/EBOOT.Z.Y";
+	}
+	if (pspFileSystem.GetFileInfo("disc0:/PSP_GAME/SYSDIR/EBOOT.LEI").exists) {
+		bootpath = "disc0:/PSP_GAME/SYSDIR/EBOOT.LEI";
 	}
 
 	bool hasEncrypted = false;

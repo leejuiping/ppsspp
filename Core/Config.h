@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <map>
+
 #include "CommonTypes.h"
 
 extern const char *PPSSPP_GIT_VERSION;
@@ -48,6 +49,7 @@ public:
 	// General
 	bool bNewUI;  // "Hidden" setting, does not get saved to ini file.
 	int iNumWorkerThreads;
+	bool bScreenshotsAsPNG;
 
 	// Core
 	bool bIgnoreBadMemAccess;
@@ -78,6 +80,9 @@ public:
 	bool SSAntiAliasing; // for Windows, too
 	bool bVertexCache;
 	bool bFullScreen;
+#ifdef _WIN32
+	bool bFullScreenOnLaunch;
+#endif
 	int iAnisotropyLevel;
 	bool bTrueColor;
 	bool bFramebuffersToMem;
@@ -95,6 +100,8 @@ public:
 	// Sound
 	bool bEnableSound;
 	bool bEnableAtrac3plus;
+	int iSEVolume;
+	int iBGMVolume;
 
 	// UI
 	bool bShowTouchControls;
@@ -104,18 +111,8 @@ public:
 	bool bShowDebugStats;
 	bool bLargeControls;
 	bool bAccelerometerToAnalogHoriz;
-	// Temporary until control mapping rewrite
-	// 0 = none
-	// 1 = arrow buttons
-	// 2 = face buttons
-	// 3 = L/R
-	// 4 = L/R + triangle/cross
-	int iRightStickBind;
-	int iSwapRightAxes;
 
 	// Control
-	std::map<int,int> iMappingMap; // Can be used differently depending on systems
-	int iForceInputDevice;
 	int iTouchButtonOpacity;
 	float fButtonScale;
 
@@ -139,6 +136,8 @@ public:
 	int iDisasmWindowH;
 	int iConsoleWindowX;
 	int iConsoleWindowY;
+	int iFontWidth;
+	int iFontHeight;
 
 	std::string currentDirectory;
 	std::string externalDirectory; 

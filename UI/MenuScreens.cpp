@@ -698,9 +698,11 @@ void ControlsScreen::update(InputState &input) {
 
 void KeyMappingNewKeyDialog::key(const KeyInput &key) {
 	if (key.flags & KEY_DOWN) {
-		last_kb_deviceid = key.deviceId;
-		last_kb_key = key.keyCode;
-		last_axis_id = -1;
+		if (key.keyCode != KEYCODE_EXT_MOUSEBUTTON_1) {
+			last_kb_deviceid = key.deviceId;
+			last_kb_key = key.keyCode;
+			last_axis_id = -1;
+		}
 	}
 }
 
@@ -1196,8 +1198,12 @@ void GraphicsScreenP3::render() {
 			if(g_Config.iFpsLimit > 10)
 				g_Config.iFpsLimit -= 1;
 		if (UIButton(GEN_ID, hlinear1, 50, 0, gs->T("+1"), ALIGN_LEFT))
-			if(g_Config.iFrameSkip < 240)
 				g_Config.iFpsLimit += 1;
+		if (UIButton(GEN_ID, hlinear1, 65, 0, gs->T("-10"), ALIGN_LEFT))
+			if(g_Config.iFpsLimit > 10)
+				g_Config.iFpsLimit -= 10;
+		if (UIButton(GEN_ID, hlinear1, 65, 0, gs->T("+10"), ALIGN_LEFT))
+				g_Config.iFpsLimit += 10;
 
 		y += 20;
 	} else 

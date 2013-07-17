@@ -300,10 +300,10 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 	bool throughmode = (gstate.vertType & GE_VTYPE_THROUGH_MASK) != 0;
 
 	// Scissor
-	int scissorX1 = gstate.scissor1 & 0x3FF;
-	int scissorY1 = (gstate.scissor1 >> 10) & 0x3FF;
-	int scissorX2 = gstate.scissor2 & 0x3FF;
-	int scissorY2 = (gstate.scissor2 >> 10) & 0x3FF;
+	int scissorX1 = (gstate.getScissorX1());
+	int scissorY1 = (gstate.getScissorY1());
+	int scissorX2 = (gstate.getScissorX2());
+	int scissorY2 = (gstate.getScissorY2());
 
 	// This is a bit of a hack as the render buffer isn't always that size
 	if (scissorX1 == 0 && scissorY1 == 0 

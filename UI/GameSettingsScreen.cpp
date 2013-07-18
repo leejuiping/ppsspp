@@ -26,16 +26,18 @@
 #include "UI/GameInfoCache.h"
 #include "UI/MiscScreens.h"
 #include "Core/Config.h"
+#include "android/jni/TestRunner.h"
 
 namespace UI {
 
 // Reads and writes value to determine the current selection.
 class PopupMultiChoice : public Choice {
 public:
-	PopupMultiChoice(int *value, const std::string &text, const char **choices, int numChoices,
+	PopupMultiChoice(int *value, const std::string &text, const char **choices, int minVal, int numChoices,
 		I18NCategory *category, ScreenManager *screenManager, LayoutParams *layoutParams = 0)
-		: Choice(text, "", false, layoutParams), value_(value), choices_(choices), numChoices_(numChoices), 
+		: Choice(text, "", false, layoutParams), value_(value), choices_(choices), minVal_(minVal), numChoices_(numChoices), 
 		category_(category), screenManager_(screenManager) {
+		if (*value < minVal) *value = minVal;
 		OnClick.Handle(this, &PopupMultiChoice::HandleClick);
 		UpdateText();
 	}
@@ -50,6 +52,7 @@ private:
 
 	const char **choices_;
 	int numChoices_;
+	int minVal_;
 	int *value_;
 	ScreenManager *screenManager_;
 	I18NCategory *category_;
@@ -62,18 +65,18 @@ EventReturn PopupMultiChoice::HandleClick(EventParams &e) {
 		choices.push_back(category_ ? category_->T(choices_[i]) : choices_[i]);
 	}
 
-	Screen *popupScreen = new ListPopupScreen(text_, choices, *value_,
+	Screen *popupScreen = new ListPopupScreen(text_, choices, *value_ - minVal_,
 		std::bind(&PopupMultiChoice::ChoiceCallback, this, placeholder::_1));
 	screenManager_->push(popupScreen);
 	return EVENT_DONE;
 }
 
 void PopupMultiChoice::UpdateText() {
-	valueText_ = category_ ? category_->T(choices_[*value_]) : choices_[*value_];
+	valueText_ = category_ ? category_->T(choices_[*value_ - minVal_]) : choices_[*value_ - minVal_];
 }
 
 void PopupMultiChoice::ChoiceCallback(int num) {
-	*value_ = num;
+	*value_ = num + minVal_;
 	UpdateText();
 }
 
@@ -82,12 +85,43 @@ void PopupMultiChoice::Draw(UIContext &dc) {
 	dc.Draw()->DrawText(dc.theme->uiFont, valueText_.c_str(), bounds_.x2() - 8, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
 }
 
+class PopupSliderChoice : public Choice {
+public:
+	PopupSliderChoice(int *value, int minValue, int maxValue, const std::string &text, ScreenManager *screenManager, LayoutParams *layoutParams = 0)
+		: Choice(text, "", false, layoutParams), value_(value), minValue_(minValue), maxValue_(maxValue), screenManager_(screenManager) {
+		OnClick.Handle(this, &PopupSliderChoice::HandleClick);
+	}
+
+	void Draw(UIContext &dc);
+
+private:
+	EventReturn HandleClick(EventParams &e);
+
+	int *value_;
+	int minValue_;
+	int maxValue_;
+	ScreenManager *screenManager_;
+};
+
+EventReturn PopupSliderChoice::HandleClick(EventParams &e) {
+	Screen *popupScreen = new SliderPopupScreen(value_, minValue_, maxValue_, text_);
+	screenManager_->push(popupScreen);
+	return EVENT_DONE;
+}
+
+void PopupSliderChoice::Draw(UIContext &dc) {
+	Choice::Draw(dc);
+	char temp[4];
+	sprintf(temp, "%i", *value_);
+	dc.Draw()->DrawText(dc.theme->uiFont, temp, bounds_.x2() - 8, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
+}
 
 }
 
-
 void GameSettingsScreen::CreateViews() {
 	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, true);
+
+	cap60FPS_ = g_Config.iForceMaxEmulatedFPS == 60;
 
 	// Information in the top left.
 	// Back button to the bottom left.
@@ -128,29 +162,28 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new CheckBox(&g_Config.bUseVBO, gs->T("Stream VBO")));
 	graphicsSettings->Add(new CheckBox(&g_Config.SSAntiAliasing, gs->T("Anti Aliasing")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bFramebuffersToMem, gs->T("Read Framebuffer to memory")));
+
+	// TODO: Does frame rate belong among the graphics settings?
+	graphicsSettings->Add(new ItemHeader(gs->T("Frame rate")));
+	graphicsSettings->Add(new CheckBox(&cap60FPS_, gs->T("Read Framebuffer to memory")));
+
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture filtering")));
 
-	static const char *anisoLevels[] = {
-		"Off", "2 samples", "4 samples", "8 samples", "16 samples"
-	};
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iAnisotropyLevel, gs->T("Anisotropic Filtering"), anisoLevels, 5, gs, screenManager()));
+	static const char *anisoLevels[] = { "Off", "2x", "4x", "8x", "16x" };
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iAnisotropyLevel, gs->T("Aniso Filter"), anisoLevels, 0, 5, gs, screenManager()));
 	
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture scaling")));
-
 	static const char *texScaleLevels[] = {
-		"bad", "1x", "2x", "3x",
+		"Off (1x)", "2x", "3x",
 #ifndef USING_GLES2
 		"4x", "5x",
 #endif
 	};
-	//graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Scale"), anisoLevels, 5, gs, screenManager()));
-
-	static const char *texScaleAlgos[] = {
-		"xBRZ", "Hybrid", "Bicubic", "Hybrid + Bicubic",
-	};
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingType, gs->T("Texture Scaling Type"), texScaleAlgos, 4, gs, screenManager()));
-
-
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Upscale"), texScaleLevels, 1, 5, gs, screenManager()));
+	static const char *texScaleAlgos[] = { "xBRZ", "Hybrid", "Bicubic", "Hybrid + Bicubic", };
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingType, gs->T("Upscale type"), texScaleAlgos, 0, 4, gs, screenManager()));
+	static const char *texFilters[] = { "Default (auto)", "Nearest", "Linear", "Linear on FMV", };
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexFiltering, gs->T("Upscale type"), texFilters, 1, 4, gs, screenManager()));
 
 #ifdef USING_GLES2
 	g_Config.bFramebuffersCPUConvert = g_Config.bFramebuffersToMem;
@@ -166,6 +199,8 @@ void GameSettingsScreen::CreateViews() {
 	audioSettingsScroll->Add(audioSettings);
 	tabHolder->AddTab("Audio", audioSettingsScroll);
 	audioSettings->Add(new Choice(a->T("Download Atrac3+ plugin")))->OnClick.Handle(this, &GameSettingsScreen::OnDownloadPlugin);
+	audioSettings->Add(new PopupSliderChoice(&g_Config.iSEVolume, 0, 8, a->T("FX volume"), screenManager()));
+	audioSettings->Add(new PopupSliderChoice(&g_Config.iBGMVolume, 0, 8, a->T("BGM volume"), screenManager()));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableAtrac3plus, a->T("Enable Atrac3+")));
 	
@@ -195,11 +230,15 @@ void DrawBackground(float alpha);
 
 void GameSettingsScreen::DrawBackground(UIContext &dc) {
 	::DrawBackground(1.0f);
+
+	g_Config.iForceMaxEmulatedFPS = cap60FPS_ ? 60 : 0;
 }
 
 void GlobalSettingsScreen::CreateViews() {
 	using namespace UI;
 	root_ = new ScrollView(ORIENT_VERTICAL);
+
+	enableReports_ = g_Config.sReportHost != "";
 
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *gs = GetI18NCategory("Graphics");
@@ -207,14 +246,15 @@ void GlobalSettingsScreen::CreateViews() {
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->Add(new ItemHeader("General"));
 	list->Add(new CheckBox(&g_Config.bNewUI, gs->T("New UI")));
+	list->Add(new CheckBox(&enableReports_, gs->T("Enable error reporting")));
 
 	static const char *fpsChoices[] = {
 		"None", "Speed", "FPS", "Both"
 	};
 
-	list->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS"), fpsChoices, 4, gs, screenManager()));
+	list->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS"), fpsChoices, 0, 4, gs, screenManager()));
 	list->Add(new Choice(gs->T("Language")))->OnClick.Handle(this, &GlobalSettingsScreen::OnLanguage);
-
+	list->Add(new Choice(gs->T("Developer Tools")))->OnClick.Handle(this, &GlobalSettingsScreen::OnDeveloperTools);
 	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &GlobalSettingsScreen::OnBack);
 }
 
@@ -228,11 +268,46 @@ UI::EventReturn GlobalSettingsScreen::OnLanguage(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GlobalSettingsScreen::OnDeveloperTools(UI::EventParams &e) {
+	screenManager()->push(new DeveloperToolsScreen());
+	return UI::EVENT_DONE;
+}
+
 UI::EventReturn GlobalSettingsScreen::OnBack(UI::EventParams &e) {
 	screenManager()->finishDialog(this, DR_OK);
+	g_Config.sReportHost = enableReports_ ? "report.ppsspp.org" : "";
+	g_Config.Save();
 	return UI::EVENT_DONE;
 }
 
 void GlobalSettingsScreen::DrawBackground(UIContext &dc) {
 	::DrawBackground(1.0f);
+}
+
+void DeveloperToolsScreen::DrawBackground(UIContext &dc) {
+	::DrawBackground(1.0f);
+}
+
+void DeveloperToolsScreen::CreateViews() {
+	using namespace UI;
+	root_ = new ScrollView(ORIENT_VERTICAL);
+
+	I18NCategory *g = GetI18NCategory("General");
+	I18NCategory *d = GetI18NCategory("Developer");
+
+	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
+	list->Add(new ItemHeader(g->T("General")));
+	list->Add(new Choice(d->T("Run CPU Tests")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
+
+	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &DeveloperToolsScreen::OnBack);
+}
+
+UI::EventReturn DeveloperToolsScreen::OnBack(UI::EventParams &e) {
+	screenManager()->finishDialog(this, DR_OK);
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn DeveloperToolsScreen::OnRunCPUTests(UI::EventParams &e) {
+	RunTests();
+	return UI::EVENT_DONE;
 }

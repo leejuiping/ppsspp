@@ -396,8 +396,10 @@ void PauseScreen::update(InputState &input) {
 void PauseScreen::sendMessage(const char *msg, const char *value) {
 	if (!strcmp(msg, "run")) {
 		screenManager()->finishDialog(this, DR_CANCEL);
-	} else if (!strcmp(msg, "stop")) {
-		screenManager()->finishDialog(this, DR_OK);
+	} else if (!strcmp(msg, "stop") || !strcmp(msg, "reset") || !strcmp(msg, "boot")) {
+		// Close the menu and send the events to EmuScreen
+		m_data = new PauseScreen::Message(msg, value);
+		screenManager()->finishDialog(this, DR_YES);
 	}
 }
 
@@ -783,6 +785,7 @@ void DeveloperScreen::render() {
 	if (UICheckBox(GEN_ID, x, y += stride, d->T("Report","Enable Compatibility Server Reports"), ALIGN_TOPLEFT, &reportingEnabled)) {
 		g_Config.sReportHost = reportingEnabled ? reportHostOfficial : "";
 	}
+	UICheckBox(GEN_ID, x, y += stride, d->T("New UI"), ALIGN_TOPLEFT, &g_Config.bNewUI);
 
 	VLinear vlinear(x, y + stride + 12, 16);
 
@@ -869,7 +872,7 @@ void AudioScreen::render() {
 			if (g_Config.iBGMVolume > 1)
 				g_Config.iBGMVolume -= 1;
 		if (UIButton(GEN_ID, hlinear1, 50, 0, a->T("+1"), ALIGN_LEFT))
-			if (g_Config.iBGMVolume < 5)
+			if (g_Config.iBGMVolume < 8)
 				g_Config.iBGMVolume += 1;
 		y+=20;
 		char sevol[256];
@@ -882,7 +885,7 @@ void AudioScreen::render() {
 			if (g_Config.iSEVolume > 1)
 				g_Config.iSEVolume -= 1;
 		if (UIButton(GEN_ID, hlinear2, 50, 0, a->T("+1"), ALIGN_LEFT))
-			if (g_Config.iSEVolume < 5)
+			if (g_Config.iSEVolume < 8)
 				g_Config.iSEVolume += 1;
 
 		y+=10;
@@ -1046,9 +1049,9 @@ void GraphicsScreenP2::render() {
 		char showType[256];
 		std::string type;
 		switch (g_Config.iTexFiltering) {
-		case 2:	type = "Nearest";break;
-		case 3: type = "Linear";break;
-		case 4:	type = "Linear(CG)";break;
+		case 2:	type = "Nearest"; break;
+		case 3: type = "Linear"; break;
+		case 4:	type = "Linear(CG)"; break;
 		}
 		sprintf(showType, "%s %s", gs->T("Type :"), type.c_str());
 		ui_draw2d.DrawTextShadow(UBUNTU24, showType, x + 60, (y += stride) , 0xFFFFFFFF, ALIGN_LEFT);

@@ -38,6 +38,9 @@ private:
 	// As we load metadata in the background, we need to be able to update these after the fact.
 	UI::TextView *tvTitle_;
 	UI::TextView *tvGameSize_;
+
+	// Temporaries to convert bools to int settings
+	bool cap60FPS_;
 };
 
 // TODO: Move to its own file.
@@ -54,4 +57,21 @@ private:
 	UI::EventReturn OnLanguage(UI::EventParams &e);
 	UI::EventReturn OnFactoryReset(UI::EventParams &e);
 	UI::EventReturn OnBack(UI::EventParams &e);
+	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
+
+	// Temporaries to convert bools to other kinds of settings
+	bool enableReports_;
+};
+
+class DeveloperToolsScreen : public UIScreen {
+public:
+	DeveloperToolsScreen() {}
+
+protected:
+	virtual void CreateViews();
+	virtual void DrawBackground(UIContext &dc);
+
+private:
+	UI::EventReturn OnBack(UI::EventParams &e);
+	UI::EventReturn OnRunCPUTests(UI::EventParams &e);
 };

@@ -99,7 +99,7 @@ void Config::Load(const char *iniFileName)
 #endif
 	graphics->Get("BufferedRendering", &bBufferedRendering, true);
 	graphics->Get("HardwareTransform", &bHardwareTransform, true);
-	graphics->Get("TextureFiltering", &iTexFiltering, false);
+	graphics->Get("TextureFiltering", &iTexFiltering, 1);
 	graphics->Get("SSAA", &SSAntiAliasing, 0);
 	graphics->Get("VBO", &bUseVBO, false);
 	graphics->Get("FrameSkip", &iFrameSkip, 0);
@@ -134,8 +134,8 @@ void Config::Load(const char *iniFileName)
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
 	sound->Get("EnableAtrac3plus", &bEnableAtrac3plus, true);
-	sound->Get("BGMVolume", &iBGMVolume, 4);
-	sound->Get("SEVolume", &iSEVolume, 4);
+	sound->Get("BGMVolume", &iBGMVolume, 5);
+	sound->Get("SEVolume", &iSEVolume, 5);
 	
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 	control->Get("ShowStick", &bShowAnalogStick, false);

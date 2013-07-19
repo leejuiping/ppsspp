@@ -176,9 +176,14 @@ void TextureCache::NotifyFramebuffer(u32 address, VirtualFramebuffer *framebuffe
 	TexCacheEntry *entry = GetEntryAt(address | 0x04000000);
 	if (entry) {
 		DEBUG_LOG(HLE, "Render to texture detected at %08x!", address);
-		if (!entry->framebuffer)
+		if (!entry->framebuffer) {
 			entry->framebuffer = framebuffer;
-		// TODO: Delete the original non-fbo texture too.
+			// TODO: Delete the original non-fbo texture too.
+		}	else {
+			// Force a re-bind, fixes map in Tactics Ogre.
+			glBindTexture(GL_TEXTURE_2D, 0);
+			lastBoundTexture = -1;
+		}
 	}
 }
 
@@ -499,7 +504,7 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 	bool sClamp = gstate.texwrap & 1;
 	bool tClamp = (gstate.texwrap>>8) & 1;
 
-	// bool noMip = (gstate.texlevel & 0xFFFFFF) == 0x000001;  // Fix texlevel at 0
+	bool noMip = (gstate.texlevel & 0xFFFFFF) == 0x000001 || (gstate.texlevel & 0xFFFFFF) == 0x100001 ;  // Fix texlevel at 0
 
 	if (entry.maxLevel == 0) {
 		// Enforce no mip filtering, for safety.
@@ -515,17 +520,17 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 		}
 	}
 
-	if ((g_Config.iTexFiltering == 3 || (g_Config.iTexFiltering == 4 && g_iNumVideos)) && !gstate.isColorTestEnabled()) {
+	if ((g_Config.iTexFiltering == linear || (g_Config.iTexFiltering == linearFMV && g_iNumVideos)) && !gstate.isColorTestEnabled()) {
 		magFilt |= 1;
 		minFilt |= 1;
 	}
 
-	if (g_Config.iTexFiltering == 2) {
+	if (g_Config.iTexFiltering == nearest) {
 		magFilt &= ~1;
 		minFilt &= ~1;
 	}
 
-	if (!g_Config.bMipMap) {
+	if (!g_Config.bMipMap || noMip) {
 		magFilt &= 1;
 		minFilt &= 1;
 	}

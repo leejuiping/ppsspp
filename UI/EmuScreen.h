@@ -21,9 +21,10 @@
 #include <list>
 
 #include "ui/screen.h"
+#include "ui/ui_screen.h"
 #include "Common/KeyMap.h"
 
-class EmuScreen : public Screen
+class EmuScreen : public UIScreen
 {
 public:
 	EmuScreen(const std::string &filename);
@@ -39,19 +40,23 @@ public:
 	virtual void key(const KeyInput &key);
 	virtual void axis(const AxisInput &axis);
 
+protected:
+	virtual void CreateViews();
+
 private:
 	void bootGame(const std::string &filename);
 
 	void pspKey(int pspKeyCode, int flags);
 	void onVKeyDown(int virtualKeyCode);
 	void onVKeyUp(int virtualKeyCode);
+	void setVKeyAnalogX(int stick, int virtualKeyMin, int virtualKeyMax);
+	void setVKeyAnalogY(int stick, int virtualKeyMin, int virtualKeyMax);
 
 	// Something invalid was loaded, don't try to emulate
 	bool invalid_;
 	std::string errorMessage_;
 
-	// For the virtual touch buttons, that currently can't send key events.
-	InputState fakeInputState;
+	bool pauseTrigger_;
 
 	// To track mappable virtual keys. We can have as many as we want.
 	bool virtKeys[VIRTKEY_COUNT];

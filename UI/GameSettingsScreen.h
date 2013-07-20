@@ -31,13 +31,14 @@ protected:
  	virtual void DrawBackground(UIContext &dc);
 
 private:
-	UI::EventReturn OnDownloadPlugin(UI::EventParams &e);
-
 	std::string gamePath_, gameID_;
 
 	// As we load metadata in the background, we need to be able to update these after the fact.
 	UI::TextView *tvTitle_;
 	UI::TextView *tvGameSize_;
+
+	// Event handlers
+	UI::EventReturn OnDownloadPlugin(UI::EventParams &e);
 
 	// Temporaries to convert bools to int settings
 	bool cap60FPS_;

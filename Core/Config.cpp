@@ -124,12 +124,12 @@ void Config::Load(const char *iniFileName)
 	graphics->Get("StretchToDisplay", &bStretchToDisplay, false);
 	graphics->Get("TrueColor", &bTrueColor, true);
 	graphics->Get("FramebuffersToMem", &bFramebuffersToMem, false);
-	graphics->Get("FramebuffersCPUConvert", &bFramebuffersCPUConvert, false);
+	graphics->Get("FramebuffersCPUConvert", &bFramebuffersCPUConvert, true);
 	graphics->Get("MipMap", &bMipMap, true);
 	graphics->Get("TexScalingLevel", &iTexScalingLevel, 1);
 	graphics->Get("TexScalingType", &iTexScalingType, 0);
 	graphics->Get("TexDeposterize", &bTexDeposterize, false);
-	graphics->Get("VSyncInterval", &iVSyncInterval, 0);
+	graphics->Get("VSyncInterval", &bVSync, false);
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
@@ -146,7 +146,6 @@ void Config::Load(const char *iniFileName)
 #else
 	control->Get("ShowTouchControls", &bShowTouchControls, false);
 #endif
-	control->Get("LargeControls", &bLargeControls, false);
 	// control->Get("KeyMapping",iMappingMap);
 	control->Get("AccelerometerToAnalogHoriz", &bAccelerometerToAnalogHoriz, false);
 	control->Get("TouchButtonOpacity", &iTouchButtonOpacity, 65);
@@ -251,7 +250,7 @@ void Config::Save()
 		graphics->Set("TexScalingLevel", iTexScalingLevel);
 		graphics->Set("TexScalingType", iTexScalingType);
 		graphics->Set("TexDeposterize", bTexDeposterize);
-		graphics->Set("VSyncInterval", iVSyncInterval);
+		graphics->Set("VSyncInterval", bVSync);
 
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);
@@ -262,7 +261,6 @@ void Config::Save()
 		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 		control->Set("ShowStick", bShowAnalogStick);
 		control->Set("ShowTouchControls", bShowTouchControls);
-		control->Set("LargeControls", bLargeControls);
 		// control->Set("KeyMapping",iMappingMap);
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
 		control->Set("TouchButtonOpacity", iTouchButtonOpacity);

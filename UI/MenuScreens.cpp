@@ -949,12 +949,10 @@ void GraphicsScreenP1::render() {
 #endif
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Mipmapping"), ALIGN_TOPLEFT, &g_Config.bMipMap);
 #ifdef _WIN32
-	bool Vsync = g_Config.iVSyncInterval != 0;
-	UICheckBox(GEN_ID, x, y += stride, gs->T("VSync"), ALIGN_TOPLEFT, &Vsync);
-	g_Config.iVSyncInterval = Vsync ? 1 : 0;
+	UICheckBox(GEN_ID, x, y += stride, gs->T("VSync"), ALIGN_TOPLEFT, &g_Config.bVSync);
 	UICheckBox(GEN_ID, x, y += stride, gs->T("Fullscreen"), ALIGN_TOPLEFT, &g_Config.bFullScreen);
 #endif
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Display Raw Framebuffer"), ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
+	
 	if (UICheckBox(GEN_ID, x, y += stride, gs->T("Buffered Rendering"), ALIGN_TOPLEFT, &g_Config.bBufferedRendering)) {
 		if (gpu)
 			gpu->Resized();
@@ -964,6 +962,12 @@ void GraphicsScreenP1::render() {
 			if (gpu)
 				gpu->Resized();
 		}
+#ifndef USING_GLES2
+		if (UICheckBox(GEN_ID, x + 60, y += stride, gs->T("Convert Framebuffers Using CPU"), ALIGN_TOPLEFT, &g_Config.bFramebuffersCPUConvert)) { 
+			if (gpu)
+				gpu->Resized();
+		}
+#endif
 		if (UICheckBox(GEN_ID, x + 60, y += stride, gs->T("AA", "Anti-Aliasing"), ALIGN_TOPLEFT, &g_Config.SSAntiAliasing)) {
 			if (gpu)
 				gpu->Resized();
@@ -1245,7 +1249,9 @@ void GraphicsScreenP3::render() {
 		y += 20;
 	} else 
 		g_Config.iFrameSkip = 0;
-	
+
+	UICheckBox(GEN_ID, x, y += stride, gs->T("Display Raw Framebuffer"), ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
+
 	UIEnd();
 }
 
@@ -1615,22 +1621,20 @@ void ControlsScreen::render() {
 	if (g_Config.bShowTouchControls) {
 		UICheckBox(GEN_ID, x, y += stride, c->T("Show Left Analog Stick"), ALIGN_TOPLEFT, &g_Config.bShowAnalogStick);
 			
-		UICheckBox(GEN_ID, x, y += stride, c->T("Buttons Scaling"), ALIGN_TOPLEFT, &g_Config.bLargeControls);
-		if (g_Config.bLargeControls) {
-			char scale[256];
-			sprintf(scale, "%s %0.2f", c->T("Scale :"), g_Config.fButtonScale);
-			ui_draw2d.DrawTextShadow(UBUNTU24, scale, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
-			HLinear hlinear1(x + 250, y, 20);
-			if (UIButton(GEN_ID, hlinear1, 80, 0, c->T("Auto"), ALIGN_LEFT))
-				g_Config.fButtonScale = 1.15;
-			if (UIButton(GEN_ID, hlinear1, 60, 0, c->T("-0.1"), ALIGN_LEFT))
-				if (g_Config.fButtonScale > 1.15)
-					g_Config.fButtonScale -= 0.1;
-			if (UIButton(GEN_ID, hlinear1, 60, 0, c->T("+0.1"), ALIGN_LEFT))
-				if (g_Config.fButtonScale < 2.05)
-					g_Config.fButtonScale += 0.1;
-			y += 20;
-		}
+		char scale[256];
+		sprintf(scale, "%s %0.2f", c->T("Buttons Scaling:"), g_Config.fButtonScale);
+		ui_draw2d.DrawTextShadow(UBUNTU24, scale, x + 60, y += stride , 0xFFFFFFFF, ALIGN_LEFT);
+		HLinear hlinear1(x + 400, y, 20);
+		if (UIButton(GEN_ID, hlinear1, 80, 0, c->T("Auto"), ALIGN_LEFT))
+			g_Config.fButtonScale = 1.15;
+		if (UIButton(GEN_ID, hlinear1, 60, 0, c->T("-0.1"), ALIGN_LEFT))
+			if (g_Config.fButtonScale > 1.15)
+				g_Config.fButtonScale -= 0.1;
+		if (UIButton(GEN_ID, hlinear1, 60, 0, c->T("+0.1"), ALIGN_LEFT))
+			if (g_Config.fButtonScale < 2.05)
+				g_Config.fButtonScale += 0.1;
+		y += 20;
+
 		// This will be a slider in the new UI later
 		bool bTransparent = g_Config.iTouchButtonOpacity < 65;
 		bool prev = bTransparent;

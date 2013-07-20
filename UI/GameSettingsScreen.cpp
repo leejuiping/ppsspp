@@ -50,18 +50,18 @@ private:
 
 	void ChoiceCallback(int num);
 
-	const char **choices_;
-	int numChoices_;
-	int minVal_;
 	int *value_;
-	ScreenManager *screenManager_;
+	const char **choices_;
+	int minVal_;
+	int numChoices_;
 	I18NCategory *category_;
+	ScreenManager *screenManager_;
 	std::string valueText_;
 };
 
 EventReturn PopupMultiChoice::HandleClick(EventParams &e) {
 	std::vector<std::string> choices;
-	for (size_t i = 0; i < numChoices_; i++) {
+	for (int i = 0; i < numChoices_; i++) {
 		choices.push_back(category_ ? category_->T(choices_[i]) : choices_[i]);
 	}
 
@@ -103,11 +103,30 @@ private:
 	ScreenManager *screenManager_;
 };
 
+class PopupSliderChoiceFloat : public Choice {
+public:
+	PopupSliderChoiceFloat(float *value, float minValue, float maxValue, const std::string &text, ScreenManager *screenManager, LayoutParams *layoutParams = 0)
+		: Choice(text, "", false, layoutParams), value_(value), minValue_(minValue), maxValue_(maxValue), screenManager_(screenManager) {
+		OnClick.Handle(this, &PopupSliderChoiceFloat::HandleClick);
+	}
+
+	void Draw(UIContext &dc);
+
+private:
+	EventReturn HandleClick(EventParams &e);
+
+	float *value_;
+	float minValue_;
+	float maxValue_;
+	ScreenManager *screenManager_;
+};
+
 EventReturn PopupSliderChoice::HandleClick(EventParams &e) {
 	Screen *popupScreen = new SliderPopupScreen(value_, minValue_, maxValue_, text_);
 	screenManager_->push(popupScreen);
 	return EVENT_DONE;
 }
+
 
 void PopupSliderChoice::Draw(UIContext &dc) {
 	Choice::Draw(dc);
@@ -116,7 +135,21 @@ void PopupSliderChoice::Draw(UIContext &dc) {
 	dc.Draw()->DrawText(dc.theme->uiFont, temp, bounds_.x2() - 8, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
 }
 
+EventReturn PopupSliderChoiceFloat::HandleClick(EventParams &e) {
+	Screen *popupScreen = new SliderFloatPopupScreen(value_, minValue_, maxValue_, text_);
+	screenManager_->push(popupScreen);
+	return EVENT_DONE;
 }
+
+void PopupSliderChoiceFloat::Draw(UIContext &dc) {
+	Choice::Draw(dc);
+	char temp[4];
+	sprintf(temp, "%2.2f", *value_);
+	dc.Draw()->DrawText(dc.theme->uiFont, temp, bounds_.x2() - 8, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
+}
+
+}
+
 
 void GameSettingsScreen::CreateViews() {
 	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, true);
@@ -138,92 +171,99 @@ void GameSettingsScreen::CreateViews() {
 
 	root_ = new LinearLayout(ORIENT_HORIZONTAL);
 
-	ViewGroup *leftColumn = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f));
+	ViewGroup *leftColumn = new AnchorLayout(new LinearLayoutParams(1.0f));
 	root_->Add(leftColumn);
 
 	leftColumn->Add(new Spacer(new LinearLayoutParams(1.0)));
-	leftColumn->Add(new Choice("Back"))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	leftColumn->Add(new Choice(g->T("Back"), "", false, new AnchorLayoutParams(150, WRAP_CONTENT, 10, NONE, NONE, 10)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 
-	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new LinearLayoutParams(600, FILL_PARENT, actionMenuMargins));
+	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new LinearLayoutParams(750, FILL_PARENT, actionMenuMargins));
 	root_->Add(tabHolder);
 
 	// TODO: These currently point to global settings, not game specific ones.
 
+	// Graphics
 	ViewGroup *graphicsSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	ViewGroup *graphicsSettings = new LinearLayout(ORIENT_VERTICAL);
 	graphicsSettingsScroll->Add(graphicsSettings);
 	tabHolder->AddTab("Graphics", graphicsSettingsScroll);
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bBufferedRendering, gs->T("Buffered Rendering")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bDisplayFramebuffer, gs->T("Display Raw Framebuffer")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bUseVBO, gs->T("Stream VBO")));
-	graphicsSettings->Add(new CheckBox(&g_Config.SSAntiAliasing, gs->T("Anti Aliasing")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bFramebuffersToMem, gs->T("Read Framebuffer to memory")));
-
+	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bBufferedRendering, gs->T("Buffered Rendering")));
+	graphicsSettings->Add(new CheckBox(&g_Config.SSAntiAliasing, gs->T("Anti-Aliasing")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bFramebuffersToMem, gs->T("Read Framebuffer To Memory")));
+#ifdef USING_GLES2
+	g_Config.bFramebuffersCPUConvert = g_Config.bFramebuffersToMem;
+#endif
+	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bUseVBO, gs->T("Stream VBO")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bTrueColor, gs->T("True Color")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bDisplayFramebuffer, gs->T("Display Raw Framebuffer")));
+#ifdef _WIN32
+	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")));
+#endif
 	// TODO: Does frame rate belong among the graphics settings?
-	graphicsSettings->Add(new ItemHeader(gs->T("Frame rate")));
-	graphicsSettings->Add(new CheckBox(&cap60FPS_, gs->T("Read Framebuffer to memory")));
+	graphicsSettings->Add(new ItemHeader(gs->T("Frame Rate Control")));
+	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"};
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, 4, gs, screenManager()));
+	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")));
+	graphicsSettings->Add(new PopupSliderChoice(&g_Config.iFrameSkip, 1, 9, gs->T("Frame Skipping"), screenManager()));
 
-	graphicsSettings->Add(new ItemHeader(gs->T("Texture filtering")));
-
+	graphicsSettings->Add(new ItemHeader(gs->T("Anisotropic Filtering")));
 	static const char *anisoLevels[] = { "Off", "2x", "4x", "8x", "16x" };
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iAnisotropyLevel, gs->T("Aniso Filter"), anisoLevels, 0, 5, gs, screenManager()));
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iAnisotropyLevel, gs->T("Anisotropic Filtering"), anisoLevels, 0, 5, gs, screenManager()));
 	
-	graphicsSettings->Add(new ItemHeader(gs->T("Texture scaling")));
+	graphicsSettings->Add(new ItemHeader(gs->T("Texture Scaling")));
 	static const char *texScaleLevels[] = {
 		"Off (1x)", "2x", "3x",
 #ifndef USING_GLES2
 		"4x", "5x",
 #endif
 	};
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Upscale"), texScaleLevels, 1, 5, gs, screenManager()));
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Upscale Level"), texScaleLevels, 1, 5, gs, screenManager()));
 	static const char *texScaleAlgos[] = { "xBRZ", "Hybrid", "Bicubic", "Hybrid + Bicubic", };
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingType, gs->T("Upscale type"), texScaleAlgos, 0, 4, gs, screenManager()));
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingType, gs->T("Upscale Type"), texScaleAlgos, 0, 4, gs, screenManager()));
+
+	graphicsSettings->Add(new ItemHeader(gs->T("Texture Filtering")));
 	static const char *texFilters[] = { "Default (auto)", "Nearest", "Linear", "Linear on FMV", };
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexFiltering, gs->T("Upscale type"), texFilters, 1, 4, gs, screenManager()));
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexFiltering, gs->T("Upscale Type"), texFilters, 1, 4, gs, screenManager()));
 
 #ifdef USING_GLES2
 	g_Config.bFramebuffersCPUConvert = g_Config.bFramebuffersToMem;
 #endif
 
-#ifdef _WIN32
-	graphicsSettings->Add(new CheckBox(&g_Config.bAutoSaveSymbolMap, gs->T("VSync")));
-#endif
-
-
+	// Audio
 	ViewGroup *audioSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	ViewGroup *audioSettings = new LinearLayout(ORIENT_VERTICAL);
 	audioSettingsScroll->Add(audioSettings);
 	tabHolder->AddTab("Audio", audioSettingsScroll);
 	audioSettings->Add(new Choice(a->T("Download Atrac3+ plugin")))->OnClick.Handle(this, &GameSettingsScreen::OnDownloadPlugin);
-	audioSettings->Add(new PopupSliderChoice(&g_Config.iSEVolume, 0, 8, a->T("FX volume"), screenManager()));
-	audioSettings->Add(new PopupSliderChoice(&g_Config.iBGMVolume, 0, 8, a->T("BGM volume"), screenManager()));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableAtrac3plus, a->T("Enable Atrac3+")));
-	
+	audioSettings->Add(new PopupSliderChoice(&g_Config.iSEVolume, 0, 5, a->T("FX volume"), screenManager()));
+	audioSettings->Add(new PopupSliderChoice(&g_Config.iBGMVolume, 0, 5, a->T("BGM volume"), screenManager()));
+
+	// Control
 	ViewGroup *controlsSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	ViewGroup *controlsSettings = new LinearLayout(ORIENT_VERTICAL);
 	controlsSettingsScroll->Add(controlsSettings);
 	tabHolder->AddTab("Controls", controlsSettingsScroll);
 	controlsSettings->Add(new CheckBox(&g_Config.bShowTouchControls, c->T("OnScreen", "On-Screen Touch Controls")));
-	controlsSettings->Add(new CheckBox(&g_Config.bLargeControls, c->T("Large Controls")));
-	controlsSettings->Add(new CheckBox(&g_Config.bShowAnalogStick, c->T("Show Analog Stick")));
+	controlsSettings->Add(new CheckBox(&g_Config.bShowAnalogStick, c->T("Show Left Analog Stick")));
+	controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 15, 65, c->T("Button Opacity"), screenManager()));
 	controlsSettings->Add(new CheckBox(&g_Config.bAccelerometerToAnalogHoriz, c->T("Tilt", "Tilt to Analog (horizontal)")));
 
+	// System
 	ViewGroup *systemSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	ViewGroup *systemSettings = new LinearLayout(ORIENT_VERTICAL);
 	systemSettingsScroll->Add(systemSettings);
 	tabHolder->AddTab("System", systemSettingsScroll);
 	systemSettings->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));
-	systemSettings->Add(new CheckBox(&g_Config.bFastMemory, s->T("Fast Memory", "Fast Memory (unstable)")));
-}
-
-UI::EventReturn GameSettingsScreen::OnDownloadPlugin(UI::EventParams &e) {
-	screenManager()->push(new PluginScreen());
-	return UI::EVENT_DONE;
+	systemSettings->Add(new CheckBox(&g_Config.bFastMemory, s->T("Fast Memory", "Fast Memory (Unstable)")));
 }
 
 void DrawBackground(float alpha);
@@ -233,6 +273,7 @@ void GameSettingsScreen::DrawBackground(UIContext &dc) {
 
 	g_Config.iForceMaxEmulatedFPS = cap60FPS_ ? 60 : 0;
 }
+
 
 void GlobalSettingsScreen::CreateViews() {
 	using namespace UI;
@@ -245,15 +286,9 @@ void GlobalSettingsScreen::CreateViews() {
 
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->Add(new ItemHeader("General"));
-	list->Add(new CheckBox(&g_Config.bNewUI, gs->T("New UI")));
-	list->Add(new CheckBox(&enableReports_, gs->T("Enable error reporting")));
-
-	static const char *fpsChoices[] = {
-		"None", "Speed", "FPS", "Both"
-	};
-
-	list->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS"), fpsChoices, 0, 4, gs, screenManager()));
-	list->Add(new Choice(gs->T("Language")))->OnClick.Handle(this, &GlobalSettingsScreen::OnLanguage);
+	list->Add(new CheckBox(&g_Config.bNewUI, gs->T("Enable New UI")));
+	list->Add(new CheckBox(&enableReports_, gs->T("Enable Error Reporting")));
+	list->Add(new Choice(gs->T("System Language")))->OnClick.Handle(this, &GlobalSettingsScreen::OnLanguage);
 	list->Add(new Choice(gs->T("Developer Tools")))->OnClick.Handle(this, &GlobalSettingsScreen::OnDeveloperTools);
 	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &GlobalSettingsScreen::OnBack);
 }
@@ -294,6 +329,7 @@ void DeveloperToolsScreen::CreateViews() {
 
 	I18NCategory *g = GetI18NCategory("General");
 	I18NCategory *d = GetI18NCategory("Developer");
+	I18NCategory *a = GetI18NCategory("Audio");
 
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->Add(new ItemHeader(g->T("General")));
@@ -309,5 +345,10 @@ UI::EventReturn DeveloperToolsScreen::OnBack(UI::EventParams &e) {
 
 UI::EventReturn DeveloperToolsScreen::OnRunCPUTests(UI::EventParams &e) {
 	RunTests();
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameSettingsScreen::OnDownloadPlugin(UI::EventParams &e) {
+	screenManager()->push(new PluginScreen());
 	return UI::EVENT_DONE;
 }

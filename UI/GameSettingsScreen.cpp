@@ -177,7 +177,9 @@ void GameSettingsScreen::CreateViews() {
 	leftColumn->Add(new Spacer(new LinearLayoutParams(1.0)));
 	leftColumn->Add(new Choice(g->T("Back"), "", false, new AnchorLayoutParams(150, WRAP_CONTENT, 10, NONE, NONE, 10)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 
-	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new LinearLayoutParams(750, FILL_PARENT, actionMenuMargins));
+
+	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new LinearLayoutParams(800, FILL_PARENT, actionMenuMargins));
+
 	root_->Add(tabHolder);
 
 	// TODO: These currently point to global settings, not game specific ones.
@@ -187,36 +189,36 @@ void GameSettingsScreen::CreateViews() {
 	ViewGroup *graphicsSettings = new LinearLayout(ORIENT_VERTICAL);
 	graphicsSettingsScroll->Add(graphicsSettings);
 	tabHolder->AddTab("Graphics", graphicsSettingsScroll);
+
+	graphicsSettings->Add(new ItemHeader(gs->T("Rendering Mode")));
+	static const char *renderingMode[] = { "Non-Buffered Rendering", "Buffered Rendering", 
+#ifndef USING_GLES2
+	"Read Framebuffers To Memory(CPU)", 
+#endif
+	"Read Framebuffers To Memory(GPU)"
+	};
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iRenderingMode, gs->T("Mode"), renderingMode, 0, 4, gs, screenManager()));
+
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bUseVBO, gs->T("Stream VBO")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bBufferedRendering, gs->T("Buffered Rendering")));
-	graphicsSettings->Add(new CheckBox(&g_Config.SSAntiAliasing, gs->T("Anti-Aliasing")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bFramebuffersToMem, gs->T("Read Framebuffer To Memory")));
-#ifdef USING_GLES2
-	g_Config.bFramebuffersCPUConvert = g_Config.bFramebuffersToMem;
-#endif
 	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bUseVBO, gs->T("Stream VBO")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bTrueColor, gs->T("True Color")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bDisplayFramebuffer, gs->T("Display Raw Framebuffer")));
 #ifdef _WIN32
 	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")));
 #endif
-	// TODO: Does frame rate belong among the graphics settings?
 	graphicsSettings->Add(new ItemHeader(gs->T("Frame Rate Control")));
 	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, 4, gs, screenManager()));
 	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")));
-	graphicsSettings->Add(new PopupSliderChoice(&g_Config.iFrameSkip, 1, 9, gs->T("Frame Skipping"), screenManager()));
-
+	graphicsSettings->Add(new PopupSliderChoice(&g_Config.iFrameSkip, 0, 9, gs->T("Frame Skipping"), screenManager()));
 	graphicsSettings->Add(new ItemHeader(gs->T("Anisotropic Filtering")));
 	static const char *anisoLevels[] = { "Off", "2x", "4x", "8x", "16x" };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iAnisotropyLevel, gs->T("Anisotropic Filtering"), anisoLevels, 0, 5, gs, screenManager()));
-	
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture Scaling")));
 	static const char *texScaleLevels[] = {
 		"Off (1x)", "2x", "3x",
@@ -227,14 +229,9 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Upscale Level"), texScaleLevels, 1, 5, gs, screenManager()));
 	static const char *texScaleAlgos[] = { "xBRZ", "Hybrid", "Bicubic", "Hybrid + Bicubic", };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingType, gs->T("Upscale Type"), texScaleAlgos, 0, 4, gs, screenManager()));
-
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture Filtering")));
 	static const char *texFilters[] = { "Default (auto)", "Nearest", "Linear", "Linear on FMV", };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexFiltering, gs->T("Upscale Type"), texFilters, 1, 4, gs, screenManager()));
-
-#ifdef USING_GLES2
-	g_Config.bFramebuffersCPUConvert = g_Config.bFramebuffersToMem;
-#endif
 
 	// Audio
 	ViewGroup *audioSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -244,8 +241,8 @@ void GameSettingsScreen::CreateViews() {
 	audioSettings->Add(new Choice(a->T("Download Atrac3+ plugin")))->OnClick.Handle(this, &GameSettingsScreen::OnDownloadPlugin);
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableAtrac3plus, a->T("Enable Atrac3+")));
-	audioSettings->Add(new PopupSliderChoice(&g_Config.iSEVolume, 0, 5, a->T("FX volume"), screenManager()));
-	audioSettings->Add(new PopupSliderChoice(&g_Config.iBGMVolume, 0, 5, a->T("BGM volume"), screenManager()));
+	audioSettings->Add(new PopupSliderChoice(&g_Config.iSEVolume, 0, 8, a->T("FX volume"), screenManager()));
+	audioSettings->Add(new PopupSliderChoice(&g_Config.iBGMVolume, 0, 8, a->T("BGM volume"), screenManager()));
 
 	// Control
 	ViewGroup *controlsSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -264,16 +261,20 @@ void GameSettingsScreen::CreateViews() {
 	tabHolder->AddTab("System", systemSettingsScroll);
 	systemSettings->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));
 	systemSettings->Add(new CheckBox(&g_Config.bFastMemory, s->T("Fast Memory", "Fast Memory (Unstable)")));
+	systemSettings->Add(new PopupSliderChoice(&g_Config.iLockedCPUSpeed, 1, 1000, gs->T("Unlock CPU Clock"), screenManager()));
+	systemSettings->Add(new CheckBox(&g_Config.bDayLightSavings, s->T("Day Light Saving")));
+	static const char *dateFormat[] = { "YYYYMMDD", "MMDDYYYY", "DDMMYYYY"};
+	systemSettings->Add(new PopupMultiChoice(&g_Config.iDateFormat, gs->T("Date Format"), dateFormat, 1, 3, s, screenManager()));
+	static const char *timeFormat[] = { "12HR", "24HR"};
+	systemSettings->Add(new PopupMultiChoice(&g_Config.iTimeFormat, gs->T("Time Format"), timeFormat, 1, 2, s, screenManager()));
+	static const char *buttonPref[] = { "Use X to confirm", "Use O to confirm"};
+	systemSettings->Add(new PopupMultiChoice(&g_Config.iButtonPreference, gs->T("Button Perference"), buttonPref, 1, 2, s, screenManager()));
 }
 
-void DrawBackground(float alpha);
-
-void GameSettingsScreen::DrawBackground(UIContext &dc) {
-	::DrawBackground(1.0f);
-
+void GameSettingsScreen::update(InputState &input) {
+	UIScreen::update(input);
 	g_Config.iForceMaxEmulatedFPS = cap60FPS_ ? 60 : 0;
 }
-
 
 void GlobalSettingsScreen::CreateViews() {
 	using namespace UI;
@@ -288,6 +289,8 @@ void GlobalSettingsScreen::CreateViews() {
 	list->Add(new ItemHeader("General"));
 	list->Add(new CheckBox(&g_Config.bNewUI, gs->T("Enable New UI")));
 	list->Add(new CheckBox(&enableReports_, gs->T("Enable Error Reporting")));
+	list->Add(new CheckBox(&g_Config.bEnableCheats, gs->T("Enable Cheats")));
+	list->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, gs->T("Screenshots as PNG")));
 	list->Add(new Choice(gs->T("System Language")))->OnClick.Handle(this, &GlobalSettingsScreen::OnLanguage);
 	list->Add(new Choice(gs->T("Developer Tools")))->OnClick.Handle(this, &GlobalSettingsScreen::OnDeveloperTools);
 	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &GlobalSettingsScreen::OnBack);
@@ -313,14 +316,6 @@ UI::EventReturn GlobalSettingsScreen::OnBack(UI::EventParams &e) {
 	g_Config.sReportHost = enableReports_ ? "report.ppsspp.org" : "";
 	g_Config.Save();
 	return UI::EVENT_DONE;
-}
-
-void GlobalSettingsScreen::DrawBackground(UIContext &dc) {
-	::DrawBackground(1.0f);
-}
-
-void DeveloperToolsScreen::DrawBackground(UIContext &dc) {
-	::DrawBackground(1.0f);
 }
 
 void DeveloperToolsScreen::CreateViews() {

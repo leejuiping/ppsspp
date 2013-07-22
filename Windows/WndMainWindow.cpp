@@ -88,6 +88,8 @@ namespace MainWindow
 	LRESULT CALLBACK DisplayProc(HWND, UINT, WPARAM, LPARAM);
 	LRESULT CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
+	const UINT WM_USER_SAVESTATE_FINISH = WM_USER + 100;
+
 	HWND GetHWND() {
 		return hwndMain;
 	}
@@ -214,6 +216,10 @@ namespace MainWindow
 	void setTexScalingType(int num) {
 		g_Config.iTexScalingType = num;
 		if(gpu) gpu->ClearCacheNextFrame();
+	}
+
+	void setRenderingMode(int num) {
+		g_Config.iRenderingMode = num;
 	}
 
 	void setFpsLimit(int fps) {
@@ -720,25 +726,20 @@ namespace MainWindow
 				if(gpu) gpu->ClearCacheNextFrame();
 				break;
 
+			case ID_OPTIONS_NONBUFFEREDRENDERING:
+				setRenderingMode(0);
+				break;
+
 			case ID_OPTIONS_BUFFEREDRENDERING:
-				g_Config.bBufferedRendering = !g_Config.bBufferedRendering;
-				osm.ShowOnOff(g->T("Buffered Rendering"), g_Config.bBufferedRendering);
-				if (gpu)
-					gpu->Resized();  // easy way to force a clear...
+				setRenderingMode(1);
 				break;
 
-			case ID_OPTIONS_READFBOTOMEMORY:
-				g_Config.bFramebuffersToMem = !g_Config.bFramebuffersToMem;
-				osm.ShowOnOff(g->T("Read Framebuffers To Memory"), g_Config.bFramebuffersToMem);
-				if (gpu)
-					gpu->Resized();  // easy way to force a clear...
+			case ID_OPTIONS_READFBOTOMEMORYGPU:
+				setRenderingMode(2);
 				break;
 
-			case ID_OPTIONS_FBOCPUCONVERT:
-				g_Config.bFramebuffersCPUConvert = !g_Config.bFramebuffersCPUConvert;
-				osm.ShowOnOff(g->T("Convert Framebuffers Using CPU"), g_Config.bFramebuffersCPUConvert);
-				if(gpu)
-					gpu->Resized(); // easy way to force a clear...
+			case ID_OPTIONS_READFBOTOMEMORYCPU:
+				setRenderingMode(3);
 				break;
 
 			case ID_OPTIONS_SHOWDEBUGSTATISTICS:
@@ -1001,6 +1002,9 @@ namespace MainWindow
 			SetForegroundWindow(hwndMain);
 			break;
 
+		case WM_USER_SAVESTATE_FINISH:
+			SetCursor(LoadCursor(0, IDC_ARROW));
+			break;
 
 		case WM_MENUSELECT:
 			// Unfortunately, accelerate keys (hotkeys) shares the same enabled/disabled states
@@ -1041,9 +1045,6 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_IGNOREILLEGALREADS,g_Config.bIgnoreBadMemAccess);
 		CHECKITEM(ID_CPU_INTERPRETER,g_Config.bJit == false);
 		CHECKITEM(ID_CPU_DYNAREC,g_Config.bJit == true);
-		CHECKITEM(ID_OPTIONS_BUFFEREDRENDERING, g_Config.bBufferedRendering);
-		CHECKITEM(ID_OPTIONS_READFBOTOMEMORY, g_Config.bFramebuffersToMem);
-		CHECKITEM(ID_OPTIONS_FBOCPUCONVERT, g_Config.bFramebuffersCPUConvert);
 		CHECKITEM(ID_OPTIONS_SHOWDEBUGSTATISTICS, g_Config.bShowDebugStats);
 		CHECKITEM(ID_OPTIONS_HARDWARETRANSFORM, g_Config.bHardwareTransform);
 		CHECKITEM(ID_OPTIONS_FASTMEMORY, g_Config.bFastMemory);
@@ -1099,6 +1100,16 @@ namespace MainWindow
 		};
 		for (int i = 0; i < 4; i++) {
 			CheckMenuItem(menu, texfilteringitems[i], MF_BYCOMMAND | ( (i + 1) == g_Config.iTexFiltering )? MF_CHECKED : MF_UNCHECKED);
+		}
+
+		static const int renderingmode[] = {
+			ID_OPTIONS_NONBUFFEREDRENDERING,
+			ID_OPTIONS_BUFFEREDRENDERING,
+			ID_OPTIONS_READFBOTOMEMORYGPU,
+			ID_OPTIONS_READFBOTOMEMORYCPU,
+		};
+		for (int i = 0; i < 4; i++) {
+			CheckMenuItem(menu, renderingmode[i], MF_BYCOMMAND | ( i == g_Config.iRenderingMode )? MF_CHECKED : MF_UNCHECKED);
 		}
 
 		UpdateCommands();
@@ -1241,7 +1252,7 @@ namespace MainWindow
 
 	void SaveStateActionFinished(bool result, void *userdata)
 	{
-		SetCursor(LoadCursor(0, IDC_ARROW));
+		PostMessage(hwndMain, WM_USER_SAVESTATE_FINISH, 0, 0);
 	}
 
 	HINSTANCE GetHInstance()

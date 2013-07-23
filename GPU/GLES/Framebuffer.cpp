@@ -172,7 +172,7 @@ FramebufferManager::FramebufferManager() :
 	glClearColor(0,0,0,1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-	useBufferedRendering_ = g_Config.iRenderingMode != 0 ? 1 : 0;
+	useBufferedRendering_ = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE ? 1 : 0;
 
 	// Check vendor string to try and guess GPU
 	const char *cvendor = (char *)glGetString(GL_VENDOR);
@@ -461,35 +461,21 @@ void FramebufferManager::SetRenderFrameBuffer() {
 	int buffer_width = drawing_width;
 	int buffer_height = drawing_height;
 
-	// Find a matching framebuffer, same size or bigger
+	// Find a matching framebuffer
 	VirtualFramebuffer *vfb = 0;
 	for (size_t i = 0; i < vfbs_.size(); ++i) {
 		VirtualFramebuffer *v = vfbs_[i];
-		if (MaskedEqual(v->fb_address, fb_address) && v->format == fmt) {
-			// Okay, let's check the sizes. If the new one is bigger than the old one, recreate.
-			// If the opposite, just use it and hope that the game sets scissors accordingly.
-			if (v->bufferWidth >= drawing_width && v->bufferHeight >= drawing_height) {
-				// Let's not be so picky for now. Let's say this is the one.
-				vfb = v;
-				// Update fb stride in case it changed
-				vfb->fb_stride = fb_stride;
-				// Just hack the width/height and we should be fine. also hack renderwidth/renderheight?
-				// This hack gonna breaks Kingdom Heart and causing black bar on the left side.
+		if (MaskedEqual(v->fb_address, fb_address) &&  v->format == fmt) {
+			// Let's not be so picky for now. Let's say this is the one.
+			vfb = v;
+			// Update fb stride in case it changed
+			vfb->fb_stride = fb_stride;
+			if (v->bufferWidth >= drawing_width && v->bufferHeight >= drawing_height) { 
 				v->width = drawing_width;
 				v->height = drawing_height;
-				break;
-			} else {
-				INFO_LOG(HLE, "Embiggening framebuffer (%i, %i) -> (%i, %i)", (int)v->width, (int)v->height, drawing_width, drawing_height);
-				// drawing_width or drawing_height is bigger. Let's recreate with the max.
-				// To do this right we should copy the data over too, but meh.
-				buffer_width = std::max((int)v->width, drawing_width);
-				buffer_height = std::max((int)v->height, drawing_height);
-
-				DestroyFramebuf(v);
-				vfbs_.erase(vfbs_.begin() + i--);
-				break;
-			}
-		}
+			} 
+			break; 
+		} 
 	}
 
 	float renderWidthFactor = (float)PSP_CoreParameter().renderWidth / 480.0f;
@@ -1124,7 +1110,7 @@ void FramebufferManager::BeginFrame() {
 		// TODO: restore state?
 	}
 	currentRenderVfb_ = 0;
-	useBufferedRendering_ = g_Config.iRenderingMode != 0 ? 1 : 0;
+	useBufferedRendering_ = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE ? 1 : 0;
 }
 
 void FramebufferManager::SetDisplayFramebuffer(u32 framebuf, u32 stride, int format) {
@@ -1165,7 +1151,7 @@ void FramebufferManager::DecimateFBOs() {
 	fbo_unbind();
 	currentRenderVfb_ = 0;
 	bool thirdFrame = (gpuStats.numFrames % 3 == 0);
-	bool useFramebufferToMem = g_Config.iRenderingMode > 1 ? 1 : 0;
+	bool useFramebufferToMem = g_Config.iRenderingMode != FB_BUFFERED_MODE ? 1 : 0;
 
 	for (size_t i = 0; i < vfbs_.size(); ++i) {
 		VirtualFramebuffer *vfb = vfbs_[i];

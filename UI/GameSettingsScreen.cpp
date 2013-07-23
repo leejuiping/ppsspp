@@ -22,11 +22,13 @@
 #include "ui/ui_context.h"
 #include "UI/EmuScreen.h"
 #include "UI/PluginScreen.h"
+#include "UI/MenuScreens.h"
 #include "UI/GameSettingsScreen.h"
 #include "UI/GameInfoCache.h"
 #include "UI/MiscScreens.h"
 #include "Core/Config.h"
 #include "android/jni/TestRunner.h"
+#include "GPU/GPUInterface.h"
 
 namespace UI {
 
@@ -198,7 +200,6 @@ void GameSettingsScreen::CreateViews() {
 	"Read Framebuffers To Memory(GPU)"
 	};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iRenderingMode, gs->T("Mode"), renderingMode, 0, 4, gs, screenManager()));
-
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
@@ -291,6 +292,7 @@ void GlobalSettingsScreen::CreateViews() {
 	list->Add(new CheckBox(&enableReports_, gs->T("Enable Error Reporting")));
 	list->Add(new CheckBox(&g_Config.bEnableCheats, gs->T("Enable Cheats")));
 	list->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, gs->T("Screenshots as PNG")));
+	list->Add(new Choice(gs->T("Control Mapping")))->OnClick.Handle(this, &GlobalSettingsScreen::OnControlMapping);
 	list->Add(new Choice(gs->T("System Language")))->OnClick.Handle(this, &GlobalSettingsScreen::OnLanguage);
 	list->Add(new Choice(gs->T("Developer Tools")))->OnClick.Handle(this, &GlobalSettingsScreen::OnDeveloperTools);
 	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &GlobalSettingsScreen::OnBack);
@@ -310,6 +312,12 @@ UI::EventReturn GlobalSettingsScreen::OnDeveloperTools(UI::EventParams &e) {
 	screenManager()->push(new DeveloperToolsScreen());
 	return UI::EVENT_DONE;
 }
+
+UI::EventReturn GlobalSettingsScreen::OnControlMapping(UI::EventParams &e) {
+	screenManager()->push(new ControlsScreen());
+	return UI::EVENT_DONE;
+}
+
 
 UI::EventReturn GlobalSettingsScreen::OnBack(UI::EventParams &e) {
 	screenManager()->finishDialog(this, DR_OK);

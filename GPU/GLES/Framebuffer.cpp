@@ -309,7 +309,7 @@ void FramebufferManager::DrawPixels(const u8 *framebuf, int pixelFormat, int lin
 	}
 
 	glBindTexture(GL_TEXTURE_2D,drawPixelsTex_);
-	if (g_Config.iTexFiltering == 3 || (g_Config.iTexFiltering == 4 && g_iNumVideos))
+	if (g_Config.iTexFiltering == LINEAR || (g_Config.iTexFiltering == LINEARFMV && g_iNumVideos))
 	{
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	}
@@ -1150,7 +1150,8 @@ std::vector<FramebufferInfo> FramebufferManager::GetFramebufferList() {
 void FramebufferManager::DecimateFBOs() {
 	fbo_unbind();
 	currentRenderVfb_ = 0;
-	bool thirdFrame = (gpuStats.numFrames % 3 == 0);
+	int skip = g_Config.iFrameSkip > 0 ? g_Config.iFrameSkip : 3;
+	bool thirdFrame = (gpuStats.numFrames % skip == 0);
 	bool useFramebufferToMem = g_Config.iRenderingMode != FB_BUFFERED_MODE ? 1 : 0;
 
 	for (size_t i = 0; i < vfbs_.size(); ++i) {

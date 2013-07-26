@@ -92,7 +92,6 @@ void Config::Load(const char *iniFileName)
 
 	IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
 	graphics->Get("ShowFPSCounter", &iShowFPSCounter, false);
-	graphics->Get("DisplayFramebuffer", &bDisplayFramebuffer, false);
 #ifdef _WIN32
 	graphics->Get("ResolutionScale", &iWindowZoom, 2);
 #else
@@ -133,8 +132,8 @@ void Config::Load(const char *iniFileName)
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
 	sound->Get("EnableAtrac3plus", &bEnableAtrac3plus, true);
-	sound->Get("BGMVolume", &iBGMVolume, 5);
-	sound->Get("SEVolume", &iSEVolume, 5);
+	sound->Get("VolumeBGM", &iBGMVolume, 7);
+	sound->Get("VolumeSFX", &iSEVolume, 7);
 	
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 	control->Get("ShowStick", &bShowAnalogStick, false);
@@ -223,13 +222,11 @@ void Config::Save()
 
 		IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
 		graphics->Set("ShowFPSCounter", iShowFPSCounter);
-		graphics->Set("DisplayFramebuffer", bDisplayFramebuffer);
 		graphics->Set("ResolutionScale", iWindowZoom);
 		graphics->Set("RenderingMode", iRenderingMode);
 		graphics->Set("HardwareTransform", bHardwareTransform);
 		graphics->Set("TextureFiltering", iTexFiltering);
 		graphics->Set("SSAA", SSAntiAliasing);
-		graphics->Set("VBO", bUseVBO);
 		graphics->Set("FrameSkip", iFrameSkip);
 		graphics->Set("FrameRate", iFpsLimit);
 		graphics->Set("ForceMaxEmulatedFPS", iForceMaxEmulatedFPS);
@@ -253,8 +250,8 @@ void Config::Save()
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);
 		sound->Set("EnableAtrac3plus", bEnableAtrac3plus);
-		sound->Set("BGMVolume", iBGMVolume);
-		sound->Set("SEVolume", iSEVolume);
+		sound->Set("VolumeBGM", iBGMVolume);
+		sound->Set("VolumeSFX", iSEVolume);
 
 		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 		control->Set("ShowStick", bShowAnalogStick);

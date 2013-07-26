@@ -74,7 +74,7 @@
 #ifdef _WIN32
 namespace MainWindow {
 	extern HWND hwndMain;
-	void BrowseAndBoot(std::string defaultPath);
+	void BrowseAndBoot(std::string defaultPath, bool browseDirectory = false);
 }
 #endif
 
@@ -1237,8 +1237,6 @@ void GraphicsScreenP3::render() {
 		y += 20;
 	} else 
 		g_Config.iFrameSkip = 0;
-
-	UICheckBox(GEN_ID, x, y += stride, gs->T("Display Raw Framebuffer"), ALIGN_TOPLEFT, &g_Config.bDisplayFramebuffer);
 
 	UIEnd();
 }

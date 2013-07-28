@@ -54,13 +54,11 @@
 
 
 EmuScreen::EmuScreen(const std::string &filename)
-	: gamePath_(filename), invalid_(true), pauseTrigger_(false) {
-
-	bootGame(filename);
+	: booted_(false), gamePath_(filename), invalid_(true), pauseTrigger_(false) {
 }
 
 void EmuScreen::bootGame(const std::string &filename) {
-	CheckGLExtensions();
+	booted_ = true;
 	std::string fileToStart = filename;
 	// This is probably where we should start up the emulated PSP.
 	INFO_LOG(BOOT, "Starting up hardware.");
@@ -200,7 +198,8 @@ inline float clamp1(float x) {
 }
 
 void EmuScreen::touch(const TouchInput &touch) {
-	root_->Touch(touch);
+	if (root_)
+		root_->Touch(touch);
 }
 
 void EmuScreen::onVKeyDown(int virtualKeyCode) {
@@ -399,6 +398,9 @@ void EmuScreen::CreateViews() {
 }
 
 void EmuScreen::update(InputState &input) {
+	if (!booted_)
+		bootGame(gamePath_);
+
 	UIScreen::update(input);
 
 	// Simply forcibily update to the current screen size every frame. Doesn't cost much.
@@ -495,9 +497,10 @@ void EmuScreen::render() {
 
 	float touchOpacity = g_Config.iTouchButtonOpacity / 100.0f;
 
-	UI::LayoutViewHierarchy(*screenManager()->getUIContext(), root_);
-	root_->Draw(*screenManager()->getUIContext());
-
+	if (root_) {
+		UI::LayoutViewHierarchy(*screenManager()->getUIContext(), root_);
+		root_->Draw(*screenManager()->getUIContext());
+	}
 	DrawWatermark();
 
 	if (!osm.IsEmpty()) {
@@ -521,11 +524,11 @@ void EmuScreen::render() {
 		char fpsbuf[256];
 		switch (g_Config.iShowFPSCounter) {
 		case 1:
-			sprintf(fpsbuf, "Speed: %0.1f", vps); break;
+			sprintf(fpsbuf, "Speed: %0.1f%%", vps / 60.0f * 100.0f); break;
 		case 2:
 			sprintf(fpsbuf, "FPS: %0.1f", fps); break;
 		case 3:
-			sprintf(fpsbuf, "Speed: %5.1f\nFPS: %0.1f", vps, fps); break;
+			sprintf(fpsbuf, "Speed: %0.1f%%\nFPS: %0.1f", vps / 60.0f * 100.0f, fps); break;
 		}
 		ui_draw2d.DrawText(UBUNTU24, fpsbuf, dp_xres - 8, 12, 0xc0000000, ALIGN_TOPRIGHT);
 		ui_draw2d.DrawText(UBUNTU24, fpsbuf, dp_xres - 10, 10, 0xFF3fFF3f, ALIGN_TOPRIGHT);
@@ -548,5 +551,6 @@ void EmuScreen::render() {
 
 void EmuScreen::deviceLost() {
 	ILOG("EmuScreen::deviceLost()");
-	gpu->DeviceLost();
+	if (gpu)
+		gpu->DeviceLost();
 }

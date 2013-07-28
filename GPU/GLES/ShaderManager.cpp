@@ -114,11 +114,15 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, bool useHWTransform)
 	u_view = glGetUniformLocation(program, "u_view");
 	u_world = glGetUniformLocation(program, "u_world");
 	u_texmtx = glGetUniformLocation(program, "u_texmtx");
-	numBones = gstate.getNumBoneWeights();
+	if ((gstate.vertType & GE_VTYPE_WEIGHT_MASK) != 0)
+		numBones = TranslateNumBones(gstate.getNumBoneWeights());
+	else
+		numBones = 0;
+
 #ifdef USE_BONE_ARRAY
 	u_bone = glGetUniformLocation(program, "u_bone");
 #else
-	for (int i = 0; i < numBones; i++) {
+	for (int i = 0; i < 8; i++) {
 		char name[10];
 		sprintf(name, "u_bone%i", i);
 		u_bone[i] = glGetUniformLocation(program, name);
@@ -278,7 +282,6 @@ void LinkedShader::updateUniforms() {
 
 	// Update any dirty uniforms before we draw
 	if (u_proj != -1 && (dirtyUniforms & DIRTY_PROJMATRIX)) {
-		glUniformMatrix4fv(u_proj, 1, GL_FALSE, gstate.projMatrix);
 		float flippedMatrix[16];
 		memcpy(flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 		if (gstate_c.vpHeight < 0) {
@@ -323,10 +326,10 @@ void LinkedShader::updateUniforms() {
 		if (gstate.isModeThrough()) {
 			// We never get here because we don't use HW transform with through mode.
 			// Although - why don't we?
-			uvscaleoff[0] = gstate_c.uScale / gstate_c.curTextureWidth;
-			uvscaleoff[1] = gstate_c.vScale / gstate_c.curTextureHeight;
-			uvscaleoff[2] = gstate_c.uOff / gstate_c.curTextureWidth;
-			uvscaleoff[3] = gstate_c.vOff / gstate_c.curTextureHeight;
+			uvscaleoff[0] = gstate_c.uv.uScale / gstate_c.curTextureWidth;
+			uvscaleoff[1] = gstate_c.uv.vScale / gstate_c.curTextureHeight;
+			uvscaleoff[2] = gstate_c.uv.uOff / gstate_c.curTextureWidth;
+			uvscaleoff[3] = gstate_c.uv.vOff / gstate_c.curTextureHeight;
 			glUniform4fv(u_uvscaleoffset, 1, uvscaleoff);
 		} else {
 			int w = 1 << (gstate.texsize[0] & 0xf);
@@ -334,12 +337,12 @@ void LinkedShader::updateUniforms() {
 			float widthFactor = (float)w / (float)gstate_c.curTextureWidth;
 			float heightFactor = (float)h / (float)gstate_c.curTextureHeight;
 			if ((gstate.texmapmode & 3) == 0) {
-				static const float rescale[4] = {2.0f, 2*127.5f/128.f, 2*32767.5f/32768.f, 2.0f};
+				static const float rescale[4] = {1.0f, 2*127.5f/128.f, 2*32767.5f/32768.f, 1.0f};
 				float factor = rescale[(gstate.vertType & GE_VTYPE_TC_MASK) >> GE_VTYPE_TC_SHIFT];
-				uvscaleoff[0] = gstate_c.uScale * factor * widthFactor;
-				uvscaleoff[1] = gstate_c.vScale * factor * heightFactor;
-				uvscaleoff[2] = gstate_c.uOff * widthFactor;
-				uvscaleoff[3] = gstate_c.vOff * heightFactor;
+				uvscaleoff[0] = gstate_c.uv.uScale * factor * widthFactor;
+				uvscaleoff[1] = gstate_c.uv.vScale * factor * heightFactor;
+				uvscaleoff[2] = gstate_c.uv.uOff * widthFactor;
+				uvscaleoff[3] = gstate_c.uv.vOff * heightFactor;
 			} else {
 				uvscaleoff[0] = widthFactor;
 				uvscaleoff[1] = heightFactor;
@@ -363,6 +366,7 @@ void LinkedShader::updateUniforms() {
 
 	// TODO: Could even set all bones in one go if they're all dirty.
 #ifdef USE_BONE_ARRAY
+
 	if (u_bone != -1) {
 		float allBones[8 * 16];
 

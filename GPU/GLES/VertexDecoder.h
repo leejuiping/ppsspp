@@ -83,24 +83,19 @@ enum {
 };
 
 // Right now
-//   - only contains computed information
-//   - does decoding in nasty branchfilled loops
+//   - compiles into list of called functions
 // Future TODO
-//   - should be cached, not recreated every time
-//   - will compile into list of called functions
 //   - will compile into lighting fast specialized x86 and ARM
-//   - will not bother translating components that can be read directly
-//     by OpenGL ES. Will still have to translate 565 colors and things
-//     like that. DecodedVertex will not be a fixed struct. Will have to
-//     do morphing here.
 class VertexDecoder
 {
 public:
 	VertexDecoder() : coloff(0), nrmoff(0), posoff(0) {}
 	~VertexDecoder() {}
 
+	// prim is needed knowledge for a performance hack (PrescaleUV)
 	void SetVertexType(u32 vtype);
 	u32 VertexType() const { return fmt_; }
+
 	const DecVtxFormat &GetDecVtxFmt() { return decFmt; }
 
 	void DecodeVerts(u8 *decoded, const void *verts, int indexLowerBound, int indexUpperBound) const;
@@ -117,8 +112,13 @@ public:
 
 	void Step_TcU8() const;
 	void Step_TcU16() const;
-	void Step_TcU16Double() const;
 	void Step_TcFloat() const;
+
+	void Step_TcU8Prescale() const;
+	void Step_TcU16Prescale() const;
+	void Step_TcFloatPrescale() const;
+
+	void Step_TcU16Double() const;
 	void Step_TcU16Through() const;
 	void Step_TcU16ThroughDouble() const;
 	void Step_TcFloatThrough() const;
@@ -210,7 +210,7 @@ class VertexReader
 public:
 	VertexReader(u8 *base, const DecVtxFormat &decFmt, int vtype) : base_(base), data_(base), decFmt_(decFmt), vtype_(vtype) {}
 
-	void ReadPos(float pos[3]) {
+	void ReadPos(float pos[3]) const {
 		switch (decFmt_.posfmt) {
 		case DEC_FLOAT_3:
 			{
@@ -259,14 +259,14 @@ public:
 		}
 	}
 
-	void ReadNrm(float nrm[3]) {
+	void ReadNrm(float nrm[3]) const {
 		switch (decFmt_.nrmfmt) {
 		case DEC_FLOAT_3:
 			//memcpy(nrm, data_ + decFmt_.nrmoff, 12);
 			{
 				const float *f = (const float *)(data_ + decFmt_.nrmoff);
 				for (int i = 0; i < 3; i++)
-					nrm[i] = f[i] ;
+					nrm[i] = f[i];
 			}
 			break;
 		case DEC_S16_3:
@@ -290,7 +290,7 @@ public:
 		}
 	}
 
-	void ReadUV(float uv[2]) {
+	void ReadUV(float uv[2]) const {
 		switch (decFmt_.uvfmt) {
 		case DEC_U8_2:
 			{
@@ -311,8 +311,8 @@ public:
 		case DEC_FLOAT_2:
 			{
 				const float *f = (const float *)(data_ + decFmt_.uvoff);
-				uv[0] = f[0] * 2.f;
-				uv[1] = f[1] * 2.f;
+				uv[0] = f[0];
+				uv[1] = f[1];
 			}
 			break;
 
@@ -330,7 +330,7 @@ public:
 		}
 	}
 
-	void ReadColor0(float color[4]) {
+	void ReadColor0(float color[4]) const {
 		switch (decFmt_.c0fmt) {
 		case DEC_U8_4:
 			{
@@ -349,7 +349,7 @@ public:
 		}
 	}
 
-	void ReadColor1(float color[3]) {
+	void ReadColor1(float color[3]) const {
 		switch (decFmt_.c1fmt) {
 		case DEC_U8_4:
 			{
@@ -368,7 +368,7 @@ public:
 		}
 	}
 
-	void ReadWeights(float weights[8]) {
+	void ReadWeights(float weights[8]) const {
 		const float *f = (const float *)(data_ + decFmt_.w0off);
 		const u8 *b = (const u8 *)(data_ + decFmt_.w0off);
 		const u16 *s = (const u16 *)(data_ + decFmt_.w0off);
@@ -378,7 +378,7 @@ public:
 		case DEC_FLOAT_3:
 		case DEC_FLOAT_4:
 			for (int i = 0; i <= decFmt_.w0fmt - DEC_FLOAT_1; i++)
-				weights[i] = f[i] * 2.f;
+				weights[i] = f[i];
 			break;
 		case DEC_U8_1: weights[0] = b[0] * (1.f / 128.f); break;
 		case DEC_U8_2: for (int i = 0; i < 2; i++) weights[i] = b[i] * (1.f / 128.f); break;
@@ -406,7 +406,7 @@ public:
 		case DEC_FLOAT_3:
 		case DEC_FLOAT_4:
 			for (int i = 0; i <= decFmt_.w1fmt - DEC_FLOAT_1; i++)
-				weights[i+4] = f[i] * 2.f;
+				weights[i+4] = f[i];
 			break;
 		case DEC_U8_1: weights[4] = b[0] * (1.f / 128.f); break;
 		case DEC_U8_2: for (int i = 0; i < 2; i++) weights[i+4] = b[i] * (1.f / 128.f); break;

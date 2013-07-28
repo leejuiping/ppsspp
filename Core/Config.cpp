@@ -172,6 +172,9 @@ void Config::Load(const char *iniFileName)
 	debugConfig->Get("FontWidth", &iFontWidth, 8);
 	debugConfig->Get("FontHeight", &iFontHeight, 12);
 
+	IniFile::Section *gleshacks = iniFile.GetOrCreateSection("GLESHacks");
+	gleshacks->Get("PrescaleUV", &bPrescaleUV, false);
+
 	KeyMap::LoadFromIni(iniFile);
 
 	CleanRecent();
@@ -227,6 +230,7 @@ void Config::Save()
 		graphics->Set("HardwareTransform", bHardwareTransform);
 		graphics->Set("TextureFiltering", iTexFiltering);
 		graphics->Set("SSAA", SSAntiAliasing);
+		graphics->Set("VBO", bUseVBO);
 		graphics->Set("FrameSkip", iFrameSkip);
 		graphics->Set("FrameRate", iFpsLimit);
 		graphics->Set("ForceMaxEmulatedFPS", iForceMaxEmulatedFPS);

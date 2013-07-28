@@ -15,12 +15,13 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "gfx_es2/gl_state.h"
+
 #include "Core/MemMap.h"
 #include "Core/Host.h"
 #include "Core/Config.h"
 #include "Core/Reporting.h"
 #include "Core/System.h"
-#include "gfx_es2/gl_state.h"
 
 #include "../GPUState.h"
 #include "../ge_constants.h"
@@ -310,6 +311,16 @@ void GLES_GPU::CopyDisplayToOutput() {
 
 	shaderManager_->EndFrame();
 
+	// If buffered, discard the depth buffer of the backbuffer. Don't even know if we need one.
+#if 0
+#ifdef USING_GLES2
+	if (gl_extensions.EXT_discard_framebuffer && g_Config.iRenderingMode != 0) {
+		GLenum attachments[] = {GL_DEPTH_EXT, GL_STENCIL_EXT};
+		glDiscardFramebufferEXT(GL_FRAMEBUFFER, 2, attachments);
+	}
+#endif
+#endif
+
 	gstate_c.textureChanged = true;
 }
 
@@ -506,27 +517,35 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		break;
 
 	case GE_CMD_TEXSCALEU:
-		gstate_c.uScale = getFloat24(data);
-		if (diff)
-			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		if (diff) {
+			gstate_c.uv.uScale = getFloat24(data);
+			if (!g_Config.bPrescaleUV)
+				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		}
 		break;
 
 	case GE_CMD_TEXSCALEV:
-		gstate_c.vScale = getFloat24(data);
-		if (diff)
-			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		if (diff) {
+			gstate_c.uv.vScale = getFloat24(data);
+			if (!g_Config.bPrescaleUV)
+				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		}
 		break;
 
 	case GE_CMD_TEXOFFSETU:
-		gstate_c.uOff = getFloat24(data);
-		if (diff)
-			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		if (diff) {
+			gstate_c.uv.uOff = getFloat24(data);
+			if (!g_Config.bPrescaleUV)
+				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		}
 		break;
 
 	case GE_CMD_TEXOFFSETV:
-		gstate_c.vOff = getFloat24(data);
-		if (diff)
-			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		if (diff) {
+			gstate_c.uv.vOff = getFloat24(data);
+			if (!g_Config.bPrescaleUV)
+				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		}
 		break;
 
 	case GE_CMD_SCISSOR1:
@@ -996,11 +1015,11 @@ void GLES_GPU::DoBlockTransfer() {
 	//
 	// etc....
 
-	u32 srcBasePtr = (gstate.transfersrc & 0xFFFFFF) | ((gstate.transfersrcw & 0xFF0000) << 8);
-	u32 srcStride = gstate.transfersrcw & 0x3FF;
+	u32 srcBasePtr = (gstate.transfersrc & 0xFFFFF0) | ((gstate.transfersrcw & 0xFF0000) << 8);
+	u32 srcStride = gstate.transfersrcw & 0x3F8;
 
-	u32 dstBasePtr = (gstate.transferdst & 0xFFFFFF) | ((gstate.transferdstw & 0xFF0000) << 8);
-	u32 dstStride = gstate.transferdstw & 0x3FF;
+	u32 dstBasePtr = (gstate.transferdst & 0xFFFFF0) | ((gstate.transferdstw & 0xFF0000) << 8);
+	u32 dstStride = gstate.transferdstw & 0x3F8;
 
 	int srcX = gstate.transfersrcpos & 0x3FF;
 	int srcY = (gstate.transfersrcpos >> 10) & 0x3FF;

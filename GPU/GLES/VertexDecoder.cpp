@@ -17,10 +17,12 @@
 
 #include "math/lin/matrix4x4.h"
 
-#include "../../Core/MemMap.h"
-#include "../ge_constants.h"
+#include "Core/Config.h"
+#include "Core/MemMap.h"
+#include "GPU/ge_constants.h"
 
 #include "VertexDecoder.h"
+#include "VertexShaderGenerator.h"
 
 void PrintDecodedVertex(VertexReader &vtx) {
 	if (vtx.hasNormal())
@@ -118,16 +120,22 @@ void VertexDecoder::Step_WeightsU8() const
 {
 	u8 *wt = (u8 *)(decoded_ + decFmt.w0off);
 	const u8 *wdata = (const u8*)(ptr_);
-	for (int j = 0; j < nweights; j++)
+	int j;
+	for (j = 0; j < nweights; j++)
 		wt[j] = wdata[j];
+	while (j & 3)   // Zero additional weights rounding up to 4.
+		wt[j++] = 0;
 }
 
 void VertexDecoder::Step_WeightsU16() const
 {
 	u16 *wt = (u16 *)(decoded_  + decFmt.w0off);
 	const u16 *wdata = (const u16*)(ptr_);
-	for (int j = 0; j < nweights; j++)
+	int j;
+	for (j = 0; j < nweights; j++)
 		wt[j] = wdata[j];
+	while (j & 3)   // Zero additional weights rounding up to 4.
+		wt[j++] = 0;
 }
 
 // Float weights should be uncommon, we can live with having to multiply these by 2.0
@@ -137,9 +145,12 @@ void VertexDecoder::Step_WeightsFloat() const
 {
 	float *wt = (float *)(decoded_ + decFmt.w0off);
 	const float *wdata = (const float*)(ptr_);
-	for (int i = 0; i < nweights; i++) {
-		wt[i] = wdata[i] * 0.5f;
+	int j;
+	for (j = 0; j < nweights; j++) {
+		wt[j] = wdata[j];
 	}
+	while (j & 3)   // Zero additional weights rounding up to 4.
+		wt[j++] = 0.0f;
 }
 
 void VertexDecoder::Step_TcU8() const
@@ -185,16 +196,37 @@ void VertexDecoder::Step_TcFloat() const
 {
 	float *uv = (float *)(decoded_ + decFmt.uvoff);
 	const float *uvdata = (const float*)(ptr_ + tcoff);
-	uv[0] = uvdata[0] * 0.5f;
-	uv[1] = uvdata[1] * 0.5f;
+	uv[0] = uvdata[0];
+	uv[1] = uvdata[1];
 }
 
 void VertexDecoder::Step_TcFloatThrough() const
 {
 	float *uv = (float *)(decoded_ + decFmt.uvoff);
 	const float *uvdata = (const float*)(ptr_ + tcoff);
-	uv[0] = uvdata[0] * 0.5f;
-	uv[1] = uvdata[1] * 0.5f;
+	uv[0] = uvdata[0];
+	uv[1] = uvdata[1];
+}
+
+void VertexDecoder::Step_TcU8Prescale() const {
+	float *uv = (float *)(decoded_ + decFmt.uvoff);
+	const u8 *uvdata = (const u8 *)(ptr_ + tcoff);
+	uv[0] = (float)uvdata[0] * (1.f / 128.f) * gstate_c.uv.uScale + gstate_c.uv.uOff;
+	uv[1] = (float)uvdata[1] * (1.f / 128.f) * gstate_c.uv.vScale + gstate_c.uv.vOff;
+}
+
+void VertexDecoder::Step_TcU16Prescale() const {
+	float *uv = (float *)(decoded_ + decFmt.uvoff);
+	const u16 *uvdata = (const u16 *)(ptr_ + tcoff);
+	uv[0] = (float)uvdata[0] * (1.f / 32768.f) * gstate_c.uv.uScale + gstate_c.uv.uOff;
+	uv[1] = (float)uvdata[1] * (1.f / 32768.f) * gstate_c.uv.vScale + gstate_c.uv.vOff;
+}
+
+void VertexDecoder::Step_TcFloatPrescale() const {
+	float *uv = (float *)(decoded_ + decFmt.uvoff);
+	const float *uvdata = (const float*)(ptr_ + tcoff);
+	uv[0] = uvdata[0] * gstate_c.uv.uScale + gstate_c.uv.uOff;
+	uv[1] = uvdata[1] * gstate_c.uv.vScale + gstate_c.uv.vOff;
 }
 
 void VertexDecoder::Step_Color565() const
@@ -486,6 +518,13 @@ static const StepFunction tcstep[4] = {
 	&VertexDecoder::Step_TcFloat,
 };
 
+static const StepFunction tcstep_prescale[4] = {
+	0,
+	&VertexDecoder::Step_TcU8Prescale,
+	&VertexDecoder::Step_TcU16Prescale,
+	&VertexDecoder::Step_TcFloatPrescale,
+};
+
 static const StepFunction tcstep_through[4] = {
 	0,
 	&VertexDecoder::Step_TcU8,
@@ -562,6 +601,10 @@ static const StepFunction posstep_through[4] = {
 };
 
 
+int RoundUp4(int x) {
+	return (x + 3) & ~3;
+}
+
 void VertexDecoder::SetVertexType(u32 fmt) {
 	fmt_ = fmt;
 	throughmode = (fmt & GE_VTYPE_THROUGH) != 0;
@@ -593,25 +636,28 @@ void VertexDecoder::SetVertexType(u32 fmt) {
 		steps_[numSteps_++] = wtstep[weighttype];
 
 		int fmtBase = DEC_FLOAT_1;
-		int weightSize = 4;
 		if (weighttype == GE_VTYPE_WEIGHT_8BIT >> GE_VTYPE_WEIGHT_SHIFT) {
 			fmtBase = DEC_U8_1;
-			weightSize = 1;
 		} else if (weighttype == GE_VTYPE_WEIGHT_16BIT >> GE_VTYPE_WEIGHT_SHIFT) {
 			fmtBase = DEC_U16_1;
-			weightSize = 2;
+		} else if (weighttype == GE_VTYPE_WEIGHT_FLOAT >> GE_VTYPE_WEIGHT_SHIFT) {
+			fmtBase = DEC_FLOAT_1;
 		}
 
-		if (nweights < 5) {
+		int numWeights = TranslateNumBones(nweights);
+
+		if (numWeights <= 4) {
 			decFmt.w0off = decOff;
-			decFmt.w0fmt = fmtBase + nweights - 1;
+			decFmt.w0fmt = fmtBase + numWeights - 1;
+			decOff += DecFmtSize(decFmt.w0fmt);
 		} else {
 			decFmt.w0off = decOff;
 			decFmt.w0fmt = fmtBase + 3;
-			decFmt.w1off = decOff + 4 * weightSize;
-			decFmt.w1fmt = fmtBase + nweights - 5;
+			decOff += DecFmtSize(decFmt.w0fmt);
+			decFmt.w1off = decOff;
+			decFmt.w1fmt = fmtBase + numWeights - 5;
+			decOff += DecFmtSize(decFmt.w1fmt);
 		}
-		decOff += nweights * 4;
 	}
 
 	if (tc) {
@@ -621,21 +667,26 @@ void VertexDecoder::SetVertexType(u32 fmt) {
 		if (tcalign[tc] > biggest)
 			biggest = tcalign[tc];
 
-		if(g_DoubleTextureCoordinates)
-			steps_[numSteps_++] = throughmode ? tcstep_through_Remaster[tc] : tcstep_Remaster[tc];
-		else
-			steps_[numSteps_++] = throughmode ? tcstep_through[tc] : tcstep[tc];
-
-		switch (tc) {
-		case GE_VTYPE_TC_8BIT >> GE_VTYPE_TC_SHIFT:
-			decFmt.uvfmt = throughmode ? DEC_U8A_2 : DEC_U8_2;
-			break;
-		case GE_VTYPE_TC_16BIT >> GE_VTYPE_TC_SHIFT:
-			decFmt.uvfmt = throughmode ? DEC_U16A_2 : DEC_U16_2;
-			break;
-		case GE_VTYPE_TC_FLOAT >> GE_VTYPE_TC_SHIFT:
+		if (g_Config.bPrescaleUV && !throughmode && gstate.getTextureFunction() == 0) {
+			steps_[numSteps_++] = tcstep_prescale[tc];
 			decFmt.uvfmt = DEC_FLOAT_2;
-			break;
+		} else {
+			if (g_DoubleTextureCoordinates)
+				steps_[numSteps_++] = throughmode ? tcstep_through_Remaster[tc] : tcstep_Remaster[tc];
+			else
+				steps_[numSteps_++] = throughmode ? tcstep_through[tc] : tcstep[tc];
+
+			switch (tc) {
+			case GE_VTYPE_TC_8BIT >> GE_VTYPE_TC_SHIFT:
+				decFmt.uvfmt = throughmode ? DEC_U8A_2 : DEC_U8_2;
+				break;
+			case GE_VTYPE_TC_16BIT >> GE_VTYPE_TC_SHIFT:
+				decFmt.uvfmt = throughmode ? DEC_U16A_2 : DEC_U16_2;
+				break;
+			case GE_VTYPE_TC_FLOAT >> GE_VTYPE_TC_SHIFT:
+				decFmt.uvfmt = DEC_FLOAT_2;
+				break;
+			}
 		}
 
 		decFmt.uvoff = decOff;

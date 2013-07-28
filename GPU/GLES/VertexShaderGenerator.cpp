@@ -22,11 +22,12 @@
 #include <windows.h>
 #endif
 
-#include "../ge_constants.h"
-#include "../GPUState.h"
-#include "../../Core/Config.h"
+#include "base/stringutil.h"
+#include "GPU/ge_constants.h"
+#include "GPU/GPUState.h"
+#include "Core/Config.h"
 
-#include "VertexShaderGenerator.h"
+#include "GPU/GLES/VertexShaderGenerator.h"
 
 // SDL 1.2 on Apple does not have support for OpenGL 3 and hence needs
 // special treatment in the shader generator.
@@ -42,6 +43,13 @@ bool CanUseHardwareTransform(int prim) {
 	if (!g_Config.bHardwareTransform)
 		return false;
 	return !gstate.isModeThrough() && prim != GE_PRIM_RECTANGLES;
+}
+
+int TranslateNumBones(int bones) {
+	if (!bones) return 0;
+	if (bones < 4) return 4;
+	// if (bones < 8) return 8;   I get drawing problems in FF:CC with this!
+	return bones;
 }
 
 // prim so we can special case for RECTANGLES :(
@@ -70,7 +78,6 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim, bool useHWTransform) {
 	if (useHWTransform) {
 		id->d[0] |= 1 << 8;
 		id->d[0] |= (hasNormal & 1) << 9;
-		id->d[0] |= (hasBones & 1) << 10;
 
 		// UV generation mode
 		id->d[0] |= gstate.getUVGenMode() << 16;
@@ -84,12 +91,11 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim, bool useHWTransform) {
 		}
 
 		// Bones
-		id->d[0] |= (gstate.getNumBoneWeights() - 1) << 22;
+		if (hasBones)
+			id->d[0] |= (TranslateNumBones(gstate.getNumBoneWeights()) - 1) << 22;
 
 		// Okay, d[1] coming up. ==============
 
-		id->d[1] |= gstate.isLightingEnabled() << 24;
-		id->d[1] |= ((vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT) << 25;
 		if (gstate.isLightingEnabled() || gstate.getUVGenMode() == 2) {
 			// Light bits
 			for (int i = 0; i < 4; i++) {
@@ -101,10 +107,13 @@ void ComputeVertexShaderID(VertexShaderID *id, int prim, bool useHWTransform) {
 				id->d[1] |= (gstate.isLightChanEnabled(i) & 1) << (20 + i);
 			}
 		}
+		id->d[1] |= gstate.isLightingEnabled() << 24;
+		id->d[1] |= ((vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT) << 25;
 	}
 }
 
-static const char * const boneWeightAttrDecl[8] = {
+static const char * const boneWeightAttrDecl[9] = {
+	"#ERROR#",
 	"attribute mediump float a_w1;\n",
 	"attribute mediump vec2 a_w1;\n",
 	"attribute mediump vec3 a_w1;\n",
@@ -112,7 +121,7 @@ static const char * const boneWeightAttrDecl[8] = {
 	"attribute mediump vec4 a_w1;\nattribute mediump float a_w2;\n",
 	"attribute mediump vec4 a_w1;\nattribute mediump vec2 a_w2;\n",
 	"attribute mediump vec4 a_w1;\nattribute mediump vec3 a_w2;\n",
-	"attribute mediump vec4 a_w1;\nattribute mediump vec4 a_w2;\n",
+	"attribute mediump vec4 a_w1, a_w2;\n",
 };
 
 enum DoLightComputation {
@@ -165,7 +174,7 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 	}
 
 	if ((vertType & GE_VTYPE_WEIGHT_MASK) != GE_VTYPE_WEIGHT_NONE) {
-		WRITE(p, "%s", boneWeightAttrDecl[gstate.getNumBoneWeights() - 1]);
+		WRITE(p, "%s", boneWeightAttrDecl[TranslateNumBones(gstate.getNumBoneWeights())]);
 	}
 
 	if (useHWTransform)
@@ -202,7 +211,7 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 		if (gstate.getUVGenMode() == 1)
 			WRITE(p, "uniform mediump mat4 u_texmtx;\n");
 		if ((vertType & GE_VTYPE_WEIGHT_MASK) != GE_VTYPE_WEIGHT_NONE) {
-			int numBones = 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT);
+			int numBones = TranslateNumBones(gstate.getNumBoneWeights());
 #ifdef USE_BONE_ARRAY
 			WRITE(p, "uniform mediump mat4 u_bone[%i];\n", numBones);
 #else
@@ -298,10 +307,10 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 			else
 				WRITE(p, "  vec3 worldnormal = vec3(0.0, 0.0, 1.0);\n");
 		} else {
-			int numWeights = 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT);
+			int numWeights = TranslateNumBones(gstate.getNumBoneWeights());
 
-			static const float rescale[4] = {0, 2*127.5f/128.f, 2*32767.5f/32768.f, 2.0f};
-			float factor = rescale[(vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT];
+			static const char *rescale[4] = {"", " * 1.9921875", " * 1.999969482421875", ""}; // 2*127.5f/128.f, 2*32767.5f/32768.f, 1.0f};
+			const char *factor = rescale[(vertType & GE_VTYPE_WEIGHT_MASK) >> GE_VTYPE_WEIGHT_SHIFT];
 
 			static const char * const boneWeightAttr[8] = {
 				"a_w1.x", "a_w1.y", "a_w1.z", "a_w1.w",
@@ -365,11 +374,11 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 			WRITE(p, ";\n");
 
 			// Trying to simplify this results in bugs in LBP...
-			WRITE(p, "  vec3 skinnedpos = (skinMatrix * vec4(a_position, 1.0)).xyz * %f;\n", factor);
+			WRITE(p, "  vec3 skinnedpos = (skinMatrix * vec4(a_position, 1.0)).xyz %s;\n", factor);
 			WRITE(p, "  vec3 worldpos = (u_world * vec4(skinnedpos, 1.0)).xyz;\n");
 
 			if (hasNormal) {
-				WRITE(p, "  vec3 skinnednormal = (skinMatrix * vec4(a_normal, 0.0)).xyz * %f;\n", factor);
+				WRITE(p, "  vec3 skinnednormal = (skinMatrix * vec4(a_normal, 0.0)).xyz %s;\n", factor);
 				WRITE(p, "  vec3 worldnormal = normalize((u_world * vec4(skinnednormal, 0.0)).xyz);\n");
 			} else {
 				WRITE(p, "  vec3 worldnormal = (u_world * (skinMatrix * vec4(0.0, 0.0, 1.0, 0.0))).xyz;\n");
@@ -407,7 +416,6 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 
 			if (!specularIsZero) {
 				WRITE(p, "  lowp vec3 lightSum1 = vec3(0.0);\n");
-				WRITE(p, "  mediump vec3 halfVec;\n");
 			}
 			if (!diffuseIsZero) {
 				WRITE(p, "  vec3 toLight;\n");
@@ -470,8 +478,7 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 
 			WRITE(p, "  diffuse = (u_lightdiffuse%i * %s) * max(dot%i, 0.0);\n", i, diffuseStr, i);
 			if (doSpecular) {
-				WRITE(p, "  halfVec = normalize(toLight + vec3(0.0, 0.0, 1.0));\n");
-				WRITE(p, "  dot%i = dot(halfVec, worldnormal);\n", i);
+				WRITE(p, "  dot%i = dot(normalize(toLight + vec3(0.0, 0.0, 1.0)), worldnormal);\n", i);
 				WRITE(p, "  if (dot%i > 0.0)\n", i);
 				WRITE(p, "    lightSum1 += u_lightspecular%i * %s * (pow(dot%i, u_matspecular.a) %s);\n", i, specularStr, i, timesLightScale);
 			}
@@ -508,20 +515,30 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 
 		// Step 3: UV generation
 		if (doTexture) {
+			bool prescale = g_Config.bPrescaleUV && !throughmode && gstate.getTextureFunction() == 0;
+
 			switch (gstate.getUVGenMode()) {
 			case 0:  // Scale-offset. Easy.
-				WRITE(p, "  v_texcoord = a_texcoord * u_uvscaleoffset.xy + u_uvscaleoffset.zw;\n");
+				if (prescale) {
+					WRITE(p, "  v_texcoord = a_texcoord;\n");
+				} else {
+					WRITE(p, "  v_texcoord = a_texcoord * u_uvscaleoffset.xy + u_uvscaleoffset.zw;\n");
+				}
 				break;
 
 			case 1:  // Projection mapping.
 				{
-					const char *temp_tc;
+					std::string temp_tc;
 					switch (gstate.getUVProjMode()) {
 					case 0:  // Use model space XYZ as source
 						temp_tc = "vec4(a_position.xyz, 1.0)";
 						break;
 					case 1:  // Use unscaled UV as source
-						temp_tc = "vec4(a_texcoord.xy * 2.0, 0.0, 1.0)";
+						{
+							static const char *rescaleuv[4] = {"", " * 1.9921875", " * 1.999969482421875", ""}; // 2*127.5f/128.f, 2*32767.5f/32768.f, 1.0f};
+							const char *factor = rescaleuv[(vertType & GE_VTYPE_TC_MASK) >> GE_VTYPE_TC_SHIFT];
+							temp_tc = StringFromFormat("vec4(a_texcoord.xy %s, 0.0, 1.0)", factor);
+						}
 						break;
 					case 2:  // Use normalized transformed normal as source
 						if (hasNormal)
@@ -536,7 +553,7 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 							temp_tc = "vec4(0.0, 0.0, 1.0, 1.0)";
 						break;
 					}
-					WRITE(p, "  v_texcoord = (u_texmtx * %s).xyz * vec3(u_uvscaleoffset.xy, 1.0);\n", temp_tc);
+					WRITE(p, "  v_texcoord = (u_texmtx * %s).xyz * vec3(u_uvscaleoffset.xy, 1.0);\n", temp_tc.c_str());
 				}
 				// Transform by texture matrix. XYZ as we are doing projection mapping.
 				break;

@@ -187,6 +187,7 @@
     <ClCompile Include="FileSystems\ISOFileSystem.cpp" />
     <ClCompile Include="FileSystems\MetaFileSystem.cpp" />
     <ClCompile Include="FileSystems\tlzrc.cpp" />
+    <ClCompile Include="FileSystems\VirtualDiscFileSystem.cpp" />
     <ClCompile Include="Font\PGF.cpp" />
     <ClCompile Include="HDRemaster.cpp" />
     <ClCompile Include="HLE\HLE.cpp" />
@@ -311,6 +312,8 @@
     <ClCompile Include="MIPS\JitCommon\JitCommon.cpp" />
     <ClCompile Include="Mips\MIPS.cpp" />
     <ClCompile Include="Mips\MIPSAnalyst.cpp" />
+    <ClCompile Include="MIPS\MIPSAsm.cpp" />
+    <ClCompile Include="MIPS\MIPSAsmTables.cpp" />
     <ClCompile Include="Mips\MIPSCodeUtils.cpp" />
     <ClCompile Include="MIPS\MIPSDebugInterface.cpp" />
     <ClCompile Include="Mips\MIPSDis.cpp" />
@@ -369,6 +372,7 @@
     <ClInclude Include="FileSystems\FileSystem.h" />
     <ClInclude Include="FileSystems\ISOFileSystem.h" />
     <ClInclude Include="FileSystems\MetaFileSystem.h" />
+    <ClInclude Include="FileSystems\VirtualDiscFileSystem.h" />
     <ClInclude Include="Font\PGF.h" />
     <ClInclude Include="HDRemaster.h" />
     <ClInclude Include="HLE\FunctionWrappers.h" />
@@ -463,6 +467,8 @@
     <ClInclude Include="MIPS\JitCommon\JitCommon.h" />
     <ClInclude Include="Mips\MIPS.h" />
     <ClInclude Include="Mips\MIPSAnalyst.h" />
+    <ClInclude Include="MIPS\MIPSAsm.h" />
+    <ClInclude Include="MIPS\MIPSAsmTables.h" />
     <ClInclude Include="Mips\MIPSCodeUtils.h" />
     <ClInclude Include="MIPS\MIPSDebugInterface.h" />
     <ClInclude Include="Mips\MIPSDis.h" />

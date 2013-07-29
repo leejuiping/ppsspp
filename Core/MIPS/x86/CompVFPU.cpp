@@ -372,6 +372,40 @@ void Jit::Comp_VVectorInit(u32 op) {
 	fpr.ReleaseSpillLocks();
 }
 
+
+
+void Jit::Comp_VIdt(u32 op) {
+	CONDITIONAL_DISABLE;
+
+	int vd = _VD;
+	VectorSize sz = GetVecSize(op);
+	int n = GetNumVectorElements(sz);
+	XORPS(XMM0, R(XMM0));
+	MOVSS(XMM1, M((void *) &one));
+	u8 dregs[4];
+	GetVectorRegsPrefixD(dregs, sz, _VD);
+	fpr.MapRegsV(dregs, sz, MAP_NOINIT | MAP_DIRTY);
+	switch (sz)
+	{
+	case V_Pair:
+		MOVSS(fpr.VX(dregs[0]), R((vd&1)==0 ? XMM1 : XMM0));
+		MOVSS(fpr.VX(dregs[1]), R((vd&1)==1 ? XMM1 : XMM0));
+		break;
+	case V_Quad:
+		MOVSS(fpr.VX(dregs[0]), R((vd&3)==0 ? XMM1 : XMM0));
+		MOVSS(fpr.VX(dregs[1]), R((vd&3)==1 ? XMM1 : XMM0));
+		MOVSS(fpr.VX(dregs[2]), R((vd&3)==2 ? XMM1 : XMM0));
+		MOVSS(fpr.VX(dregs[3]), R((vd&3)==3 ? XMM1 : XMM0));
+		break;
+	default:
+		_dbg_assert_msg_(CPU,0,"Trying to interpret instruction that can't be interpreted");
+		break;
+	}
+	ApplyPrefixD(dregs, sz);
+	fpr.ReleaseSpillLocks();
+}
+
+
 void Jit::Comp_VDot(u32 op) {
 	CONDITIONAL_DISABLE;
 
@@ -395,8 +429,9 @@ void Jit::Comp_VDot(u32 op) {
 	}
 
 	// Need to start with +0.0f so it doesn't result in -0.0f.
-	XORPS(tempxreg, R(tempxreg));
-	for (int i = 0; i < n; i++)
+	MOVSS(tempxreg, fpr.V(sregs[0]));
+	MULSS(tempxreg, fpr.V(tregs[0]));
+	for (int i = 1; i < n; i++)
 	{
 		// sum += s[i]*t[i];
 		MOVSS(XMM1, fpr.V(sregs[i]));
@@ -404,8 +439,55 @@ void Jit::Comp_VDot(u32 op) {
 		ADDSS(tempxreg, R(XMM1));
 	}
 
-	if (!fpr.V(dregs[0]).IsSimpleReg(tempxreg))
+	if (!fpr.V(dregs[0]).IsSimpleReg(tempxreg)) {
+		fpr.MapRegsV(dregs, V_Single, MAP_NOINIT);
+		MOVSS(fpr.V(dregs[0]), tempxreg);
+	}
+
+	ApplyPrefixD(dregs, V_Single);
+
+	fpr.ReleaseSpillLocks();
+}
+
+
+void Jit::Comp_VHdp(u32 op) {
+	CONDITIONAL_DISABLE;
+
+	if (js.HasUnknownPrefix())
+		DISABLE;
+
+	VectorSize sz = GetVecSize(op);
+	int n = GetNumVectorElements(sz);
+
+	// TODO: Force read one of them into regs? probably not.
+	u8 sregs[4], tregs[4], dregs[1];
+	GetVectorRegsPrefixS(sregs, sz, _VS);
+	GetVectorRegsPrefixT(tregs, sz, _VT);
+	GetVectorRegsPrefixD(dregs, V_Single, _VD);
+
+	X64Reg tempxreg = XMM0;
+	if (IsOverlapSafe(dregs[0], 0, n, sregs, n, tregs))
 	{
+		fpr.MapRegsV(dregs, V_Single, MAP_NOINIT);
+		tempxreg = fpr.VX(dregs[0]);
+	}
+
+	// Need to start with +0.0f so it doesn't result in -0.0f.
+	MOVSS(tempxreg, fpr.V(sregs[0]));
+	MULSS(tempxreg, fpr.V(tregs[0]));
+	for (int i = 1; i < n; i++)
+	{
+		// sum += (i == n-1) ? t[i] : s[i]*t[i];
+		if (i == n - 1) {
+			ADDSS(tempxreg, fpr.V(tregs[i]));
+		} else {
+			MOVSS(XMM1, fpr.V(sregs[i]));
+			MULSS(XMM1, fpr.V(tregs[i]));
+			ADDSS(tempxreg, R(XMM1));
+		}
+	}
+
+	if (!fpr.V(dregs[0]).IsSimpleReg(tempxreg)) {
 		fpr.MapRegsV(dregs, V_Single, MAP_NOINIT);
 		MOVSS(fpr.V(dregs[0]), tempxreg);
 	}
@@ -935,36 +1017,52 @@ void Jit::Comp_Vmmul(u32 op) {
 	GetMatrixRegs(tregs, sz, _VT);
 	GetMatrixRegs(dregs, sz, _VD);
 
-	// TODO: test overlap, fix non-optimal.
-	u8 tempregs[16];
-	for (int a = 0; a < n; a++)
-	{
-		for (int b = 0; b < n; b++)
-		{
-			XORPS(XMM0, R(XMM0));
-			for (int c = 0; c < n; c++)
-			{
-				MOVSS(XMM1, fpr.V(sregs[b * 4 + c]));
-				MULSS(XMM1, fpr.V(tregs[a * 4 + c]));
-				ADDSS(XMM0, R(XMM1));
-			}
-			u8 temp = (u8) fpr.GetTempV();
-			fpr.MapRegV(temp, MAP_NOINIT | MAP_DIRTY);
-			MOVSS(fpr.VX(temp), R(XMM0));
-			fpr.StoreFromRegisterV(temp);
-			tempregs[a * 4 + b] = temp;
-		}
-	}
-	for (int a = 0; a < n; a++)
-	{
-		for (int b = 0; b < n; b++)
-		{
-			u8 temp = tempregs[a * 4 + b];
-			fpr.MapRegV(temp, 0);
-			MOVSS(fpr.V(dregs[a * 4 + b]), fpr.VX(temp));
-		}
+	// Rough overlap check.
+	bool overlap = false;
+	if (GetMtx(_VS) == GetMtx(_VD) || GetMtx(_VT) == GetMtx(_VD)) {
+		// Potential overlap (guaranteed for 3x3 or more).
+		overlap = true;
 	}
 
+	if (overlap) {
+		u8 tempregs[16];
+		for (int a = 0; a < n; a++) {
+			for (int b = 0; b < n; b++) {
+				MOVSS(XMM0, fpr.V(sregs[b * 4]));
+				MULSS(XMM0, fpr.V(tregs[a * 4]));
+				for (int c = 1; c < n; c++) {
+					MOVSS(XMM1, fpr.V(sregs[b * 4 + c]));
+					MULSS(XMM1, fpr.V(tregs[a * 4 + c]));
+					ADDSS(XMM0, R(XMM1));
+				}
+				u8 temp = (u8) fpr.GetTempV();
+				fpr.MapRegV(temp, MAP_NOINIT | MAP_DIRTY);
+				MOVSS(fpr.VX(temp), R(XMM0));
+				fpr.StoreFromRegisterV(temp);
+				tempregs[a * 4 + b] = temp;
+			}
+		}
+		for (int a = 0; a < n; a++) {
+			for (int b = 0; b < n; b++) {
+				u8 temp = tempregs[a * 4 + b];
+				fpr.MapRegV(temp, 0);
+				MOVSS(fpr.V(dregs[a * 4 + b]), fpr.VX(temp));
+			}
+		}
+	} else {
+		for (int a = 0; a < n; a++) {
+			for (int b = 0; b < n; b++) {
+				MOVSS(XMM0, fpr.V(sregs[b * 4]));
+				MULSS(XMM0, fpr.V(tregs[a * 4]));
+				for (int c = 1; c < n; c++) {
+					MOVSS(XMM1, fpr.V(sregs[b * 4 + c]));
+					MULSS(XMM1, fpr.V(tregs[a * 4 + c]));
+					ADDSS(XMM0, R(XMM1));
+				}
+				MOVSS(fpr.V(dregs[a * 4 + b]), XMM0);
+			}
+		}
+	}
 	fpr.ReleaseSpillLocks();
 }
 
@@ -1044,10 +1142,10 @@ void Jit::Comp_Vtfm(u32 op) {
 
 	// TODO: test overlap, optimize.
 	u8 tempregs[4];
-	for (int i = 0; i < n; i++)
-	{
-		XORPS(XMM0, R(XMM0));
-		for (int k = 0; k < n; k++)
+	for (int i = 0; i < n; i++) {
+		MOVSS(XMM0, fpr.V(sregs[i * 4]));
+		MULSS(XMM0, fpr.V(tregs[0]));
+		for (int k = 1; k < n; k++)
 		{
 			MOVSS(XMM1, fpr.V(sregs[i * 4 + k]));
 			if (!homogenous || k != n - 1)
@@ -1061,8 +1159,7 @@ void Jit::Comp_Vtfm(u32 op) {
 		fpr.StoreFromRegisterV(temp);
 		tempregs[i] = temp;
 	}
-	for (int i = 0; i < n; i++)
-	{
+	for (int i = 0; i < n; i++) {
 		u8 temp = tempregs[i];
 		fpr.MapRegV(temp, 0);
 		MOVSS(fpr.V(dregs[i]), fpr.VX(temp));
@@ -1071,10 +1168,6 @@ void Jit::Comp_Vtfm(u32 op) {
 	fpr.ReleaseSpillLocks();
 }
 
-
-void Jit::Comp_VHdp(u32 op) {
-	DISABLE;
-}
 
 void Jit::Comp_VCrs(u32 op) {
 	DISABLE;
@@ -1098,6 +1191,90 @@ void Jit::Comp_Vf2i(u32 op) {
 
 void Jit::Comp_Vhoriz(u32 op) {
 	DISABLE;
+}
+
+static float sincostemp[2];
+
+void SinCos(float angle) {
+#ifndef M_PI_2
+#define M_PI_2     1.57079632679489661923
+#endif
+	angle *= (float)M_PI_2;
+	sincostemp[0] = sinf(angle);
+	sincostemp[1] = cosf(angle);
+}
+
+void SinCosNegSin(float angle) {
+#ifndef M_PI_2
+#define M_PI_2     1.57079632679489661923
+#endif
+	angle *= (float)M_PI_2;
+	sincostemp[0] = -sinf(angle);
+	sincostemp[1] = cosf(angle);
+}
+// Very heavily used by FF:CC
+void Jit::Comp_VRot(u32 op) {
+	// DISABLE;
+	CONDITIONAL_DISABLE;
+
+	int vd = _VD;
+	int vs = _VS;
+
+	VectorSize sz = GetVecSize(op);
+	int n = GetNumVectorElements(sz);
+
+	u8 dregs[4];
+	u8 sreg;
+	GetVectorRegs(dregs, sz, vd);
+	GetVectorRegs(&sreg, V_Single, vs);
+
+	int imm = (op >> 16) & 0x1f;
+
+	gpr.FlushBeforeCall();
+	fpr.Flush();
+
+	bool negSin = (imm & 0x10) ? true : false;
+
+#ifdef _M_X64
+	MOVSS(XMM0, fpr.V(sreg));
+	ABI_CallFunction(negSin ? (void *)&SinCosNegSin : (void *)&SinCos);
+#else
+	// Sigh, passing floats with cdecl isn't pretty.
+	MOVSS(XMM0, fpr.V(sreg));
+	SUB(32, R(ESP), Imm32(4));
+	MOVSS(MatR(ESP), XMM0);
+	ABI_CallFunction(negSin ? (void *)&SinCosNegSin : (void *)&SinCos);
+	ADD(32, R(ESP), Imm32(4));
+#endif
+
+	MOVSS(XMM0, M(&sincostemp[0]));
+	MOVSS(XMM1, M(&sincostemp[1]));
+	
+	char what[4] = {'0', '0', '0', '0'};
+	if (((imm >> 2) & 3) == (imm & 3)) {
+		for (int i = 0; i < 4; i++)
+			what[i] = 'S';
+	}
+	what[(imm >> 2) & 3] = 'S';
+	what[imm & 3] = 'C';
+
+	for (int i = 0; i < n; i++) {
+		fpr.MapRegV(dregs[i], MAP_DIRTY | MAP_NOINIT);
+		switch (what[i]) {
+		case 'C': MOVSS(fpr.V(dregs[i]), XMM1); break;
+		case 'S': MOVSS(fpr.V(dregs[i]), XMM0); break;
+		case '0':
+			{
+				XORPS(fpr.VX(dregs[i]), fpr.V(dregs[i]));
+				break;
+			}
+		default:
+			ERROR_LOG(HLE, "Bad what in vrot");
+			break;
+		}
+	}
+
+	fpr.ReleaseSpillLocks();
 }
 
 }

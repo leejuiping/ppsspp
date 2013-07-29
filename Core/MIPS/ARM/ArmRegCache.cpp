@@ -29,7 +29,7 @@ ArmRegCache::ArmRegCache(MIPSState *mips, MIPSComp::ArmJitOptions *options) : mi
 }
 
 void ArmRegCache::Init(ARMXEmitter *emitter) {
-	emit = emitter;
+	emit_ = emitter;
 }
 
 void ArmRegCache::Start(MIPSAnalyst::AnalysisResults &stats) {
@@ -67,6 +67,13 @@ const ARMReg *ArmRegCache::GetMIPSAllocationOrder(int &count) {
 	}
 }
 
+void ArmRegCache::FlushBeforeCall() {
+	// R4-R11 are preserved. Others need flushing.
+	FlushArmReg(R2);
+	FlushArmReg(R3);
+	FlushArmReg(R12);
+}
+
 // TODO: Somewhat smarter spilling - currently simply spills the first available, should do
 // round robin or FIFO or something.
 ARMReg ArmRegCache::MapReg(MIPSReg mipsReg, int mapFlags) {
@@ -98,14 +105,14 @@ allocate:
 			if (!(mapFlags & MAP_NOINIT)) {
 				if (mr[mipsReg].loc == ML_MEM) {
 					if (mipsReg != 0) {
-						emit->LDR((ARMReg)reg, CTXREG, GetMipsRegOffset(mipsReg));
+						emit_->LDR((ARMReg)reg, CTXREG, GetMipsRegOffset(mipsReg));
 					} else {
 						// If we get a request to load the zero register, at least we won't spend
 						// time on a memory access...
-						emit->MOV((ARMReg)reg, 0);
+						emit_->MOV((ARMReg)reg, 0);
 					}
 				} else if (mr[mipsReg].loc == ML_IMM) {
-					emit->MOVI2R((ARMReg)reg, mr[mipsReg].imm);
+					emit_->MOVI2R((ARMReg)reg, mr[mipsReg].imm);
 					ar[reg].isDirty = true;  // IMM is always dirty.
 				}
 			}
@@ -181,7 +188,7 @@ void ArmRegCache::FlushArmReg(ARMReg r) {
 	}
 	if (ar[r].mipsReg != -1) {
 		if (ar[r].isDirty && mr[ar[r].mipsReg].loc == ML_ARMREG)
-			emit->STR(r, CTXREG, GetMipsRegOffset(ar[r].mipsReg));
+			emit_->STR(r, CTXREG, GetMipsRegOffset(ar[r].mipsReg));
 		// IMMs won't be in an ARM reg.
 		mr[ar[r].mipsReg].loc = ML_MEM;
 		mr[ar[r].mipsReg].reg = INVALID_REG;
@@ -197,8 +204,8 @@ void ArmRegCache::FlushR(MIPSReg r) {
 	switch (mr[r].loc) {
 	case ML_IMM:
 		// IMM is always "dirty".
-		emit->MOVI2R(R0, mr[r].imm);
-		emit->STR(R0, CTXREG, GetMipsRegOffset(r));
+		emit_->MOVI2R(R0, mr[r].imm);
+		emit_->STR(R0, CTXREG, GetMipsRegOffset(r));
 		break;
 
 	case ML_ARMREG:
@@ -206,7 +213,7 @@ void ArmRegCache::FlushR(MIPSReg r) {
 			ERROR_LOG(HLE, "FlushMipsReg: MipsReg had bad ArmReg");
 		}
 		if (ar[mr[r].reg].isDirty) {
-			emit->STR((ARMReg)mr[r].reg, CTXREG, GetMipsRegOffset(r));
+			emit_->STR((ARMReg)mr[r].reg, CTXREG, GetMipsRegOffset(r));
 			ar[mr[r].reg].isDirty = false;
 		}
 		ar[mr[r].reg].mipsReg = -1;
@@ -288,6 +295,10 @@ void ArmRegCache::ReleaseSpillLocks() {
 	for (int i = 0; i < NUM_MIPSREG; i++) {
 		mr[i].spillLock = false;
 	}
+}
+
+void ArmRegCache::ReleaseSpillLock(MIPSReg reg) {
+	mr[reg].spillLock = false;
 }
 
 ARMReg ArmRegCache::R(int mipsReg) {

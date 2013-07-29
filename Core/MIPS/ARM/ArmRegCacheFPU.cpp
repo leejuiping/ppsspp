@@ -15,6 +15,7 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "base/logging.h"
 #include "Common/ArmEmitter.h"
 #include "Common/CPUDetect.h"
 #include "Core/MIPS/ARM/ArmRegCacheFPU.h"
@@ -27,7 +28,7 @@ ArmRegCacheFPU::ArmRegCacheFPU(MIPSState *mips) : mips_(mips), vr(mr + 32) {
 }
 
 void ArmRegCacheFPU::Init(ARMXEmitter *emitter) {
-	emit = emitter;
+	emit_ = emitter;
 }
 
 void ArmRegCacheFPU::Start(MIPSAnalyst::AnalysisResults &stats) {
@@ -92,7 +93,7 @@ allocate:
 			ar[reg].isDirty = (mapFlags & MAP_DIRTY) ? true : false;
 			if (!(mapFlags & MAP_NOINIT)) {
 				if (mr[mipsReg].loc == ML_MEM && mipsReg < TEMP0) {
-					emit->VLDR((ARMReg)(reg + S0), CTXREG, GetMipsRegOffset(mipsReg));
+					emit_->VLDR((ARMReg)(reg + S0), CTXREG, GetMipsRegOffset(mipsReg));
 				}
 			}
 			ar[reg].mipsReg = mipsReg;
@@ -166,6 +167,15 @@ void ArmRegCacheFPU::MapRegV(int vreg, int flags) {
 	MapReg(vreg + 32, flags);
 }
 
+void ArmRegCacheFPU::LoadToRegV(ARMReg armReg, int vreg) {
+	if (vr[vreg].loc == ML_ARMREG) {
+		emit_->VMOV(armReg, vr[vreg].reg);
+	} else {
+		MapRegV(vreg);
+		emit_->VMOV(armReg, V(vreg));
+	}
+}
+
 void ArmRegCacheFPU::MapRegsV(int vec, VectorSize sz, int flags) {
 	u8 v[4];
 	GetVectorRegs(v, sz, vec);
@@ -182,6 +192,25 @@ void ArmRegCacheFPU::MapRegsV(const u8 *v, VectorSize sz, int flags) {
 	}
 }
 
+void ArmRegCacheFPU::MapInInV(int vs, int vt) {
+	SpillLockV(vs);
+	SpillLockV(vt);
+	MapRegV(vs);
+	MapRegV(vt);
+	ReleaseSpillLockV(vs);
+	ReleaseSpillLockV(vt);
+}
+
+void ArmRegCacheFPU::MapDirtyInV(int vd, int vs, bool avoidLoad) {
+	bool overlap = avoidLoad && (vd == vs);
+	SpillLockV(vd);
+	SpillLockV(vs);
+	MapRegV(vd, MAP_DIRTY | (overlap ? 0 : MAP_NOINIT));
+	MapRegV(vs);
+	ReleaseSpillLockV(vd);
+	ReleaseSpillLockV(vs);
+}
+
 void ArmRegCacheFPU::FlushArmReg(ARMReg r) {
 	int reg = r - S0;
 	if (ar[reg].mipsReg == -1) {
@@ -192,7 +221,7 @@ void ArmRegCacheFPU::FlushArmReg(ARMReg r) {
 		if (ar[reg].isDirty && mr[ar[reg].mipsReg].loc == ML_ARMREG)
 		{
 			//INFO_LOG(HLE, "Flushing ARM reg %i", reg);
-			emit->VSTR(r, CTXREG, GetMipsRegOffset(ar[reg].mipsReg));
+			emit_->VSTR(r, CTXREG, GetMipsRegOffset(ar[reg].mipsReg));
 		}
 		// IMMs won't be in an ARM reg.
 		mr[ar[reg].mipsReg].loc = ML_MEM;
@@ -218,7 +247,7 @@ void ArmRegCacheFPU::FlushR(MIPSReg r) {
 		}
 		if (ar[mr[r].reg].isDirty) {
 			//INFO_LOG(HLE, "Flushing dirty reg %i", mr[r].reg);
-			emit->VSTR((ARMReg)(mr[r].reg + S0), CTXREG, GetMipsRegOffset(r));
+			emit_->VSTR((ARMReg)(mr[r].reg + S0), CTXREG, GetMipsRegOffset(r));
 			ar[mr[r].reg].isDirty = false;
 		}
 		ar[mr[r].reg].mipsReg = -1;

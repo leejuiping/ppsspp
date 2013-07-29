@@ -784,6 +784,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/FileSystems/ISOFileSystem.h
 	Core/FileSystems/MetaFileSystem.cpp
 	Core/FileSystems/MetaFileSystem.h
+	Core/FileSystems/VirtualDiscFileSystem.cpp
+	Core/FileSystems/VirtualDiscFileSystem.h
 	Core/Font/PGF.cpp
 	Core/Font/PGF.h
 	Core/HLE/FunctionWrappers.h
@@ -935,6 +937,10 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/MIPS/MIPSTables.h
 	Core/MIPS/MIPSVFPUUtils.cpp
 	Core/MIPS/MIPSVFPUUtils.h
+	Core/MIPS/MIPSAsmTables.cpp
+	Core/MIPS/MIPSAsmTables.h
+	Core/MIPS/MIPSAsm.cpp
+	Core/MIPS/MIPSAsm.h
 	Core/MemMap.cpp
 	Core/MemMap.h
 	Core/MemMapFunctions.cpp

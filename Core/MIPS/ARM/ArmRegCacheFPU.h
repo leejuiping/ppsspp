@@ -79,6 +79,8 @@ public:
 	// Returns an ARM register containing the requested MIPS register.
 	ARMReg MapReg(MIPSReg reg, int mapFlags = 0);
 	void MapInIn(MIPSReg rd, MIPSReg rs);
+	void MapInInV(int rt, int rs);
+	void MapDirtyInV(int rd, int rs, bool avoidLoad = true);
 	void MapDirty(MIPSReg rd);
 	void MapDirtyIn(MIPSReg rd, MIPSReg rs, bool avoidLoad = true);
 	void MapDirtyInIn(MIPSReg rd, MIPSReg rs, MIPSReg rt, bool avoidLoad = true);
@@ -102,6 +104,8 @@ public:
 
 	void MapRegV(int vreg, int flags = 0);
 
+	void LoadToRegV(ARMReg armReg, int vreg);
+
 	// NOTE: These require you to release spill locks manually!
 	void MapRegsV(int vec, VectorSize vsz, int flags);
 	void MapRegsV(const u8 *v, VectorSize vsz, int flags);
@@ -109,7 +113,7 @@ public:
 	void SpillLockV(const u8 *v, VectorSize vsz);
 	void SpillLockV(int vec, VectorSize vsz);
 
-	void SetEmitter(ARMXEmitter *emitter) { emit = emitter; }
+	void SetEmitter(ARMXEmitter *emitter) { emit_ = emitter; }
 
 	// For better log output only.
 	void SetCompilerPC(u32 compilerPC) { compilerPC_ = compilerPC; }
@@ -121,7 +125,7 @@ public:
 
 private:
 	MIPSState *mips_;
-	ARMXEmitter *emit;
+	ARMXEmitter *emit_;
 	u32 compilerPC_;
 
 	enum {

@@ -19,7 +19,7 @@
 #include <locale.h>
 
 #if defined(_WIN32) && defined(_DEBUG)
-#include <windows.h>
+#include "Common/CommonWindows.h"
 #endif
 
 #include "base/stringutil.h"
@@ -562,7 +562,7 @@ void GenerateVertexShader(int prim, char *buffer, bool useHWTransform) {
 				WRITE(p, "  v_texcoord = u_uvscaleoffset.xy * vec2(1.0 + dot(normalize(u_lightpos%i), worldnormal), 1.0 - dot(normalize(u_lightpos%i), worldnormal)) * 0.5;\n", gstate.getUVLS0(), gstate.getUVLS1());
 				break;
 
-			case 3:
+			default:
 				// ILLEGAL
 				break;
 			}

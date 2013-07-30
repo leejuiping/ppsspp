@@ -16,7 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #ifdef _WIN32
-#include <windows.h>
+#include "Common/CommonWindows.h"
 #include <WindowsX.h>
 #else
 #include <unistd.h>
@@ -219,6 +219,35 @@ void SymbolMap::SaveSymbolMap(const char *filename) const
 	fclose(f);
 }
 
+bool SymbolMap::LoadNocashSym(const char *filename)
+{
+	FILE *f = fopen(filename,"r");
+	if (!f)
+		return false;
+
+	while (!feof(f))
+	{
+		char line[256],value[256];
+		char *p = fgets(line,256,f);
+		if(p == NULL)
+			break;
+
+		u32 address;
+		if (sscanf(line,"%08X %s",&address,value) != 2) continue;
+		if (address == 0 && strcmp(value,"0") == 0) continue;
+
+		if (value[0] == '.')	// data directives
+		{
+			continue;			// not supported yet
+		} else {				// labels
+			AddSymbol(value,address,1,ST_FUNCTION);
+		}
+	}
+
+	fclose(f);
+	return true;
+}
+
 int SymbolMap::GetSymbolNum(unsigned int address, SymbolType symmask) const
 {
 	for (size_t i = 0, n = entries.size(); i < n; i++)
@@ -279,6 +308,13 @@ bool SymbolMap::GetSymbolInfo(SymbolInfo *info, u32 address, SymbolType symmask)
 
 const char* SymbolMap::getDirectSymbol(u32 address)
 {
+	SymbolInfo info;
+	if (GetSymbolInfo(&info,address) == false) return NULL;
+	if (info.address != address) return NULL;	// has to be the START of the function
+
+	// now we need the name... which we can't just get from GetSymbolInfo because of the
+	// unique entries. But, there are so many less instances where there actually IS a
+	// label that the speed up is still massive
 	for (auto it = entries.begin(), end = entries.end(); it != end; ++it)
 	{
 		const MapEntry &entry = *it;

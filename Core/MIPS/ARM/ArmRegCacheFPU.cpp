@@ -46,7 +46,6 @@ void ArmRegCacheFPU::Start(MIPSAnalyst::AnalysisResults &stats) {
 
 static const ARMReg *GetMIPSAllocationOrder(int &count) {
 	// We conservatively reserve both S0 and S1 as scratch for now.
-	// Will probably really only need one, if that.
 	static const ARMReg allocationOrder[] = {
 		S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14, S15
 	};
@@ -111,7 +110,7 @@ allocate:
 	int bestToSpill = -1;
 	for (int i = 0; i < allocCount; i++) {
 		int reg = allocOrder[i] - S0;
-		if (ar[reg].mipsReg != -1 && (mr[ar[reg].mipsReg].spillLock || mr[ar[reg].mipsReg].tempLock))
+		if (ar[reg].mipsReg != -1 && mr[ar[reg].mipsReg].spillLock)
 			continue;
 		bestToSpill = reg;
 		break;
@@ -131,7 +130,8 @@ void ArmRegCacheFPU::MapInIn(MIPSReg rd, MIPSReg rs) {
 	SpillLock(rd, rs);
 	MapReg(rd);
 	MapReg(rs);
-	ReleaseSpillLocks();
+	ReleaseSpillLock(rd);
+	ReleaseSpillLock(rs);
 }
 
 void ArmRegCacheFPU::MapDirtyIn(MIPSReg rd, MIPSReg rs, bool avoidLoad) {
@@ -139,7 +139,8 @@ void ArmRegCacheFPU::MapDirtyIn(MIPSReg rd, MIPSReg rs, bool avoidLoad) {
 	bool overlap = avoidLoad && rd == rs;
 	MapReg(rd, MAP_DIRTY | (overlap ? 0 : MAP_NOINIT));
 	MapReg(rs);
-	ReleaseSpillLocks();
+	ReleaseSpillLock(rd);
+	ReleaseSpillLock(rs);
 }
 
 void ArmRegCacheFPU::MapDirtyInIn(MIPSReg rd, MIPSReg rs, MIPSReg rt, bool avoidLoad) {
@@ -148,7 +149,9 @@ void ArmRegCacheFPU::MapDirtyInIn(MIPSReg rd, MIPSReg rs, MIPSReg rt, bool avoid
 	MapReg(rd, MAP_DIRTY | (overlap ? 0 : MAP_NOINIT));
 	MapReg(rt);
 	MapReg(rs);
-	ReleaseSpillLocks();
+	ReleaseSpillLock(rd);
+	ReleaseSpillLock(rs);
+	ReleaseSpillLock(rt);
 }
 
 void ArmRegCacheFPU::SpillLockV(const u8 *v, VectorSize sz) {
@@ -176,7 +179,7 @@ void ArmRegCacheFPU::LoadToRegV(ARMReg armReg, int vreg) {
 	}
 }
 
-void ArmRegCacheFPU::MapRegsV(int vec, VectorSize sz, int flags) {
+void ArmRegCacheFPU::MapRegsAndSpillLockV(int vec, VectorSize sz, int flags) {
 	u8 v[4];
 	GetVectorRegs(v, sz, vec);
 	SpillLockV(v, sz);
@@ -185,7 +188,7 @@ void ArmRegCacheFPU::MapRegsV(int vec, VectorSize sz, int flags) {
 	}
 }
 
-void ArmRegCacheFPU::MapRegsV(const u8 *v, VectorSize sz, int flags) {
+void ArmRegCacheFPU::MapRegsAndSpillLockV(const u8 *v, VectorSize sz, int flags) {
 	SpillLockV(v, sz);
 	for (int i = 0; i < GetNumVectorElements(sz); i++) {
 		MapRegV(v[i], flags);
@@ -209,6 +212,19 @@ void ArmRegCacheFPU::MapDirtyInV(int vd, int vs, bool avoidLoad) {
 	MapRegV(vs);
 	ReleaseSpillLockV(vd);
 	ReleaseSpillLockV(vs);
+}
+
+void ArmRegCacheFPU::MapDirtyInInV(int vd, int vs, int vt, bool avoidLoad) {
+	bool overlap = avoidLoad && ((vd == vs) || (vd == vt));
+	SpillLockV(vd);
+	SpillLockV(vs);
+	SpillLockV(vt);
+	MapRegV(vd, MAP_DIRTY | (overlap ? 0 : MAP_NOINIT));
+	MapRegV(vs);
+	MapRegV(vt);
+	ReleaseSpillLockV(vd);
+	ReleaseSpillLockV(vs);
+	ReleaseSpillLockV(vt);
 }
 
 void ArmRegCacheFPU::FlushArmReg(ARMReg r) {
@@ -293,7 +309,7 @@ void ArmRegCacheFPU::DiscardR(MIPSReg r) {
 	mr[r].loc = ML_MEM;
 	mr[r].reg = (int)INVALID_REG;
 	mr[r].tempLock = false;
-	// spill lock?
+	mr[r].spillLock = false;
 }
 
 
@@ -334,7 +350,7 @@ int ArmRegCacheFPU::GetMipsRegOffset(MIPSReg r) {
 	// These are offsets within the MIPSState structure. First there are the GPRS, then FPRS, then the "VFPURs".
 	if (r < 32 + 128 + NUM_TEMPS)
 		return (r + 32) << 2;
-	ERROR_LOG(JIT, "bad mips register %i", r);
+	ERROR_LOG(JIT, "bad mips register %i, out of range", r);
 	return 0;  // or what?
 }
 
@@ -346,7 +362,7 @@ void ArmRegCacheFPU::SpillLock(MIPSReg r1, MIPSReg r2, MIPSReg r3, MIPSReg r4) {
 }
 
 // This is actually pretty slow with all the 160 regs...
-void ArmRegCacheFPU::ReleaseSpillLocks() {
+void ArmRegCacheFPU::ReleaseSpillLocksAndDiscardTemps() {
 	for (int i = 0; i < NUM_MIPSFPUREG; i++)
 		mr[i].spillLock = false;
 	for (int i = TEMP0; i < TEMP0 + NUM_TEMPS; ++i)
@@ -357,7 +373,13 @@ ARMReg ArmRegCacheFPU::R(int mipsReg) {
 	if (mr[mipsReg].loc == ML_ARMREG) {
 		return (ARMReg)(mr[mipsReg].reg + S0);
 	} else {
-		ERROR_LOG(JIT, "Reg %i not in arm reg. compilerPC = %08x", mipsReg, compilerPC_);
+		if (mipsReg < 32) {
+			ERROR_LOG(JIT, "FReg %i not in ARM reg. compilerPC = %08x : %s", mipsReg, compilerPC_, currentMIPS->DisasmAt(compilerPC_));
+		} else if (mipsReg < 32 + 128) {
+			ERROR_LOG(JIT, "VReg %i not in ARM reg. compilerPC = %08x : %s", mipsReg - 32, compilerPC_, currentMIPS->DisasmAt(compilerPC_));
+		} else {
+			ERROR_LOG(JIT, "Tempreg %i not in ARM reg. compilerPC = %08x : %s", mipsReg - 128 - 32, compilerPC_, currentMIPS->DisasmAt(compilerPC_));
+		}
 		return INVALID_REG;  // BAAAD
 	}
 }

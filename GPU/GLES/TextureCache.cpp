@@ -172,17 +172,46 @@ TextureCache::TexCacheEntry *TextureCache::GetEntryAt(u32 texaddr) {
 }
 
 void TextureCache::NotifyFramebuffer(u32 address, VirtualFramebuffer *framebuffer) {
+	// This is a rough heuristic, because sometimes our framebuffers are too tall.
+	static const u32 MAX_SUBAREA_Y_OFFSET = 32;
+
 	// Must be in VRAM so | 0x04000000 it is.
-	TexCacheEntry *entry = GetEntryAt(address | 0x04000000);
-	if (entry) {
-		DEBUG_LOG(HLE, "Render to texture detected at %08x!", address);
-		if (!entry->framebuffer) {
-			entry->framebuffer = framebuffer;
-			// TODO: Delete the original non-fbo texture too.
-		}	else {
-			// Force a re-bind, fixes map in Tactics Ogre.
-			glBindTexture(GL_TEXTURE_2D, 0);
-			lastBoundTexture = -1;
+	const u64 cacheKey = (u64)(address | 0x04000000) << 32;
+	// If it has a clut, those are the low 32 bits, so it'll be inside this range.
+	// Also, if it's a subsample of the buffer, it'll also be within the FBO.
+	const u64 cacheKeyEnd = cacheKey + ((u64)(framebuffer->fb_stride * MAX_SUBAREA_Y_OFFSET) << 32);
+
+	for (auto it = cache.lower_bound(cacheKey), end = cache.upper_bound(cacheKeyEnd); it != end; ++it) {
+		auto entry = &it->second;
+
+		// If they match exactly, it's non-CLUT and from the top left.
+		if (it->first == cacheKey) {
+			DEBUG_LOG(HLE, "Render to texture detected at %08x!", address);
+			if (!entry->framebuffer) {
+				if (entry->format != framebuffer->format) {
+					WARN_LOG_REPORT_ONCE(diffFormat1, HLE, "Render to texture with different formats %d != %d", entry->format, framebuffer->format);
+				}
+				entry->framebuffer = framebuffer;
+				// TODO: Delete the original non-fbo texture too.
+			}
+		} else if (g_Config.iRenderingMode == FB_NON_BUFFERED_MODE || g_Config.iRenderingMode == FB_BUFFERED_MODE) {
+			// 3rd Birthday (and possibly other games) render to a 16 bit clut texture.
+			const bool compatFormat = framebuffer->format == entry->format
+				|| (framebuffer->format == GE_FORMAT_8888 && entry->format == GE_TFMT_CLUT32)
+				|| (framebuffer->format != GE_FORMAT_8888 && entry->format == GE_TFMT_CLUT16);
+
+			// Is it at least the right stride?
+			if (framebuffer->fb_stride == entry->bufw && compatFormat) {
+				if (framebuffer->format != entry->format) {
+					WARN_LOG_REPORT_ONCE(diffFormat2, HLE, "Render to texture with different formats %d != %d at %08x", entry->format, framebuffer->format, address);
+					// TODO: Use an FBO to translate the palette?
+					entry->framebuffer = framebuffer;
+				} else if ((entry->addr - address) / entry->bufw < framebuffer->height) {
+					WARN_LOG_REPORT_ONCE(subarea, HLE, "Render to area containing texture at %08x", address);
+					// TODO: Keep track of the y offset.
+					entry->framebuffer = framebuffer;
+				}
+			}
 		}
 	}
 }
@@ -216,7 +245,7 @@ void *TextureCache::UnswizzleFromMem(u32 texaddr, u32 bufw, u32 bytesPerPixel, u
 	const u32 rowWidth = (bytesPerPixel > 0) ? (bufw * bytesPerPixel) : (bufw / 2);
 	const u32 pitch = rowWidth / 4;
 	const int bxc = rowWidth / 16;
-	int byc = ((1 << ((gstate.texsize[level] >> 8) & 0xf)) + 7) / 8;
+	int byc = (gstate.getTextureHeight(level) + 7) / 8;
 	if (byc == 0)
 		byc = 1;
 
@@ -363,8 +392,8 @@ inline void DeIndexTexture4Optimal(ClutT *dest, const u32 texaddr, int length, C
 
 void *TextureCache::readIndexedTex(int level, u32 texaddr, int bytesPerIndex, GLuint dstFmt) {
 	int bufw = GetLevelBufw(level, texaddr);
-	int w = 1 << (gstate.texsize[0] & 0xf);
-	int h = 1 << ((gstate.texsize[0] >> 8) & 0xf);
+	int w = gstate.getTextureWidth(level);
+	int h = gstate.getTextureHeight(level);
 	int length = bufw * h;
 	void *buf = NULL;
 	switch (gstate.getClutPaletteFormat()) {
@@ -967,8 +996,8 @@ void TextureCache::SetTexture() {
 		cluthash = 0;
 	}
 
-	int w = 1 << (gstate.texsize[0] & 0xf);
-	int h = 1 << ((gstate.texsize[0] >> 8) & 0xf);
+	int w = gstate.getTextureWidth(0);
+	int h = gstate.getTextureHeight(0);
 	int bufw = GetLevelBufw(0, texaddr);
 	int maxLevel = ((gstate.texmode >> 16) & 0x7);
 
@@ -992,23 +1021,20 @@ void TextureCache::SetTexture() {
 					fbo_bind_color_as_texture(entry->framebuffer->fbo, 0);
 				} else {
 					glBindTexture(GL_TEXTURE_2D, 0);
-					lastBoundTexture = -1;
 					gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
 				}
 				UpdateSamplingParams(*entry, false);
-				// This isn't right.
 				gstate_c.curTextureWidth = entry->framebuffer->width;
 				gstate_c.curTextureHeight = entry->framebuffer->height;
 				gstate_c.flipTexture = true;
 				gstate_c.textureFullAlpha = entry->framebuffer->format == GE_FORMAT_565;
-				entry->lastFrame = gpuStats.numFrames;
 			} else {
 				if (entry->framebuffer->fbo)
 					entry->framebuffer->fbo = 0;
 				glBindTexture(GL_TEXTURE_2D, 0);
-				lastBoundTexture = -1;
-				entry->lastFrame = gpuStats.numFrames;
 			}
+			lastBoundTexture = -1;
+			entry->lastFrame = gpuStats.numFrames;
 			return;
 		}
 
@@ -1138,6 +1164,7 @@ void TextureCache::SetTexture() {
 	entry->lodBias = 0.0f;
 	
 	entry->dim = gstate.texsize[0] & 0xF0F;
+	entry->bufw = bufw;
 
 	// This would overestimate the size in many case so we underestimate instead
 	// to avoid excessive clearing caused by cache invalidations.
@@ -1214,8 +1241,8 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 
 	int bufw = GetLevelBufw(level, texaddr);
 
-	int w = 1 << (gstate.texsize[level] & 0xf);
-	int h = 1 << ((gstate.texsize[level] >> 8) & 0xf);
+	int w = gstate.getTextureWidth(level);
+	int h = gstate.getTextureHeight(level);
 	const u8 *texptr = Memory::GetPointer(texaddr);
 
 	switch (format)
@@ -1517,8 +1544,8 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 		return;
 	}
 
-	int w = 1 << (gstate.texsize[level] & 0xf);
-	int h = 1 << ((gstate.texsize[level] >> 8) & 0xf);
+	int w = gstate.getTextureWidth(level);
+	int h = gstate.getTextureHeight(level);
 
 	gpuStats.numTexturesDecoded++;
 
@@ -1581,8 +1608,8 @@ bool TextureCache::DecodeTexture(u8* output, GPUgstate state)
 
 	int bufw = GetLevelBufw(level, texaddr);
 
-	int w = 1 << (gstate.texsize[level] & 0xf);
-	int h = 1 << ((gstate.texsize[level]>>8) & 0xf);
+	int w = gstate.getTextureWidth(level);
+	int h = gstate.getTextureHeight(level);
 
 	void *finalBuf = DecodeTextureLevel(format, clutformat, level, texByteAlign, dstFmt);
 	if (finalBuf == NULL) {

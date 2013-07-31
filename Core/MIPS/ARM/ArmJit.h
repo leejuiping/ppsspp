@@ -216,14 +216,17 @@ public:
 	void Comp_Vhoriz(u32 op);
 	void Comp_VRot(u32 op);
 	void Comp_VIdt(u32 op);
+	void Comp_Vcmp(u32 op);
+	void Comp_Vcmov(u32 op);
+	void Comp_Viim(u32 op);
+	void Comp_Vfim(u32 op);
 
 	JitBlockCache *GetBlockCache() { return &blocks; }
 
 	void ClearCache();
 	void ClearCacheAt(u32 em_address);
 
-	// TODO: Eat VFPU prefixes here.
-	void EatPrefix() { }
+	void EatPrefix() { js.EatPrefix(); }
 
 private:
 	void GenerateFixedCode();
@@ -280,6 +283,9 @@ private:
 	ArmRegCacheFPU fpr;
 
 	MIPSState *mips_;
+
+	int dontLogBlocks;
+	int logBlocks;
 
 public:
 	// Code pointers

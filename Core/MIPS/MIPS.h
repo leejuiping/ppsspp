@@ -78,6 +78,26 @@ enum
 	//unknown....
 };
 
+enum VCondition
+{
+	VC_FL,
+	VC_EQ,
+	VC_LT,
+	VC_LE,
+	VC_TR,
+	VC_NE,
+	VC_GE,
+	VC_GT,
+	VC_EZ,
+	VC_EN,
+	VC_EI,
+	VC_ES,
+	VC_NZ,
+	VC_NN,
+	VC_NI,
+	VC_NS
+};
+
 class MIPSState
 {
 public:
@@ -98,6 +118,8 @@ public:
 		float v[128];
 		u32 vi[128];
 	};
+	// Temps don't get flushed so we don't reserve space for them.
+	// If vfpuCtrl (prefixes) get mysterious values, check the VFPU regcache code.
 	u32 vfpuCtrl[16];
 
 	u32 pc;

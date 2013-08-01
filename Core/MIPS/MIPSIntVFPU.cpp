@@ -132,9 +132,11 @@ void ApplyPrefixST(float *v, u32 data, VectorSize size)
 		{
 			// Prefix may say "z, z, z, z" but if this is a pair, we force to x.
 			// TODO: But some ops seem to use const 0 instead?
-			if (regnum >= n)
-			{
-				ERROR_LOG_REPORT(CPU, "Invalid VFPU swizzle: %08x / %d", data, size);
+			if (regnum >= n) {
+				ERROR_LOG_REPORT(CPU, "Invalid VFPU swizzle: %08x: %i / %d at PC = %08x (%s)", data, regnum, n, currentMIPS->pc, currentMIPS->DisasmAt(currentMIPS->pc));
+				//for (int i = 0; i < 12; i++) {
+				//	ERROR_LOG(CPU, "  vfpuCtrl[%i] = %08x", i, currentMIPS->vfpuCtrl[i]);
+				//}
 				regnum = 0;
 			}
 
@@ -626,7 +628,7 @@ namespace MIPSInt
 			if (sv < (int)0x80000000) sv = (int)0x80000000;
 			switch ((op >> 21) & 0x1f)
 			{
-			case 16: d[i] = (int)round_vfpu_n(sv); break; //n
+			case 16: d[i] = (int)(floor(sv + 0.5f)); break; //n  (round_vfpu_n causes issue #3011 but seems right according to tests...)
 			case 17: d[i] = s[i]>=0 ? (int)floor(sv) : (int)ceil(sv); break; //z
 			case 18: d[i] = (int)ceil(sv); break; //u
 			case 19: d[i] = (int)floor(sv); break; //d
@@ -1438,26 +1440,6 @@ namespace MIPSInt
 		PC += 4;
 		EatPrefixes();
 	}
-
-	enum VCondition
-	{
-		VC_FL,
-		VC_EQ,
-		VC_LT,
-		VC_LE,
-		VC_TR,
-		VC_NE,
-		VC_GE,
-		VC_GT,
-		VC_EZ,
-		VC_EN,
-		VC_EI,
-		VC_ES,
-		VC_NZ,
-		VC_NN,
-		VC_NI,
-		VC_NS
-	};
 
 	void Int_Vcmp(u32 op)
 	{

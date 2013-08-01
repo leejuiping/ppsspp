@@ -116,10 +116,12 @@ struct ArmJitState
 			prefixD = 0x0;
 		}
 	}
+
 	u8 VfpuWriteMask() const {
 		_assert_(prefixDFlag & PREFIX_KNOWN);
 		return (prefixD >> 8) & 0xF;
 	}
+
 	bool VfpuWriteMask(int i) const {
 		_assert_(prefixDFlag & PREFIX_KNOWN);
 		return (prefixD >> (8 + i)) & 1;
@@ -220,6 +222,9 @@ public:
 	void Comp_Vcmov(u32 op);
 	void Comp_Viim(u32 op);
 	void Comp_Vfim(u32 op);
+	void Comp_VCrossQuat(u32 op);
+	void Comp_Vsge(u32 op);
+	void Comp_Vslt(u32 op);
 
 	JitBlockCache *GetBlockCache() { return &blocks; }
 

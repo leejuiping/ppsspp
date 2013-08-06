@@ -613,10 +613,10 @@ namespace MainWindow
 				key.deviceId = DEVICE_ID_MOUSE;
 
 				if (wheelDelta < 0) {
-					key.keyCode = KEYCODE_EXT_MOUSEWHEEL_DOWN;
+					key.keyCode = NKCODE_EXT_MOUSEWHEEL_DOWN;
 					wheelDelta = -wheelDelta;
 				} else {
-					key.keyCode = KEYCODE_EXT_MOUSEWHEEL_UP;
+					key.keyCode = NKCODE_EXT_MOUSEWHEEL_UP;
 				}
 				// There's no separate keyup event for mousewheel events, let's pass them both together.
 				// This also means it really won't work great for key mapping :( Need to build a 1 frame delay or something.
@@ -1146,9 +1146,10 @@ namespace MainWindow
 			if(!g_Config.bEnableLogging) {
 				LogManager::GetInstance()->GetConsoleListener()->Show(false);
 				EnableMenuItem(menu, ID_DEBUG_LOG, MF_GRAYED);
-			}
-			else
+			} else {
+				LogManager::GetInstance()->GetConsoleListener()->Show(true);
 				EnableMenuItem(menu, ID_DEBUG_LOG, MF_ENABLED);
+			}
 			break;
 
 		case WM_MENUSELECT:
@@ -1386,6 +1387,7 @@ namespace MainWindow
 		CorrectCursor();
 		ResizeDisplay();
 		ShowOwnedPopups(hwndMain, FALSE);
+		UpdateScreenScale();
 	}
 
 	void SetPlaying(const char *text) {

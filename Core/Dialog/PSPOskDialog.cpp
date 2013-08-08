@@ -27,17 +27,13 @@
 #include "Common/ChunkFile.h"
 #include "GPU/GPUState.h"
 
+#ifdef _WIN32
+#include "Core/Host.h"
+#endif
+
 #ifndef _WIN32
 #include <ctype.h>
 #include <math.h>
-#endif
-
-#ifdef _WIN32
-#include "../Windows/InputBox.h"
-namespace MainWindow {
-	extern HWND hwndMain;
-	HINSTANCE GetHinstance();
-};
 #endif
 
 const int numKeyCols[OSK_KEYBOARD_COUNT] = {12, 12, 13, 13, 12, 12, 12};
@@ -695,7 +691,7 @@ void PSPOskDialog::RenderKeyboard()
 
 				if(isCombinated == true)
 				{
-					float animStep = (float)(gpuStats.numFrames % 40) / 20.0f;
+					float animStep = (float)(gpuStats.numVBlanks % 40) / 20.0f;
 					// Fade in and out the next character so they know it's not part of the string yet.
 					u32 alpha = (0.5f - (cosf(animStep * M_PI) / 2.0f)) * 128 + 127;
 					color = CalcFadedColor((alpha << 24) | 0xFFFFFF);
@@ -783,10 +779,9 @@ int PSPOskDialog::NativeKeyboard()
 
 		size_t maxInputLength = FieldMaxLength();
 
-		if(!InputBox_GetString(0, MainWindow::hwndMain, windowTitle, defaultText, input, maxInputLength)) {
+		if(host->InputBoxGetString(windowTitle, defaultText, input, maxInputLength)) {
 			strncat(input, "", strlen(""));
 		}
-		// TODO: Insert your platform's native keyboard stuff here...
 
 		status = SCE_UTILITY_STATUS_FINISHED;
 	}

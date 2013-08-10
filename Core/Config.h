@@ -66,7 +66,6 @@ public:
 	bool bHardwareTransform;
 	int iRenderingMode; // 0 = non-buffered rendering 1 = buffered rendering 2 = Read Framebuffer to memory (CPU) 3 = Read Framebuffer to memory (GPU)
 	int iTexFiltering; // 1 = off , 2 = nearest , 3 = linear , 4 = linear(CG)
-	bool bUseVBO;
 #ifdef BLACKBERRY
 	bool bPartialStretch;
 #endif
@@ -99,7 +98,7 @@ public:
 	// Sound
 	bool bEnableSound;
 	bool bEnableAtrac3plus;
-	int iSEVolume;
+	int iSFXVolume;
 	int iBGMVolume;
 
 	// UI

@@ -1540,6 +1540,7 @@ namespace MIPSInt
 		EatPrefixes();
 	}
 	
+	// This doesn't quite pass all the tests :/
 	void Int_Vscmp(u32 op) {
 		int vt = _VT;
 		int vs = _VS;

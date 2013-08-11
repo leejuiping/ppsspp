@@ -89,6 +89,7 @@ void Config::Load(const char *iniFileName)
 #else
 	cpu->Get("Jit", &bJit, true);
 #endif
+	cpu->Get("SeparateCPUThread", &bSeparateCPUThread, false);
 	cpu->Get("FastMemory", &bFastMemory, false);
 	cpu->Get("CPUSpeed", &iLockedCPUSpeed, false);
 
@@ -137,7 +138,7 @@ void Config::Load(const char *iniFileName)
 	sound->Get("VolumeSFX", &iSFXVolume, 7);
 	
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
-	control->Get("ShowStick", &bShowAnalogStick, false);
+	control->Get("ShowAnalogStick", &bShowAnalogStick, true);
 #ifdef BLACKBERRY
 	control->Get("ShowTouchControls", &bShowTouchControls, pixel_xres != pixel_yres);
 #elif defined(USING_GLES2)
@@ -226,6 +227,7 @@ void Config::Save()
 
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 		cpu->Set("Jit", bJit);
+		cpu->Set("SeparateCPUThread", bSeparateCPUThread);
 		cpu->Set("FastMemory", bFastMemory);
 		cpu->Set("CPUSpeed", iLockedCPUSpeed);
 

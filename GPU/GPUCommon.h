@@ -1,8 +1,11 @@
 #pragma once
 
-#include "GPUInterface.h"
+#include "Core/ThreadEventQueue.h"
+#include "GPU/GPUInterface.h"
 
-class GPUCommon : public GPUInterface
+typedef ThreadEventQueue<GPUInterface, GPUEvent, GPUEventType, GPU_EVENT_INVALID, GPU_EVENT_SYNC_THREAD, GPU_EVENT_FINISH_EVENT_LOOP> GPUThreadEventQueue;
+
+class GPUCommon : public GPUThreadEventQueue
 {
 public:
 	GPUCommon();
@@ -39,12 +42,35 @@ protected:
 	void PopDLQueue();
 	void CheckDrawSync();
 	int  GetNextListIndex();
+	void ProcessDLQueueInternal();
+	void ReapplyGfxStateInternal();
+	virtual void ProcessEvent(GPUEvent ev);
+
+	// Allows early unlocking with a guard.  Do not double unlock.
+	class easy_guard {
+	public:
+		easy_guard(recursive_mutex &mtx) : mtx_(mtx), locked_(true) { mtx_.lock(); }
+		~easy_guard() { if (locked_) mtx_.unlock(); }
+		void unlock() { if (locked_) mtx_.unlock(); else Crash(); locked_ = false; }
+
+	private:
+		recursive_mutex &mtx_;
+		bool locked_;
+	};
 
 	typedef std::list<int> DisplayListQueue;
 
 	DisplayList dls[DisplayListMaxCount];
 	DisplayList *currentList;
 	DisplayListQueue dlQueue;
+	recursive_mutex listLock;
+
+	std::deque<GPUEvent> events;
+	recursive_mutex eventsLock;
+	recursive_mutex eventsWaitLock;
+	recursive_mutex eventsDrainLock;
+	condition_variable eventsWait;
+	condition_variable eventsDrain;
 
 	bool interruptRunning;
 	GPUState gpuState;

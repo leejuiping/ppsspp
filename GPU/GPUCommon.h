@@ -28,7 +28,10 @@ public:
 	virtual int  ListSync(int listid, int mode);
 	virtual u32  DrawSync(int mode);
 	virtual void DoState(PointerWrap &p);
-	virtual bool FramebufferDirty() { return true; }
+	virtual bool FramebufferDirty() {
+		SyncThread();
+		return true;
+	}
 	virtual u32  Continue();
 	virtual u32  Break(int mode);
 	virtual void ReapplyGfxState();
@@ -45,6 +48,9 @@ protected:
 	void ProcessDLQueueInternal();
 	void ReapplyGfxStateInternal();
 	virtual void ProcessEvent(GPUEvent ev);
+	virtual bool ShouldExitEventLoop() {
+		return coreState != CORE_RUNNING;
+	}
 
 	// Allows early unlocking with a guard.  Do not double unlock.
 	class easy_guard {
@@ -64,13 +70,6 @@ protected:
 	DisplayList *currentList;
 	DisplayListQueue dlQueue;
 	recursive_mutex listLock;
-
-	std::deque<GPUEvent> events;
-	recursive_mutex eventsLock;
-	recursive_mutex eventsWaitLock;
-	recursive_mutex eventsDrainLock;
-	condition_variable eventsWait;
-	condition_variable eventsDrain;
 
 	bool interruptRunning;
 	GPUState gpuState;

@@ -1,7 +1,15 @@
 #pragma once
 
+#include "Common/Common.h"
 #include "Core/ThreadEventQueue.h"
 #include "GPU/GPUInterface.h"
+
+#if defined(ANDROID)
+#include <atomic>
+#elif defined(_M_SSE)
+#include <xmmintrin.h>
+#pragma warning(disable:4799)
+#endif
 
 typedef ThreadEventQueue<GPUInterface, GPUEvent, GPUEventType, GPU_EVENT_INVALID, GPU_EVENT_SYNC_THREAD, GPU_EVENT_FINISH_EVENT_LOOP> GPUThreadEventQueue;
 
@@ -35,6 +43,18 @@ public:
 	virtual u32  Continue();
 	virtual u32  Break(int mode);
 	virtual void ReapplyGfxState();
+
+	virtual u64 GetTickEstimate() {
+#if defined(_M_X64) || defined(ANDROID)
+		return curTickEst_;
+#elif defined(_M_SSE)
+		__m64 result = *(__m64 *)&curTickEst_;
+		return *(u64 *)&result;
+#else
+		lock_guard guard(curTickEstLock_);
+		return curTickEst_;
+#endif
+	}
 
 protected:
 	// To avoid virtual calls to PreExecuteOp().
@@ -85,6 +105,26 @@ protected:
 	bool dumpNextFrame_;
 	bool dumpThisFrame_;
 	bool interruptsEnabled_;
+
+	// For CPU/GPU sync.
+#ifdef ANDROID
+	std::atomic<u64> curTickEst_;
+#else
+	volatile MEMORY_ALIGNED16(u64) curTickEst_;
+	recursive_mutex curTickEstLock_;
+#endif
+
+	virtual void UpdateTickEstimate(u64 value) {
+#if defined(_M_X64) || defined(ANDROID)
+		curTickEst_ = value;
+#elif defined(_M_SSE)
+		__m64 result = *(__m64 *)&value;
+		*(__m64 *)&curTickEst_ = result;
+#else
+		lock_guard guard(curTickEstLock_);
+		curTickEst_ = value;
+#endif
+	}
 
 public:
 	virtual DisplayList* getList(int listid)

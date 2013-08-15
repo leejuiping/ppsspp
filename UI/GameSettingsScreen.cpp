@@ -33,6 +33,7 @@
 #include "base/timeutil.h"
 #include "math/curves.h"
 #include "Core/HW/atrac3plus.h"
+#include "Core/System.h"
 
 #ifdef _WIN32
 namespace MainWindow {
@@ -189,7 +190,7 @@ void GameSettingsScreen::CreateViews() {
 	root_->Add(leftColumn);
 
 	leftColumn->Add(new Spacer(new LinearLayoutParams(1.0)));
-	leftColumn->Add(new Choice(g->T("Back"), "", false, new AnchorLayoutParams(150, WRAP_CONTENT, 10, NONE, NONE, 10)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	leftColumn->Add(new Choice(g->T("Back"), "", false, new AnchorLayoutParams(150, WRAP_CONTENT, 10, NONE, NONE, 10)))->OnClick.Handle(this, &GameSettingsScreen::OnBack);
 
 	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new LinearLayoutParams(800, FILL_PARENT, actionMenuMargins));
 
@@ -325,6 +326,25 @@ void GameSettingsScreen::DrawBackground(UIContext &dc) {
 void GameSettingsScreen::update(InputState &input) {
 	UIScreen::update(input);
 	g_Config.iForceMaxEmulatedFPS = cap60FPS_ ? 60 : 0;
+}
+
+UI::EventReturn GameSettingsScreen::OnBack(UI::EventParams &e) {
+	screenManager()->finishDialog(this, DR_OK);
+
+	if(g_Config.bEnableSound) {
+		if(PSP_IsInited() && !IsAudioInitialised())
+			Audio_Init();
+	}
+	// It doesn't matter if audio is inited or not, it'll still output no sound
+	// if the mixer isn't available, so go ahead and init/shutdown at our leisure.
+	if(Atrac3plus_Decoder::IsInstalled()) {
+		if(g_Config.bEnableAtrac3plus)
+			Atrac3plus_Decoder::Init();
+		else Atrac3plus_Decoder::Shutdown();
+	}
+	
+
+	return UI::EVENT_DONE;
 }
 
 void GlobalSettingsScreen::CreateViews() {

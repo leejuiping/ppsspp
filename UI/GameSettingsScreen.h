@@ -42,7 +42,8 @@ private:
 	// Event handlers
 	UI::EventReturn OnDownloadPlugin(UI::EventParams &e);
 	UI::EventReturn OnControlMapping(UI::EventParams &e);
-
+	UI::EventReturn OnBack(UI::EventParams &e);
+	
 	// Temporaries to convert bools to int settings
 	bool cap60FPS_;
 };

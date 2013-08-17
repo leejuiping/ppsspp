@@ -48,6 +48,10 @@ using namespace ArmGen;
 #include "Common/x64Analyzer.h"
 #include "Core/MIPS/x86/Asm.h"
 using namespace Gen;
+#elif defined(PPC)
+#include "Common/ppcEmitter.h"
+#include "Core/MIPS/MIPS.h"
+using namespace PpcGen;
 #else
 #error "Unsupported arch!"
 #endif
@@ -137,12 +141,12 @@ int JitBlockCache::AllocateBlock(u32 em_address)
 	JitBlock &b = blocks[num_blocks];
 	b.invalid = false;
 	b.originalAddress = em_address;
-	b.exitAddress[0] = INVALID_EXIT;
-	b.exitAddress[1] = INVALID_EXIT;
-	b.exitPtrs[0] = 0;
-	b.exitPtrs[1] = 0;
-	b.linkStatus[0] = false;
-	b.linkStatus[1] = false;
+	for (int i = 0; i < MAX_JIT_BLOCK_EXITS; ++i)
+	{
+		b.exitAddress[i] = INVALID_EXIT;
+		b.exitPtrs[i] = 0;
+		b.linkStatus[i] = false;
+	}
 	b.blockNum = num_blocks;
 	num_blocks++; //commit the current block
 	return num_blocks - 1;
@@ -163,7 +167,7 @@ void JitBlockCache::FinalizeBlock(int block_num, bool block_link)
 	block_map[std::make_pair(pAddr + 4 * b.originalSize - 1, pAddr)] = block_num;
 	if (block_link)
 	{
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < MAX_JIT_BLOCK_EXITS; i++)
 		{
 			if (b.exitAddress[i] != INVALID_EXIT) 
 				links_to.insert(std::pair<u32, int>(b.exitAddress[i], block_num));
@@ -228,7 +232,7 @@ u32 JitBlockCache::GetEmuHackOpForBlock(int blockNum) const {
 int JitBlockCache::GetBlockNumberFromStartAddress(u32 addr)
 {
 	if (!blocks)
-		return -1;		
+		return -1;
 	u32 inst = Memory::Read_U32(addr);
 	int bl = GetBlockNumberFromEmuHackOp(inst);
 	if (bl < 0)
@@ -262,7 +266,7 @@ void JitBlockCache::LinkBlockExits(int i)
 		// This block is dead. Don't relink it.
 		return;
 	}
-	for (int e = 0; e < 2; e++) {
+	for (int e = 0; e < MAX_JIT_BLOCK_EXITS; e++) {
 		if (b.exitAddress[e] != INVALID_EXIT && !b.linkStatus[e]) {
 			int destinationBlock = GetBlockNumberFromStartAddress(b.exitAddress[e]);
 			if (destinationBlock != -1) 	{
@@ -274,6 +278,10 @@ void JitBlockCache::LinkBlockExits(int i)
 #elif defined(_M_IX86) || defined(_M_X64)
 				XEmitter emit(b.exitPtrs[e]);
 				emit.JMP(blocks[destinationBlock].checkedEntry, true);
+#elif defined(PPC)
+				PPCXEmitter emit(b.exitPtrs[e]);
+				emit.B(blocks[destinationBlock].checkedEntry);
+				emit.FlushIcache();
 #endif
 				b.linkStatus[e] = true;
 			}
@@ -308,7 +316,7 @@ void JitBlockCache::UnlinkBlock(int i)
 		return;
 	for (multimap<u32, int>::iterator iter = ppp.first; iter != ppp.second; ++iter) {
 		JitBlock &sourceBlock = blocks[iter->second];
-		for (int e = 0; e < 2; e++)
+		for (int e = 0; e < MAX_JIT_BLOCK_EXITS; e++)
 		{
 			if (sourceBlock.exitAddress[e] == b.originalAddress)
 				sourceBlock.linkStatus[e] = false;
@@ -356,6 +364,12 @@ void JitBlockCache::DestroyBlock(int block_num, bool invalidate)
 	XEmitter emit((u8 *)b.checkedEntry);
 	emit.MOV(32, M(&mips->pc), Imm32(b.originalAddress));
 	emit.JMP(MIPSComp::jit->Asm().dispatcher, true);
+#elif defined(PPC)
+	PPCXEmitter emit((u8 *)b.checkedEntry);
+	emit.MOVI2R(R3, b.originalAddress);
+	emit.STW(R0, CTXREG, offsetof(MIPSState, pc));
+	emit.B(MIPSComp::jit->dispatcher);
+	emit.FlushIcache();
 #endif
 }
 

@@ -36,8 +36,19 @@ typedef ArmGen::ARMXCodeBlock CodeBlock;
 namespace Gen { class XEmitter; }
 using namespace Gen;
 typedef Gen::XCodeBlock CodeBlock;
+#elif defined(PPC)
+#include "Common/ppcEmitter.h"
+namespace PpcGen { class PPCXEmitter; }
+using namespace PpcGen;
+typedef PpcGen::PPCXCodeBlock CodeBlock;
 #else
 #error "Unsupported arch!"
+#endif
+
+#if defined(ARM)
+const int MAX_JIT_BLOCK_EXITS = 2;
+#else
+const int MAX_JIT_BLOCK_EXITS = 8;
 #endif
 
 // Define this in order to get VTune profile support for the Jit generated code.
@@ -50,8 +61,8 @@ struct JitBlock {
 	const u8 *checkedEntry;
 	const u8 *normalEntry;
 
-	u8 *exitPtrs[2];		 // to be able to rewrite the exit jump
-	u32 exitAddress[2];	// 0xFFFFFFFF == unknown
+	u8 *exitPtrs[MAX_JIT_BLOCK_EXITS];      // to be able to rewrite the exit jump
+	u32 exitAddress[MAX_JIT_BLOCK_EXITS];   // 0xFFFFFFFF == unknown
 
 	u32 originalAddress;
 	u32 originalFirstOpcode; //to be able to restore
@@ -60,7 +71,7 @@ struct JitBlock {
 	u16 blockNum;
 
 	bool invalid;
-	bool linkStatus[2];
+	bool linkStatus[MAX_JIT_BLOCK_EXITS];
 
 #ifdef USE_VTUNE
 	char blockName[32];

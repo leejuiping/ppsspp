@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,5 +17,11 @@
 
 #pragma once
 
-#include "InputDevice.h"
+#include "TransformUnit.h" // for DrawingCoords
 
+namespace Rasterizer {
+
+// Draws a triangle if its vertices are specified in counter-clockwise order
+void DrawTriangle(const VertexData& v0, const VertexData& v1, const VertexData& v2);
+
+}

@@ -65,7 +65,8 @@ public:
 	std::string languageIni;
 
 	// GFX
-	bool bHardwareTransform;
+	bool bSoftwareRendering;
+	bool bHardwareTransform; // only used in the GLES backend
 	int iRenderingMode; // 0 = non-buffered rendering 1 = buffered rendering 2 = Read Framebuffer to memory (CPU) 3 = Read Framebuffer to memory (GPU)
 	int iTexFiltering; // 1 = off , 2 = nearest , 3 = linear , 4 = linear(CG)
 #ifdef BLACKBERRY
@@ -162,7 +163,7 @@ public:
 	std::string flashDirectory;
 	std::string internalDataDirectory;
 
-	void Load(const char *iniFileName = "ppsspp.ini");
+	void Load(const char *iniFileName = "ppsspp.ini", const char *controllerIniFilename = "controls.ini");
 	void Save();
 
 	// Utility functions for "recent" management
@@ -171,6 +172,7 @@ public:
 
 private:
 	std::string iniFilename_;
+	std::string controllerIniFilename_;
 };
 
 extern Config g_Config;

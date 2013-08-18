@@ -153,6 +153,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/ext/snappy/snappy-c.cpp \
   $(SRC)/ext/snappy/snappy.cpp \
   $(SRC)/ext/xbrz/xbrz.cpp \
+  $(SRC)/ext/xxhash.c \
   $(SRC)/Common/Crypto/md5.cpp \
   $(SRC)/Common/KeyMap.cpp \
   $(SRC)/Common/LogManager.cpp \
@@ -182,6 +183,11 @@ LOCAL_SRC_FILES := \
   $(SRC)/GPU/GLES/FragmentShaderGenerator.cpp \
   $(SRC)/GPU/GLES/TextureScaler.cpp \
   $(SRC)/GPU/Null/NullGpu.cpp \
+  $(SRC)/GPU/Software/Clipper.cpp \
+  $(SRC)/GPU/Software/Lighting.cpp \
+  $(SRC)/GPU/Software/Rasterizer.cpp \
+  $(SRC)/GPU/Software/SoftGpu.cpp \
+  $(SRC)/GPU/Software/TransformUnit.cpp \
   $(SRC)/Core/ELF/ElfReader.cpp \
   $(SRC)/Core/ELF/PBPReader.cpp \
   $(SRC)/Core/ELF/PrxDecrypter.cpp \

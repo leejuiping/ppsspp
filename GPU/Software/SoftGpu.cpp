@@ -16,22 +16,245 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 
-#include "NullGpu.h"
-#include "../GPUState.h"
-#include "../ge_constants.h"
-#include "../../Core/MemMap.h"
-#include "../../Core/HLE/sceKernelInterrupt.h"
-#include "../../Core/HLE/sceGe.h"
+#include "GPU/GPUState.h"
+#include "GPU/ge_constants.h"
+#include "Core/MemMap.h"
+#include "Core/HLE/sceKernelInterrupt.h"
+#include "Core/HLE/sceGe.h"
+#include "Core/Reporting.h"
+#include "gfx/gl_common.h"
 
-NullGPU::NullGPU()
+#include "GPU/Software/SoftGpu.h"
+#include "GPU/Software/TransformUnit.h"
+#include "GPU/Software/Colors.h"
+
+static GLuint temp_texture = 0;
+
+static GLint attr_pos = -1, attr_tex = -1;
+static GLint uni_tex = -1;
+
+static GLuint program;
+
+const int FB_WIDTH = 480;
+const int FB_HEIGHT = 272;
+u8* fb = NULL;
+u8* depthbuf = NULL;
+u32 clut[4096];
+
+GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShader)
 {
+	// generate objects
+	GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+	GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+	GLuint programID = glCreateProgram();
+
+	// compile vertex shader
+	glShaderSource(vertexShaderID, 1, &vertexShader, NULL);
+	glCompileShader(vertexShaderID);
+
+#if defined(_DEBUG) || defined(DEBUGFAST) || defined(DEBUG_GLSL)
+	GLint Result = GL_FALSE;
+	char stringBuffer[1024];
+	GLsizei stringBufferUsage = 0;
+	glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &Result);
+	glGetShaderInfoLog(vertexShaderID, 1024, &stringBufferUsage, stringBuffer);
+	if(Result && stringBufferUsage) {
+		// not nice
+	} else if(!Result) {
+		// not nice
+	} else {
+		// not nice
+	}
+	bool shader_errors = !Result;
+#endif
+
+	// compile fragment shader
+	glShaderSource(fragmentShaderID, 1, &fragmentShader, NULL);
+	glCompileShader(fragmentShaderID);
+
+#if defined(_DEBUG) || defined(DEBUGFAST) || defined(DEBUG_GLSL)
+	glGetShaderiv(fragmentShaderID, GL_COMPILE_STATUS, &Result);
+	glGetShaderInfoLog(fragmentShaderID, 1024, &stringBufferUsage, stringBuffer);
+	if(Result && stringBufferUsage) {
+		// not nice
+	} else if(!Result) {
+		// not nice
+	} else {
+		// not nice
+	}
+	shader_errors |= !Result;
+#endif
+
+	// link them
+	glAttachShader(programID, vertexShaderID);
+	glAttachShader(programID, fragmentShaderID);
+	glLinkProgram(programID);
+
+#if defined(_DEBUG) || defined(DEBUGFAST) || defined(DEBUG_GLSL)
+	glGetProgramiv(programID, GL_LINK_STATUS, &Result);
+	glGetProgramInfoLog(programID, 1024, &stringBufferUsage, stringBuffer);
+	if(Result && stringBufferUsage) {
+		// not nice
+	} else if(!Result && !shader_errors) {
+		// not nice
+	}
+#endif
+
+	// cleanup
+	glDeleteShader(vertexShaderID);
+	glDeleteShader(fragmentShaderID);
+
+	return programID;
 }
 
-NullGPU::~NullGPU()
+SoftGPU::SoftGPU()
 {
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // 4-byte pixel alignment
+	glGenTextures(1, &temp_texture);
+
+
+	// TODO: Use highp for GLES
+	static const char *fragShaderText =
+		"varying vec2 TexCoordOut;\n"
+		"uniform sampler2D Texture;\n"
+		"void main() {\n"
+		"   vec4 tmpcolor;\n"
+		"   tmpcolor = texture2D(Texture, TexCoordOut);\n"
+		"   gl_FragColor = tmpcolor;\n"
+		"}\n";
+	static const char *vertShaderText =
+		"attribute vec4 pos;\n"
+		"attribute vec2 TexCoordIn;\n "
+		"varying vec2 TexCoordOut;\n "
+		"void main() {\n"
+		"   gl_Position = pos;\n"
+		"   TexCoordOut = TexCoordIn;\n"
+		"}\n";
+
+	program = OpenGL_CompileProgram(vertShaderText, fragShaderText);
+
+	glUseProgram(program);
+
+	uni_tex = glGetUniformLocation(program, "Texture");
+	attr_pos = glGetAttribLocation(program, "pos");
+	attr_tex = glGetAttribLocation(program, "TexCoordIn");
+
+	fb = Memory::GetPointer(0x44000000); // TODO: correct default address?
+	depthbuf = Memory::GetPointer(0x44000000); // TODO: correct default address?
 }
 
-void NullGPU::FastRunLoop(DisplayList &list) {
+SoftGPU::~SoftGPU()
+{
+	glDeleteProgram(program);
+	glDeleteTextures(1, &temp_texture);
+}
+
+// Copies RGBA8 data from RAM to the currently bound render target.
+void CopyToCurrentFboFromRam(u8* data, int srcwidth, int srcheight, int dstwidth, int dstheight)
+{
+    glDisable(GL_BLEND);
+	glViewport(0, 0, dstwidth, dstheight);
+	glScissor(0, 0, dstwidth, dstheight);
+
+	glBindTexture(GL_TEXTURE_2D, temp_texture);
+
+	GLfloat texvert_u;
+	if (gstate.FrameBufFormat() == GE_FORMAT_8888) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)gstate.FrameBufStride(), (GLsizei)srcheight, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+		texvert_u = (float)srcwidth / gstate.FrameBufStride();
+	} else {
+		// TODO: This should probably be converted in a shader instead..
+		// TODO: Do something less brain damaged to manage this buffer...
+		u32 *buf = new u32[srcwidth * srcheight];
+		u16 *fb16 = (u16 *)fb;
+		for (int y = 0; y < srcheight; ++y) {
+			u32 *buf_line = &buf[y * srcwidth];
+			u16 *fb_line = &fb16[y * gstate.FrameBufStride()];
+
+			switch (gstate.FrameBufFormat()) {
+			case GE_FORMAT_565:
+				for (int x = 0; x < srcwidth; ++x) {
+					buf_line[x] = DecodeRGB565(fb_line[x]);
+				}
+				break;
+
+			case GE_FORMAT_5551:
+				for (int x = 0; x < srcwidth; ++x) {
+					buf_line[x] = DecodeRGBA5551(fb_line[x]);
+				}
+				break;
+
+			case GE_FORMAT_4444:
+				for (int x = 0; x < srcwidth; ++x) {
+					buf_line[x] = DecodeRGBA4444(fb_line[x]);
+				}
+				break;
+
+			default:
+				ERROR_LOG_REPORT(G3D, "Unexpected framebuffer format: %d", gstate.FrameBufFormat());
+			}
+		}
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)srcwidth, (GLsizei)srcheight, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf);
+		texvert_u = 1.0f;
+
+		delete[] buf;
+	}
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+	glUseProgram(program);
+
+	static const GLfloat verts[4][2] = {
+		{ -1, -1}, // Left top
+		{ -1,  1}, // left bottom
+		{  1,  1}, // right bottom
+		{  1, -1}  // right top
+	};
+	const GLfloat texverts[4][2] = {
+		{0, 1},
+		{0, 0},
+		{texvert_u, 0},
+		{texvert_u, 1}
+	};
+
+	glVertexAttribPointer(attr_pos, 2, GL_FLOAT, GL_FALSE, 0, verts);
+	glVertexAttribPointer(attr_tex, 2, GL_FLOAT, GL_FALSE, 0, texverts);
+	glEnableVertexAttribArray(attr_pos);
+	glEnableVertexAttribArray(attr_tex);
+	glUniform1i(uni_tex, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	glDisableVertexAttribArray(attr_pos);
+	glDisableVertexAttribArray(attr_tex);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void SoftGPU::CopyDisplayToOutput()
+{
+	ScheduleEvent(GPU_EVENT_COPY_DISPLAY_TO_OUTPUT);
+}
+
+void SoftGPU::CopyDisplayToOutputInternal()
+{
+	// The display always shows 480x272.
+	CopyToCurrentFboFromRam(fb, FB_WIDTH, FB_HEIGHT, PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight);
+}
+
+void SoftGPU::ProcessEvent(GPUEvent ev) {
+	switch (ev.type) {
+	case GPU_EVENT_COPY_DISPLAY_TO_OUTPUT:
+		CopyDisplayToOutputInternal();
+		break;
+
+	default:
+		GPUCommon::ProcessEvent(ev);
+	}
+}
+
+void SoftGPU::FastRunLoop(DisplayList &list) {
 	for (; downcount > 0; --downcount) {
 		u32 op = Memory::ReadUnchecked_U32(list.pc);
 		u32 cmd = op >> 24;
@@ -44,7 +267,7 @@ void NullGPU::FastRunLoop(DisplayList &list) {
 	}
 }
 
-void NullGPU::ExecuteOp(u32 op, u32 diff)
+void SoftGPU::ExecuteOp(u32 op, u32 diff)
 {
 	u32 cmd = op >> 24;
 	u32 data = op & 0xFFFFFF;
@@ -79,7 +302,28 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 				"TRIANGLE_FAN=5,",
 				"RECTANGLES=6,",
 			};
-			DEBUG_LOG(G3D, "DL DrawPrim type: %s count: %i vaddr= %08x, iaddr= %08x", type<7 ? types[type] : "INVALID", count, gstate_c.vertexAddr, gstate_c.indexAddr);
+
+			if (type != GE_PRIM_TRIANGLES && type != GE_PRIM_TRIANGLE_STRIP && type != GE_PRIM_TRIANGLE_FAN && type != GE_PRIM_RECTANGLES) {
+				ERROR_LOG(G3D, "DL DrawPrim type: %s count: %i vaddr= %08x, iaddr= %08x", type<7 ? types[type] : "INVALID", count, gstate_c.vertexAddr, gstate_c.indexAddr);
+				break;
+			}
+
+			if (!Memory::IsValidAddress(gstate_c.vertexAddr)) {
+				ERROR_LOG(G3D, "Bad vertex address %08x!", gstate_c.vertexAddr);
+				break;
+			}
+
+			void *verts = Memory::GetPointer(gstate_c.vertexAddr);
+			void *indices = NULL;
+			if ((gstate.vertType & GE_VTYPE_IDX_MASK) != GE_VTYPE_IDX_NONE) {
+				if (!Memory::IsValidAddress(gstate_c.indexAddr)) {
+					ERROR_LOG(G3D, "Bad index address %08x!", gstate_c.indexAddr);
+					break;
+				}
+				indices = Memory::GetPointer(gstate_c.indexAddr);
+			}
+
+			TransformUnit::SubmitPrimitive(verts, indices, type, count, gstate.vertType);
 		}
 		break;
 
@@ -98,7 +342,28 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 			int sp_vcount = (data >> 8) & 0xFF;
 			int sp_utype = (data >> 16) & 0x3;
 			int sp_vtype = (data >> 18) & 0x3;
-			//drawSpline(sp_ucount, sp_vcount, sp_utype, sp_vtype);
+
+			if (!Memory::IsValidAddress(gstate_c.vertexAddr)) {
+				ERROR_LOG(G3D, "Bad vertex address %08x!", gstate_c.vertexAddr);
+				break;
+			}
+
+			void *control_points = Memory::GetPointer(gstate_c.vertexAddr);
+			void *indices = NULL;
+			if ((gstate.vertType & GE_VTYPE_IDX_MASK) != GE_VTYPE_IDX_NONE) {
+				if (!Memory::IsValidAddress(gstate_c.indexAddr)) {
+					ERROR_LOG(G3D, "Bad index address %08x!", gstate_c.indexAddr);
+					break;
+				}
+				indices = Memory::GetPointer(gstate_c.indexAddr);
+			}
+
+			if (gstate.getPatchPrimitiveType() != GE_PATCHPRIM_TRIANGLES) {
+				ERROR_LOG(G3D, "Unsupported patch primitive %x", gstate.patchprimitive&3);
+				break;
+			}
+
+			TransformUnit::SubmitSpline(control_points, indices, sp_ucount, sp_vcount, sp_utype, sp_vtype, gstate.patchprimitive&3, gstate.vertType);
 			DEBUG_LOG(G3D,"DL DRAW SPLINE: %i x %i, %i x %i", sp_ucount, sp_vcount, sp_utype, sp_vtype);
 		}
 		break;
@@ -137,7 +402,6 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 
 	case GE_CMD_CLIPENABLE:
 		DEBUG_LOG(G3D, "DL Clip Enable: %i   (ignoring)", data);
-		//we always clip, this is opengl
 		break;
 
 	case GE_CMD_CULLFACEENABLE: 
@@ -150,8 +414,6 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 
 	case GE_CMD_LIGHTINGENABLE:
 		DEBUG_LOG(G3D, "DL Lighting enable: %i", data);
-		data += 1;
-		//We don't use OpenGL lighting
 		break;
 
 	case GE_CMD_FOGENABLE:		
@@ -216,6 +478,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	case GE_CMD_FRAMEBUFPTR:
 		{
 			u32 ptr = op & 0xFFE000;
+			fb = Memory::GetPointer(0x44000000 | (gstate.fbptr & 0xFFE000) | ((gstate.fbwidth & 0xFF0000) << 8));
 			DEBUG_LOG(G3D, "DL FramebufPtr: %08x", ptr);
 		}
 		break;
@@ -223,6 +486,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	case GE_CMD_FRAMEBUFWIDTH:
 		{
 			u32 w = data & 0xFFFFFF;
+			fb = Memory::GetPointer(0x44000000 | (gstate.fbptr & 0xFFE000) | ((gstate.fbwidth & 0xFF0000) << 8));
 			DEBUG_LOG(G3D, "DL FramebufWidth: %i", w);
 		}
 		break;
@@ -263,9 +527,17 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_LOADCLUT:
-		// This could be used to "dirty" textures with clut.
 		{
-			u32 clutAddr = ((gstate.clutaddrupper & 0xFF0000)<<8) | (gstate.clutaddr & 0xFFFFFF);
+			u32 clutAddr = ((gstate.clutaddr & 0xFFFFF0) | ((gstate.clutaddrupper << 8) & 0xFF000000));
+			u32 clutTotalBytes_ = (gstate.loadclut & 0x3f) * 32;
+
+			if (Memory::IsValidAddress(clutAddr)) {
+				Memory::Memcpy(clut, clutAddr, clutTotalBytes_);
+			} else {
+				// TODO: Does this make any sense?
+				memset(clut, 0xFF, clutTotalBytes_);
+			}
+
 			if (clutAddr)
 			{
 				DEBUG_LOG(G3D,"DL Clut load: %08x", clutAddr);
@@ -274,7 +546,6 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 			{
 				DEBUG_LOG(G3D,"DL Empty Clut load");
 			}
-			// Should hash and invalidate all paletted textures on use
 		}
 		break;
 
@@ -296,7 +567,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 			DEBUG_LOG(G3D,"Block Transfer Dest: %08x	W: %i", xferDst, xferDstW);
 			break;
 		}
-		
+
 	case GE_CMD_TRANSFERSRCPOS:
 		{
 			u32 x = (data & 1023)+1;
@@ -323,10 +594,30 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 
 	case GE_CMD_TRANSFERSTART:
 		{
+			u32 srcBasePtr = (gstate.transfersrc & 0xFFFFF0) | ((gstate.transfersrcw & 0xFF0000) << 8);
+			u32 srcStride = gstate.transfersrcw & 0x3F8;
+
+			u32 dstBasePtr = (gstate.transferdst & 0xFFFFF0) | ((gstate.transferdstw & 0xFF0000) << 8);
+			u32 dstStride = gstate.transferdstw & 0x3F8;
+
+			int srcX = gstate.transfersrcpos & 0x3FF;
+			int srcY = (gstate.transfersrcpos >> 10) & 0x3FF;
+
+			int dstX = gstate.transferdstpos & 0x3FF;
+			int dstY = (gstate.transferdstpos >> 10) & 0x3FF;
+
+			int width = (gstate.transfersize & 0x3FF) + 1;
+			int height = ((gstate.transfersize >> 10) & 0x3FF) + 1;
+
+			int bpp = (gstate.transferstart & 1) ? 4 : 2;
+
+			for (int y = 0; y < height; y++) {
+				const u8 *src = Memory::GetPointer(srcBasePtr + ((y + srcY) * srcStride + srcX) * bpp);
+				u8 *dst = Memory::GetPointer(dstBasePtr + ((y + dstY) * dstStride + dstX) * bpp);
+				memcpy(dst, src, width * bpp);
+			}
+
 			DEBUG_LOG(G3D, "DL Texture Transfer Start: PixFormat %i", data);
-			// TODO: Here we should check if the transfer overlaps a framebuffer or any textures,
-			// and take appropriate action. If not, this should just be a block transfer within
-			// GPU memory which could be implemented by a copy loop.
 			break;
 		}
 
@@ -348,6 +639,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	case GE_CMD_ZBUFPTR:
 		{
 			u32 ptr = op & 0xFFE000;
+			depthbuf = Memory::GetPointer(0x44000000 | (gstate.zbptr & 0xFFE000) | ((gstate.zbwidth & 0xFF0000) << 8));
 			DEBUG_LOG(G3D,"Zbuf Ptr: %06x", ptr);
 		}
 		break;
@@ -355,6 +647,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	case GE_CMD_ZBUFWIDTH:
 		{
 			u32 w = data & 0xFFFFFF;
+			depthbuf = Memory::GetPointer(0x44000000 | (gstate.zbptr & 0xFFE000) | ((gstate.zbwidth & 0xFF0000) << 8));
 			DEBUG_LOG(G3D,"Zbuf Width: %i", w);
 		}
 		break;
@@ -491,7 +784,6 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	//	CLEARING
 	//////////////////////////////////////////////////////////////////
 	case GE_CMD_CLEARMODE:
-		// If it becomes a performance problem, check diff&1
 		DEBUG_LOG(G3D,"DL Clear mode: %06x", data);
 		break;
 
@@ -525,32 +817,8 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_TEXFUNC:
-		{
-			DEBUG_LOG(G3D,"DL TexFunc %i", data&7);
-			/*
-			int m=GL_MODULATE;
-			switch (data & 7)
-			{
-			case 0: m=GL_MODULATE; break;
-			case 1: m=GL_DECAL; break;
-			case 2: m=GL_BLEND; break;
-			case 3: m=GL_REPLACE; break;
-			case 4: m=GL_ADD; break;
-			}*/
-
-			/*
-			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-			glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB,			GL_MODULATE);
-			glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB,			GL_CONSTANT);
-			glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB,		 GL_SRC_COLOR);
-			glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_RGB,			GL_TEXTURE);
-			glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB,		 GL_SRC_COLOR);
-			glTexEnvi(GL_TEXTURE_ENV, GL_RGB_SCALE, 1);
-
-			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, m);
-			glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);*/
-			break;
-		}
+		DEBUG_LOG(G3D,"DL TexFunc %i", data&7);
+		break;
 	case GE_CMD_TEXFILTER:
 		{
 			int min = data & 7;
@@ -572,9 +840,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_ZTEST:
-		{
-			DEBUG_LOG(G3D,"DL Z test mode: %i", data);
-		}
+		DEBUG_LOG(G3D,"DL Z test mode: %i", data);
 		break;
 
 	case GE_CMD_MORPHWEIGHT0:
@@ -656,7 +922,7 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	}
 }
 
-void NullGPU::UpdateStats()
+void SoftGPU::UpdateStats()
 {
 	gpuStats.numVertexShaders = 0;
 	gpuStats.numFragmentShaders = 0;
@@ -664,12 +930,12 @@ void NullGPU::UpdateStats()
 	gpuStats.numTextures = 0;
 }
 
-void NullGPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type)
+void SoftGPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type)
 {
 	// Nothing to invalidate.
 }
 
-void NullGPU::UpdateMemory(u32 dest, u32 src, int size)
+void SoftGPU::UpdateMemory(u32 dest, u32 src, int size)
 {
 	// Nothing to update.
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);

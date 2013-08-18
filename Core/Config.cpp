@@ -33,9 +33,10 @@ extern bool isJailed;
 Config::Config() { }
 Config::~Config() { }
 
-void Config::Load(const char *iniFileName)
+void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 {
 	iniFilename_ = iniFileName;
+	controllerIniFilename_ = controllerIniFilename;
 	INFO_LOG(LOADER, "Loading config: %s", iniFileName);
 	bSaveSettings = true;
 
@@ -49,7 +50,7 @@ void Config::Load(const char *iniFileName)
 
 	bSpeedLimit = false;
 	general->Get("FirstRun", &bFirstRun, true);
-	general->Get("NewUI", &bNewUI, false);
+	general->Get("NewUI", &bNewUI, true);
 	general->Get("Enable Logging", &bEnableLogging, true);
 	general->Get("AutoLoadLast", &bAutoLoadLast, false);
 	general->Get("AutoRun", &bAutoRun, true);
@@ -108,6 +109,7 @@ void Config::Load(const char *iniFileName)
 		1
 #endif
 		); // default is buffered rendering mode
+	graphics->Get("SoftwareRendering", &bSoftwareRendering, false);
 	graphics->Get("HardwareTransform", &bHardwareTransform, true);
 	graphics->Get("TextureFiltering", &iTexFiltering, 1);
 	graphics->Get("SSAA", &bAntiAliasing, 0);
@@ -188,7 +190,16 @@ void Config::Load(const char *iniFileName)
 	IniFile::Section *gleshacks = iniFile.GetOrCreateSection("GLESHacks");
 	gleshacks->Get("PrescaleUV", &bPrescaleUV, false);
 
-	KeyMap::LoadFromIni(iniFile);
+	INFO_LOG(LOADER, "Loading controller config: %s", controllerIniFilename);
+	bSaveSettings = true;
+
+	IniFile controllerIniFile;
+	if (!controllerIniFile.Load(controllerIniFilename)) {
+		ERROR_LOG(LOADER, "Failed to read %s. Setting controller config to default.", controllerIniFilename);
+	}
+
+	// Continue anyway to initialize the config. It will just restore the defaults.
+	KeyMap::LoadFromIni(controllerIniFile);
 
 	CleanRecent();
 }
@@ -242,6 +253,7 @@ void Config::Save()
 		graphics->Set("ShowFPSCounter", iShowFPSCounter);
 		graphics->Set("ResolutionScale", iWindowZoom);
 		graphics->Set("RenderingMode", iRenderingMode);
+		graphics->Set("SoftwareRendering", bSoftwareRendering);
 		graphics->Set("HardwareTransform", bHardwareTransform);
 		graphics->Set("TextureFiltering", iTexFiltering);
 		graphics->Set("SSAA", bAntiAliasing);
@@ -305,14 +317,26 @@ void Config::Save()
 		debugConfig->Set("FontWidth", iFontWidth);
 		debugConfig->Set("FontHeight", iFontHeight);
 		debugConfig->Set("DisplayStatusBar", bDisplayStatusBar);
-
-		KeyMap::SaveToIni(iniFile);
-
 		if (!iniFile.Save(iniFilename_.c_str())) {
 			ERROR_LOG(LOADER, "Error saving config - can't write ini %s", iniFilename_.c_str());
 			return;
 		}
 		INFO_LOG(LOADER, "Config saved: %s", iniFilename_.c_str());
+
+
+		IniFile controllerIniFile;
+		if (!controllerIniFile.Load(controllerIniFilename_.c_str())) {
+			ERROR_LOG(LOADER, "Error saving config - can't read ini %s", controllerIniFilename_.c_str());
+		} else {
+			KeyMap::SaveToIni(controllerIniFile);
+		}
+
+		if (!controllerIniFile.Save(controllerIniFilename_.c_str())) {
+			ERROR_LOG(LOADER, "Error saving config - can't write ini %s", controllerIniFilename_.c_str());
+			return;
+		}
+		INFO_LOG(LOADER, "Controller config saved: %s", controllerIniFilename_.c_str());
+
 	} else {
 		INFO_LOG(LOADER, "Not saving config");
 	}

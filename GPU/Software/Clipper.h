@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,5 +17,11 @@
 
 #pragma once
 
-#include "InputDevice.h"
+#include "TransformUnit.h"
 
+namespace Clipper {
+
+void ProcessTriangle(VertexData& v0, VertexData& v1, VertexData& v2);
+void ProcessQuad(const VertexData& v0, const VertexData& v1);
+
+}

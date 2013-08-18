@@ -677,16 +677,16 @@ namespace MainWindow
 					if (globalUIState == UISTATE_PAUSEMENU) {
 						NativeMessageReceived("run", "");
 						if (disasmWindow[0])
-							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_GO, 0);
+							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 					}
 					else if (Core_IsStepping()) { // It is paused, then continue to run.
 						if (disasmWindow[0])
-							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_GO, 0);
+							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 						else
 							Core_EnableStepping(false);
 					} else {
 						if (disasmWindow[0])
-							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOP, 0);
+							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 						else
 							Core_EnableStepping(true);
 					}
@@ -713,6 +713,14 @@ namespace MainWindow
 
 				case ID_EMULATION_SPEEDLIMIT:
 					g_Config.bSpeedLimit = !g_Config.bSpeedLimit;
+					break;
+
+				case ID_EMULATION_RENDER_MODE_OGL:
+					g_Config.bSoftwareRendering = false;
+					break;
+
+				case ID_EMULATION_RENDER_MODE_SOFT:
+					g_Config.bSoftwareRendering = true;
 					break;
 
 				case ID_FILE_LOADSTATEFILE:
@@ -921,6 +929,10 @@ namespace MainWindow
 					g_Config.bSeparateCPUThread = !g_Config.bSeparateCPUThread;
 					break;
 
+				case ID_IO_MULTITHREADED:
+					g_Config.bSeparateIOThread = !g_Config.bSeparateIOThread;
+					break;
+
 				case ID_EMULATION_RUNONLOAD:
 					g_Config.bAutoRun = !g_Config.bAutoRun;
 					break;
@@ -1034,9 +1046,10 @@ namespace MainWindow
 						EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, MF_GRAYED);
 						if(!IsAudioInitialised())
 							Audio_Init();
+					} else {
+						if(Atrac3plus_Decoder::IsInstalled())
+							EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, MF_ENABLED);
 					}
-					else
-						EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, MF_ENABLED);
 					break;
 
 				case ID_EMULATION_ATRAC3_SOUND:
@@ -1046,6 +1059,8 @@ namespace MainWindow
 						if(g_Config.bEnableAtrac3plus)
 							Atrac3plus_Decoder::Init();
 						else Atrac3plus_Decoder::Shutdown();
+					} else {
+						EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, MF_GRAYED);
 					}
 					break;
 
@@ -1187,6 +1202,13 @@ namespace MainWindow
 			}
 			break;
 
+		case WM_USER_ATRAC_STATUS_CHANGED:
+			if(g_Config.bEnableAtrac3plus && Atrac3plus_Decoder::IsInstalled())
+				EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, MF_ENABLED);
+			else
+				EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, MF_GRAYED);
+			break;
+
 		case WM_MENUSELECT:
 			// Unfortunately, accelerate keys (hotkeys) shares the same enabled/disabled states
 			// with corresponding menu items.
@@ -1221,6 +1243,7 @@ namespace MainWindow
 		CHECKITEM(ID_CPU_INTERPRETER,g_Config.bJit == false);
 		CHECKITEM(ID_CPU_DYNAREC,g_Config.bJit == true);
 		CHECKITEM(ID_CPU_MULTITHREADED, g_Config.bSeparateCPUThread);
+		CHECKITEM(ID_IO_MULTITHREADED, g_Config.bSeparateIOThread);
 		CHECKITEM(ID_OPTIONS_SHOWDEBUGSTATISTICS, g_Config.bShowDebugStats);
 		CHECKITEM(ID_OPTIONS_HARDWARETRANSFORM, g_Config.bHardwareTransform);
 		CHECKITEM(ID_OPTIONS_FASTMEMORY, g_Config.bFastMemory);
@@ -1236,6 +1259,8 @@ namespace MainWindow
 		CHECKITEM(ID_EMULATION_SOUND, g_Config.bEnableSound);
 		CHECKITEM(ID_TEXTURESCALING_DEPOSTERIZE, g_Config.bTexDeposterize);
 		CHECKITEM(ID_EMULATION_ATRAC3_SOUND, g_Config.bEnableAtrac3plus);
+		CHECKITEM(ID_EMULATION_RENDER_MODE_OGL, g_Config.bSoftwareRendering == false);
+		CHECKITEM(ID_EMULATION_RENDER_MODE_SOFT, g_Config.bSoftwareRendering == true);
 
 		static const int zoomitems[4] = {
 			ID_OPTIONS_SCREEN1X,
@@ -1371,10 +1396,14 @@ namespace MainWindow
 		EnableMenuItem(menu, ID_CPU_DYNAREC, menuEnable);
 		EnableMenuItem(menu, ID_CPU_INTERPRETER, menuEnable);
 		EnableMenuItem(menu, ID_CPU_MULTITHREADED, menuEnable);
+		EnableMenuItem(menu, ID_IO_MULTITHREADED, menuEnable);
 		EnableMenuItem(menu, ID_TOGGLE_PAUSE, !menuEnable);
 		EnableMenuItem(menu, ID_EMULATION_STOP, !menuEnable);
 		EnableMenuItem(menu, ID_EMULATION_RESET, !menuEnable);
 		EnableMenuItem(menu, ID_DEBUG_LOG, !g_Config.bEnableLogging);
+		EnableMenuItem(menu, ID_EMULATION_RENDER_MODE_OGL, menuEnable);
+		EnableMenuItem(menu, ID_EMULATION_RENDER_MODE_SOFT, menuEnable);
+		EnableMenuItem(menu, ID_EMULATION_ATRAC3_SOUND, !Atrac3plus_Decoder::IsInstalled());
 	}
 
 	// Message handler for about box.

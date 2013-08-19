@@ -50,7 +50,6 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 
 	bSpeedLimit = false;
 	general->Get("FirstRun", &bFirstRun, true);
-	general->Get("NewUI", &bNewUI, true);
 	general->Get("Enable Logging", &bEnableLogging, true);
 	general->Get("AutoLoadLast", &bAutoLoadLast, false);
 	general->Get("AutoRun", &bAutoRun, true);
@@ -65,6 +64,9 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	general->Get("MaxRecent", &iMaxRecent, 12);
 	general->Get("ScreenshotsAsPNG", &bScreenshotsAsPNG, false);
 	general->Get("StateSlot", &iCurrentStateSlot, 0);
+	general->Get("GridView1", &bGridView1, true);
+	general->Get("GridView2", &bGridView2, true);
+	general->Get("GridView3", &bGridView3, true);
 
 	// Fix issue from switching from uint (hex in .ini) to int (dec)
 	if (iMaxRecent == 0)
@@ -92,7 +94,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	cpu->Get("SeparateCPUThread", &bSeparateCPUThread, false);
 	cpu->Get("SeparateIOThread", &bSeparateIOThread, false);
 	cpu->Get("FastMemory", &bFastMemory, false);
-	cpu->Get("CPUSpeed", &iLockedCPUSpeed, false);
+	cpu->Get("CPUSpeed", &iLockedCPUSpeed, 0);
 
 	IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
 	graphics->Get("ShowFPSCounter", &iShowFPSCounter, false);
@@ -218,7 +220,6 @@ void Config::Save()
 		// Need to do this somewhere...
 		bFirstRun = false;
 		general->Set("FirstRun", bFirstRun);
-		general->Set("NewUI", bNewUI);
 		general->Set("Enable Logging", bEnableLogging);
 		general->Set("AutoLoadLast", bAutoLoadLast);
 		general->Set("AutoRun", bAutoRun);
@@ -241,6 +242,9 @@ void Config::Save()
 		general->Set("EnableCheats", bEnableCheats);
 		general->Set("ScreenshotsAsPNG", bScreenshotsAsPNG);
 		general->Set("StateSlot", iCurrentStateSlot);
+		general->Set("GridView1", bGridView1);
+		general->Set("GridView2", bGridView2);
+		general->Set("GridView3", bGridView3);
 
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 		cpu->Set("Jit", bJit);

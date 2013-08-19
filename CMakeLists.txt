@@ -475,6 +475,9 @@ elseif(USING_QT_UI)
 	set(nativeExtra ${nativeExtra} native/base/QtMain.cpp ${nativeQtHeader})
 	set(nativeExtraLibs ${nativeExtraLibs} ${QT_LIBRARIES})
 	set(TargetBin PPSSPPQt)
+	if(APPLE)
+		set(nativeExtraLibs ${nativeExtraLibs} "-framework CoreFoundation")
+	endif()
 elseif(BLACKBERRY)
 	set(nativeExtra ${nativeExtra} native/base/BlackberryMain.cpp native/base/BlackberryDisplay.cpp)
 	set(nativeExtraLibs ${nativeExtraLibs} OpenAL bps screen socket EGL)
@@ -1127,7 +1130,6 @@ set(NativeAppSource
 	UI/GameInfoCache.cpp
 	UI/MainScreen.cpp
 	UI/MiscScreens.cpp
-	UI/MenuScreens.cpp
 	UI/GameScreen.cpp
 	UI/GameSettingsScreen.cpp
 	UI/GamepadEmu.cpp

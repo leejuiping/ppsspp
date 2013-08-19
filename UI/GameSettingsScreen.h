@@ -24,7 +24,7 @@
 // per game.
 class GameSettingsScreen : public UIDialogScreenWithBackground {
 public:
-	GameSettingsScreen(std::string gamePath, std::string gameID = "") : gamePath_(gamePath), gameID_(gameID) {}
+	GameSettingsScreen(std::string gamePath, std::string gameID = "") : gamePath_(gamePath), gameID_(gameID), iAlternateSpeedPercent_(3) {}
 
 	virtual void update(InputState &input);
 
@@ -42,10 +42,13 @@ private:
 	// Event handlers
 	UI::EventReturn OnDownloadPlugin(UI::EventParams &e);
 	UI::EventReturn OnControlMapping(UI::EventParams &e);
+	UI::EventReturn OnDumpNextFrameToLog(UI::EventParams &e);
 	UI::EventReturn OnBack(UI::EventParams &e);
-	
+	UI::EventReturn OnReloadCheats(UI::EventParams &e);
+
 	// Temporaries to convert bools to int settings
 	bool cap60FPS_;
+	int iAlternateSpeedPercent_;
 };
 
 // TODO: Move to its own file.
@@ -62,7 +65,7 @@ private:
 	UI::EventReturn OnFactoryReset(UI::EventParams &e);
 	UI::EventReturn OnBack(UI::EventParams &e);
 	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
-
+	UI::EventReturn OnChangeNickname(UI::EventParams &e);
 	// Temporaries to convert bools to other kinds of settings
 	bool enableReports_;
 };
@@ -79,6 +82,8 @@ private:
 	UI::EventReturn OnRunCPUTests(UI::EventParams &e);
 	UI::EventReturn OnSysInfo(UI::EventParams &e);
 	UI::EventReturn OnLoggingChanged(UI::EventParams &e);
+	UI::EventReturn OnLoadLanguageIni(UI::EventParams &e);
+	UI::EventReturn OnSaveLanguageIni(UI::EventParams &e);
 
 	// Temporary variable.
 	bool enableLogging_;

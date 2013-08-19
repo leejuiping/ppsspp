@@ -46,7 +46,6 @@ public:
 #endif
 
 	// General
-	bool bNewUI;
 	int iNumWorkerThreads;
 	bool bScreenshotsAsPNG;
 	bool bEnableLogging;
@@ -111,6 +110,11 @@ public:
 	int iShowFPSCounter;
 	bool bShowDebugStats;
 	bool bAccelerometerToAnalogHoriz;
+
+	// The three tabs.
+	bool bGridView1;
+	bool bGridView2;
+	bool bGridView3;
 
 	// Control
 	int iTouchButtonOpacity;

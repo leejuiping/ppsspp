@@ -61,7 +61,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	general->Get("Language", &languageIni, "en_US");
 	general->Get("NumWorkerThreads", &iNumWorkerThreads, cpu_info.num_cores);
 	general->Get("EnableCheats", &bEnableCheats, false);
-	general->Get("MaxRecent", &iMaxRecent, 12);
+	general->Get("MaxRecent", &iMaxRecent, 30);
 	general->Get("ScreenshotsAsPNG", &bScreenshotsAsPNG, false);
 	general->Get("StateSlot", &iCurrentStateSlot, 0);
 	general->Get("GridView1", &bGridView1, true);

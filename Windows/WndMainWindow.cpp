@@ -281,18 +281,7 @@ namespace MainWindow
 
 	void setFrameSkipping(int framesToSkip) {
 		I18NCategory *g = GetI18NCategory("Graphics");
-
-		char message[256];
-		if(framesToSkip == 0)
-			sprintf(message, "Frameskipping off");
-		else {
-			if(framesToSkip == 1)
-				sprintf(message, "Skipping %d frame", framesToSkip);
-			else
-				sprintf(message, "Skipping %d frames", framesToSkip);
-		}
 		g_Config.iFrameSkip = framesToSkip;
-		osm.Show(g->T(message));
 	}
 
 	void enableCheats(bool cheats) {
@@ -1121,6 +1110,23 @@ namespace MainWindow
 				} else if (raw->header.dwType == RIM_TYPEMOUSE) {
 					mouseDeltaX += raw->data.mouse.lLastX;
 					mouseDeltaY += raw->data.mouse.lLastY;
+
+					KeyInput key;
+					key.deviceId = DEVICE_ID_MOUSE;
+
+					int mouseRightBtnPressed = raw->data.mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_DOWN;
+					int mouseRightBtnReleased = raw->data.mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_UP;
+
+					if(mouseRightBtnPressed) {
+						key.flags = KEY_DOWN;
+						key.keyCode = windowsTransTable[VK_RBUTTON];
+						NativeKey(key);
+					}
+					else if(mouseRightBtnReleased) {
+						key.flags = KEY_UP;
+						key.keyCode = windowsTransTable[VK_RBUTTON];
+						NativeKey(key);
+					}
 
 					// TODO : Smooth and translate to an axis every frame.
 					// NativeAxis()

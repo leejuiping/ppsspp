@@ -230,21 +230,24 @@ void GameSettingsScreen::CreateViews() {
 	static const char *renderingMode[] = { "Non-Buffered Rendering", "Buffered Rendering", "Read Framebuffers To Memory(CPU)", "Read Framebuffers To Memory(GPU)"};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iRenderingMode, gs->T("Mode"), renderingMode, 0, 4, gs, screenManager()));
 
-	graphicsSettings->Add(new CheckBox(&g_Config.bAntiAliasing, gs->T("Anti-Aliasing")));
-
 	graphicsSettings->Add(new ItemHeader(gs->T("Frame Rate Control")));
 	static const char *frameSkip[] = {"Off", "Auto", "1", "2", "3", "4", "5", "6", "7", "8"};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gs->T("Frame Skipping"), frameSkip, 0, 9, gs, screenManager()));
 	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"};
 
-	graphicsSettings->Add(new CheckBox(&cap60FPS_, gs->T("Force 60 FPS or less (helps GoW)")));
+	graphicsSettings->Add(new CheckBox(&cap60FPS_, gs->T("Force max 60 FPS (helps GoW)")));
 	static const char *customSpeed[] = {"Unlimited", "25%", "50%", "75%", "100%", "125%", "150%", "200%", "300%"};
 	graphicsSettings->Add(new PopupMultiChoice(&iAlternateSpeedPercent_, gs->T("Alternative Speed"), customSpeed, 0, 9, gs, screenManager()));
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bAntiAliasing, gs->T("Anti-Aliasing")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
+#ifdef BLACKBERRY
+	if (pixel_xres == pixel_yres)
+		graphicsSettings->Add(new CheckBox(&g_Config.bPartialStretch, gs->T("Partial Vertical Stretch")));
+#endif
 	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
 	// This setting is not really useful for anyone atm.
 	// graphicsSettings->Add(new CheckBox(&g_Config.bTrueColor, gs->T("True Color")));
@@ -290,6 +293,7 @@ void GameSettingsScreen::CreateViews() {
 
 	std::string atracString;
 	atracString.assign(Atrac3plus_Decoder::IsInstalled() ? "Redownload Atrac3+ plugin" : "Download Atrac3+ plugin");
+	audioSettings->Add(new ItemHeader(ms->T("Audio")));
 	audioSettings->Add(new Choice(a->T(atracString.c_str())))->OnClick.Handle(this, &GameSettingsScreen::OnDownloadPlugin);
 
 	audioSettings->Add(new PopupSliderChoice(&g_Config.iSFXVolume, 0, 8, a->T("SFX volume"), screenManager()));
@@ -304,12 +308,14 @@ void GameSettingsScreen::CreateViews() {
 	controlsSettings->SetSpacing(0);
 	controlsSettingsScroll->Add(controlsSettings);
 	tabHolder->AddTab(ms->T("Controls"), controlsSettingsScroll);
+	controlsSettings->Add(new ItemHeader(ms->T("Controls")));
 	controlsSettings->Add(new Choice(gs->T("Control Mapping")))->OnClick.Handle(this, &GameSettingsScreen::OnControlMapping);
+	controlsSettings->Add(new CheckBox(&g_Config.bAccelerometerToAnalogHoriz, c->T("Tilt", "Tilt to Analog (horizontal)")));
+	controlsSettings->Add(new ItemHeader(c->T("OnScreen", "On-Screen Touch Controls")));
 	controlsSettings->Add(new CheckBox(&g_Config.bShowTouchControls, c->T("OnScreen", "On-Screen Touch Controls")));
 	controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 85, c->T("Button Opacity"), screenManager()));
 	controlsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fButtonScale, 1.15, 2.05, c->T("Button Scaling"), screenManager()));
 	controlsSettings->Add(new CheckBox(&g_Config.bShowAnalogStick, c->T("Show Left Analog Stick")));
-	controlsSettings->Add(new CheckBox(&g_Config.bAccelerometerToAnalogHoriz, c->T("Tilt", "Tilt to Analog (horizontal)")));
 	
 	// System
 	ViewGroup *systemSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -335,10 +341,34 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new CheckBox(&g_Config.bSeparateIOThread, s->T("I/O on thread (experimental)")))->SetEnabled(!PSP_IsInited());
 	systemSettings->Add(new PopupSliderChoice(&g_Config.iLockedCPUSpeed, 0, 1000, gs->T("Change CPU Clock", "Change CPU Clock (0 = default)"), screenManager()));
 
+	enableReports_ = g_Config.sReportHost != "";
+
 #ifndef ANDROID
 	systemSettings->Add(new ItemHeader(s->T("Cheats", "Cheats (experimental, see forums)")));
 	systemSettings->Add(new Choice(s->T("Reload Cheats")))->OnClick.Handle(this, &GameSettingsScreen::OnReloadCheats);
 #endif
+
+	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
+	systemSettings->SetSpacing(0);
+	systemSettings->Add(new ItemHeader(g->T("General")));
+	systemSettings->Add(new Choice(s->T("System Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
+#ifndef ANDROID
+	// Need to move the cheat config dir somewhere where it can be read/written on android
+	systemSettings->Add(new CheckBox(&g_Config.bEnableCheats, s->T("Enable Cheats")));
+#endif
+#ifdef _WIN32
+	// Screenshot functionality is not yet available on non-Windows
+	systemSettings->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, gs->T("Screenshots as PNG")));
+#endif
+
+	// TODO: Come up with a way to display a keyboard for mobile users,
+	// so until then, this is Windows/Desktop only.
+#ifdef _WIN32
+	systemSettings->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeNickname);
+#endif
+	systemSettings->Add(new CheckBox(&enableReports_, s->T("Enable Compatibility Server Reports")));
+	systemSettings->Add(new Choice(s->T("Developer Tools")))->OnClick.Handle(this, &GameSettingsScreen::OnDeveloperTools);
+
 
 	systemSettings->Add(new ItemHeader(s->T("PSP Settings")));
 	systemSettings->Add(new CheckBox(&g_Config.bDayLightSavings, s->T("Day Light Saving")));
@@ -418,7 +448,9 @@ UI::EventReturn GameSettingsScreen::OnBack(UI::EventParams &e) {
 			Atrac3plus_Decoder::Init();
 		else Atrac3plus_Decoder::Shutdown();
 	}
-	
+	g_Config.sReportHost = enableReports_ ? "report.ppsspp.org" : "";
+	g_Config.Save();
+
 #ifdef _WIN32
 	PostMessage(MainWindow::hwndMain, MainWindow::WM_USER_ATRAC_STATUS_CHANGED, 0, 0);
 #endif
@@ -426,40 +458,15 @@ UI::EventReturn GameSettingsScreen::OnBack(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+/*
 void GlobalSettingsScreen::CreateViews() {
 	using namespace UI;
 	root_ = new ScrollView(ORIENT_VERTICAL);
 
 	enableReports_ = g_Config.sReportHost != "";
+}*/
 
-	I18NCategory *g = GetI18NCategory("General");
-	I18NCategory *s = GetI18NCategory("System");
-	I18NCategory *gs = GetI18NCategory("Graphics");
-
-	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
-	list->SetSpacing(0);
-	list->Add(new ItemHeader(g->T("General")));
-	list->Add(new CheckBox(&enableReports_, s->T("Enable Compatibility Server Reports")));
-#ifndef ANDROID
-	// Need to move the cheat config dir somewhere where it can be read/written on android
-	list->Add(new CheckBox(&g_Config.bEnableCheats, s->T("Enable Cheats")));
-#endif
-#ifdef _WIN32
-	// Screenshot functionality is not yet available on non-Windows
-	list->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, gs->T("Screenshots as PNG")));
-#endif
-
-	// TODO: Come up with a way to display a keyboard for mobile users,
-	// so until then, this is Windows/Desktop only.
-#ifdef _WIN32
-	list->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GlobalSettingsScreen::OnChangeNickname);
-#endif
-	list->Add(new Choice(s->T("System Language")))->OnClick.Handle(this, &GlobalSettingsScreen::OnLanguage);
-	list->Add(new Choice(s->T("Developer Tools")))->OnClick.Handle(this, &GlobalSettingsScreen::OnDeveloperTools);
-	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &GlobalSettingsScreen::OnBack);
-}
-
-UI::EventReturn GlobalSettingsScreen::OnChangeNickname(UI::EventParams &e) {
+UI::EventReturn GameSettingsScreen::OnChangeNickname(UI::EventParams &e) {
 	#ifdef _WIN32
 
 	const size_t name_len = 256;
@@ -474,30 +481,23 @@ UI::EventReturn GlobalSettingsScreen::OnChangeNickname(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn GlobalSettingsScreen::OnFactoryReset(UI::EventParams &e) {
+UI::EventReturn GameSettingsScreen::OnFactoryReset(UI::EventParams &e) {
 	screenManager()->push(new PluginScreen());
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn GlobalSettingsScreen::OnLanguage(UI::EventParams &e) {
+UI::EventReturn GameSettingsScreen::OnLanguage(UI::EventParams &e) {
 	screenManager()->push(new NewLanguageScreen());
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn GlobalSettingsScreen::OnDeveloperTools(UI::EventParams &e) {
+UI::EventReturn GameSettingsScreen::OnDeveloperTools(UI::EventParams &e) {
 	screenManager()->push(new DeveloperToolsScreen());
 	return UI::EVENT_DONE;
 }
 
 UI::EventReturn GameSettingsScreen::OnControlMapping(UI::EventParams &e) {
 	screenManager()->push(new ControlMappingScreen());
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GlobalSettingsScreen::OnBack(UI::EventParams &e) {
-	screenManager()->finishDialog(this, DR_OK);
-	g_Config.sReportHost = enableReports_ ? "report.ppsspp.org" : "";
-	g_Config.Save();
 	return UI::EVENT_DONE;
 }
 

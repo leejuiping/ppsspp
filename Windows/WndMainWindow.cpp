@@ -333,7 +333,6 @@ namespace MainWindow
 		SetTimer(hwndMain, TIMER_CURSORUPDATE, CURSORUPDATE_INTERVAL_MS, 0);
 
 		Update();
-		SetPlaying(0);
 
 		if(g_Config.bFullScreenOnLaunch)
 			_ViewFullScreen(hwndMain);
@@ -664,7 +663,9 @@ namespace MainWindow
 
 				case ID_TOGGLE_PAUSE:
 					if (globalUIState == UISTATE_PAUSEMENU) {
-						NativeMessageReceived("run", "");
+						// Causes hang
+						//NativeMessageReceived("run", "");
+
 						if (disasmWindow[0])
 							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 					}
@@ -692,7 +693,6 @@ namespace MainWindow
 						Core_EnableStepping(false);
 					}
 					NativeMessageReceived("stop", "");
-					SetPlaying(0);
 					Update();
 					break;
 
@@ -1154,8 +1154,7 @@ namespace MainWindow
 					// Ugly, need to wait for the stop message to process in the EmuThread.
 					Sleep(20);
 					
-					MainWindow::SetPlaying(filename);
-					MainWindow::Update();
+					Update();
 
 					NativeMessageReceived("boot", filename);
 				}
@@ -1403,9 +1402,6 @@ namespace MainWindow
 		EnableMenuItem(menu, ID_CPU_INTERPRETER, menuEnable);
 		EnableMenuItem(menu, ID_CPU_MULTITHREADED, menuEnable);
 		EnableMenuItem(menu, ID_IO_MULTITHREADED, menuEnable);
-		EnableMenuItem(menu, ID_TOGGLE_PAUSE, !menuEnable);
-		EnableMenuItem(menu, ID_EMULATION_STOP, !menuEnable);
-		EnableMenuItem(menu, ID_EMULATION_RESET, !menuEnable);
 		EnableMenuItem(menu, ID_DEBUG_LOG, !g_Config.bEnableLogging);
 		EnableMenuItem(menu, ID_EMULATION_RENDER_MODE_OGL, menuEnable);
 		EnableMenuItem(menu, ID_EMULATION_RENDER_MODE_SOFT, menuEnable);
@@ -1496,16 +1492,6 @@ namespace MainWindow
 		ResizeDisplay();
 		ShowOwnedPopups(hwndMain, FALSE);
 		UpdateScreenScale();
-	}
-
-	void SetPlaying(const char *text) {
-		char temp[256];
-		if (text == 0)
-			snprintf(temp, 256, "PPSSPP %s", PPSSPP_GIT_VERSION);
-		else
-			snprintf(temp, 256, "%s - PPSSPP %s", text, PPSSPP_GIT_VERSION);
-		temp[255] = '\0';
-		SetWindowText(hwndMain, temp);
 	}
 
 	void SaveStateActionFinished(bool result, void *userdata) {

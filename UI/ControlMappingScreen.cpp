@@ -86,7 +86,7 @@ void ControlMapper::Refresh() {
 	
 	root->Add(new Choice(keyName_, new LinearLayoutParams(200, WRAP_CONTENT)))->OnClick.Handle(this, &ControlMapper::OnReplaceAll);
 	LinearLayout *rightColumn = root->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
-
+	rightColumn->SetSpacing(2.0f);
 	std::vector<KeyDef> mappings;
 	KeyMap::KeyFromPspButton(pspKey_, &mappings);
 
@@ -99,14 +99,14 @@ void ControlMapper::Refresh() {
 
 		Choice *c = row->Add(new Choice(deviceName + "." + keyName, new LinearLayoutParams(1.0f)));
 		char tagbuf[16];
-		sprintf(tagbuf, "%i", i);
+		sprintf(tagbuf, "%i", (int)i);
 		c->SetTag(tagbuf);
 		c->OnClick.Handle(this, &ControlMapper::OnReplace);
-		
+
 		Choice *d = row->Add(new Choice("X"));
 		d->SetTag(tagbuf);
 		d->OnClick.Handle(this, &ControlMapper::OnDelete);
-		
+
 		row->Add(new Choice("+"))->OnClick.Handle(this, &ControlMapper::OnAdd);
 	}
 
@@ -222,11 +222,6 @@ void KeyMappingNewKeyDialog::key(const KeyInput &key) {
 			return;
 		}
 
-		if (key.keyCode == NKCODE_ESCAPE) {
-			screenManager()->finishDialog(this, DR_CANCEL);
-			return;
-		}
-		
 		KeyDef kdf(key.deviceId, key.keyCode);
 		screenManager()->finishDialog(this, DR_OK);
 		if (callback_)

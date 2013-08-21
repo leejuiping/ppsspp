@@ -123,10 +123,10 @@ std::map<std::string, std::pair<std::string, int>> GetLangValuesMapping() {
 	langValuesMapping["sv_SE"] = std::make_pair("Svenska", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 	langValuesMapping["tr_TR"] = std::make_pair("Türk", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 	langValuesMapping["uk_UA"] = std::make_pair("Українська", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+	langValuesMapping["vn_VN"] = std::make_pair("Vietnamese", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+	langValuesMapping["cz_CZ"] = std::make_pair("Česky", PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 	return langValuesMapping;
 }
-
-
 
 void UIScreenWithBackground::DrawBackground(UIContext &dc) {
 	::DrawBackground(1.0f);
@@ -179,25 +179,30 @@ NewLanguageScreen::NewLanguageScreen() : ListPopupScreen("Language") {
 #endif
 	langValuesMapping = GetLangValuesMapping();
 
+	std::vector<FileInfo> tempLangs;
 #ifdef ANDROID
-	VFSGetFileListing("assets/lang", &langs_, "ini");
+	VFSGetFileListing("assets/lang", &tempLangs, "ini");
 #else
-	VFSGetFileListing("lang", &langs_, "ini");
+	VFSGetFileListing("lang", &tempLangs, "ini");
 #endif
 	std::vector<std::string> listing;
 	int selected = -1;
-	for (size_t i = 0; i < langs_.size(); i++) {
+	int counter = 0;
+	for (size_t i = 0; i < tempLangs.size(); i++) {
 		// Skip README
-		if (langs_[i].name.find("README") != std::string::npos) {
+		if (tempLangs[i].name.find("README") != std::string::npos) {
 			continue;
 		}
 
-		std::string code;
-		size_t dot = langs_[i].name.find('.');
-		if (dot != std::string::npos)
-			code = langs_[i].name.substr(0, dot);
+		FileInfo lang = tempLangs[i];
+		langs_.push_back(lang);
 
-		std::string buttonTitle = langs_[i].name;
+		std::string code;
+		size_t dot = lang.name.find('.');
+		if (dot != std::string::npos)
+			code = lang.name.substr(0, dot);
+
+		std::string buttonTitle = lang.name;
 
 		if (!code.empty()) {
 			if (langValuesMapping.find(code) == langValuesMapping.end()) {
@@ -208,8 +213,9 @@ NewLanguageScreen::NewLanguageScreen() : ListPopupScreen("Language") {
 			}
 		}
 		if (g_Config.languageIni == code)
-			selected = (int)i;
+			selected = counter;
 		listing.push_back(buttonTitle);
+		counter++;
 	}
 
 	adaptor_ = UI::StringVectorListAdaptor(listing, selected);
@@ -316,10 +322,11 @@ void SystemInfoScreen::CreateViews() {
 	LinearLayout *scroll = new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, WRAP_CONTENT));
 	root_->Add(scroll);
 
-	scroll->Add(new PopupHeader("System Information"));
-
-	scroll->Add(new InfoItem("System Name", System_GetName()));
-
+	scroll->Add(new ItemHeader("System Information"));
+	scroll->Add(new InfoItem("System Name :", System_GetName()));
+	scroll->Add(new InfoItem("GPU Vendor :", (char *)glGetString(GL_VENDOR)));
+	scroll->Add(new InfoItem("GPU Model :", (char *)glGetString(GL_RENDERER)));
+	
 	scroll->Add(new ItemHeader("OpenGL ES 2.0 Extensions"));
 	std::vector<std::string> exts;
 	SplitString(g_all_gl_extensions, ' ', exts);

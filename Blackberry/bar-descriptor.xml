@@ -3,7 +3,7 @@
     <id>com.Qtness.PPSSPP</id>
     <name>PPSSPP</name>
     <filename>PPSSPPBlackberry</filename>
-    <versionNumber>0.8.1</versionNumber>
+    <versionNumber>0.9</versionNumber>
     <buildId>1</buildId>
     <description>Playstation portable emulator.</description>
 
@@ -29,6 +29,8 @@
     </icon>
 
     <splashscreen>icon-114.png</splashscreen>
+
+    <env var="LD_LIBRARY_PATH" value="app/native/lib:/usr/lib/qt4/lib/:/accounts/1000/shared/misc/"/>
 
     <action system="true">run_native</action>
     <action>access_shared</action>

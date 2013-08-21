@@ -113,6 +113,8 @@ void GameButton::Draw(UIContext &dc) {
 	int h = bounds_.h;
 
 	UI::Style style = dc.theme->itemStyle;
+	if (down_)
+		style = dc.theme->itemDownStyle;
 
 	if (!gridStyle_ || !texture) {
 		// w = 144 * 80 / 50;
@@ -141,6 +143,7 @@ void GameButton::Draw(UIContext &dc) {
 	}
 
 	int txOffset = down_ ? 4 : 0;
+	if (!gridStyle_) txOffset = 0;
 
 	// Render button
 	int dropsize = 10;
@@ -214,12 +217,13 @@ public:
 	}
 	std::string GetFriendlyPath() {
 		std::string str = GetPath();
+		/*
 #ifdef ANDROID
 		if (!memcmp(str.c_str(), g_Config.memCardDirectory.c_str(), g_Config.memCardDirectory.size()))
 		{
 			str = str.substr(g_Config.memCardDirectory.size());
 		}
-#endif
+#endif*/
 		return str;
 	}
 
@@ -245,8 +249,7 @@ void PathBrowser::GetListing(std::vector<FileInfo> &fileInfo, const char *filter
 	if (path_ == "/") {
 		// Special path that means root of file system.
 		std::vector<std::string> drives = getWindowsDrives();
-		for (auto drive = drives.begin(); drive != drives.end(); ++drive) 
-		{
+		for (auto drive = drives.begin(); drive != drives.end(); ++drive) {
 			FileInfo fake;
 			fake.fullName = *drive;
 			fake.name = *drive;
@@ -288,6 +291,12 @@ void PathBrowser::Navigate(const std::string &path) {
 		if (path_[path_.size() - 1] != '/')
 			path_ += "/";
 	}
+}
+
+static std::string GetMemCardDirectory() {
+	std::string memCardDirectory, ignore;
+	GetSysDirectories(memCardDirectory, ignore);
+	return memCardDirectory;
 }
 
 class GameBrowser : public UI::LinearLayout {
@@ -333,7 +342,7 @@ UI::EventReturn GameBrowser::LastClick(UI::EventParams &e) {
 }
 
 UI::EventReturn GameBrowser::HomeClick(UI::EventParams &e) {
-	path_.SetPath(g_Config.memCardDirectory);
+	path_.SetPath(GetMemCardDirectory());
 	g_Config.currentDirectory = path_.GetPath();
 	Refresh();
 	return UI::EVENT_DONE;
@@ -345,11 +354,14 @@ void GameBrowser::Refresh() {
 	// Kill all the contents
 	Clear();
 
+	Add(new Spacer(5.0f));
+	I18NCategory *m = GetI18NCategory("MainMenu");
+
 	if (allowBrowsing_) {
 		LinearLayout *topBar = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 		topBar->Add(new TextView(path_.GetFriendlyPath().c_str(), ALIGN_VCENTER, 0.7f, new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT, 1.0f)));
 #ifdef ANDROID
-		topBar->Add(new Choice("Home"))->OnClick.Handle(this, &GameBrowser::HomeClick);
+		topBar->Add(new Choice(m->T("Home")))->OnClick.Handle(this, &GameBrowser::HomeClick);
 #endif
 		ChoiceStrip *layoutChoice = topBar->Add(new ChoiceStrip(ORIENT_HORIZONTAL));
 		layoutChoice->AddChoice(I_GRID);
@@ -362,7 +374,9 @@ void GameBrowser::Refresh() {
 	if (*gridStyle_) {
 		gameList_ = new UI::GridLayout(UI::GridLayoutSettings(150, 85), new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 	} else {
-		gameList_ = new UI::LinearLayout(UI::ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
+		UI::LinearLayout *gl = new UI::LinearLayout(UI::ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
+		gl->SetSpacing(4.0f);
+		gameList_ = gl;
 	}
 	Add(gameList_);
 
@@ -372,13 +386,13 @@ void GameBrowser::Refresh() {
 
 	if (path_.GetPath() == "!RECENT") {
 		for (size_t i = 0; i < g_Config.recentIsos.size(); i++) {
-			gameButtons.push_back(new GameButton(g_Config.recentIsos[i], *gridStyle_));
+			gameButtons.push_back(new GameButton(g_Config.recentIsos[i], *gridStyle_, new UI::LinearLayoutParams(*gridStyle_ == true ? UI::WRAP_CONTENT : UI::FILL_PARENT, UI::WRAP_CONTENT)));
 		}
 	} else {
 		std::vector<FileInfo> fileInfo;
 		path_.GetListing(fileInfo, "iso:cso:pbp:elf:prx:");
 		for (size_t i = 0; i < fileInfo.size(); i++) {
-			if (fileInfo[i].isDirectory && !File::Exists(path_.GetPath() + fileInfo[i].name + "/EBOOT.PBP")) {
+			if (fileInfo[i].isDirectory && (path_.GetPath().size() < 4 || !File::Exists(path_.GetPath() + fileInfo[i].name + "/EBOOT.PBP"))) {
 				// Check if eboot directory
 				if (allowBrowsing_)
 					dirButtons.push_back(new UI::Button(fileInfo[i].name.c_str(), new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)));
@@ -455,11 +469,12 @@ void MainScreen::CreateViews() {
 
 	I18NCategory *m = GetI18NCategory("MainMenu");
 
-	Margins actionMenuMargins(0, 0, 10, 0);
+	Margins actionMenuMargins(0, 10, 10, 0);
 
 	root_ = new LinearLayout(ORIENT_HORIZONTAL);
 
 	TabHolder *leftColumn = new TabHolder(ORIENT_HORIZONTAL, 64, new LinearLayoutParams(1.0));
+	leftColumn->SetClip(true);
 	root_->Add(leftColumn);
 
 	ScrollView *scrollRecentGames = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
@@ -467,13 +482,13 @@ void MainScreen::CreateViews() {
 	ScrollView *scrollHomebrew = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 
 	GameBrowser *tabRecentGames = new GameBrowser(
-		"!RECENT", false, &g_Config.bGridView1, m->T("How to get games"), "http://www.ppsspp.org/faq.html",
+		"!RECENT", false, &g_Config.bGridView1, "", "",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	GameBrowser *tabAllGames = new GameBrowser(g_Config.currentDirectory, true, &g_Config.bGridView2, 
-		m->T("How to get games"), "http://www.ppsspp.org/faq.html",
+		m->T("How to get games"), "http://www.ppsspp.org/getgames.html",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
-	GameBrowser *tabHomebrew = new GameBrowser(g_Config.memCardDirectory + "PSP/GAME/", false, &g_Config.bGridView3, 
-		"", "",
+	GameBrowser *tabHomebrew = new GameBrowser(GetMemCardDirectory() + "PSP/GAME/", false, &g_Config.bGridView3,
+		m->T("How to get homebrew & demos"), "http://www.ppsspp.org/gethomebrew.html",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 
 	scrollRecentGames->Add(tabRecentGames);
@@ -522,7 +537,6 @@ void MainScreen::CreateViews() {
 	rightColumnItems->Add(new Choice(m->T("Load","Load...")))->OnClick.Handle(this, &MainScreen::OnLoadFile);
 #endif
 	rightColumnItems->Add(new Choice(m->T("Game Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
-	rightColumnItems->Add(new Choice(m->T("Main Settings")))->OnClick.Handle(this, &MainScreen::OnSettings);
 	rightColumnItems->Add(new Choice(m->T("Exit")))->OnClick.Handle(this, &MainScreen::OnExit);
 	rightColumnItems->Add(new Choice(m->T("Credits")))->OnClick.Handle(this, &MainScreen::OnCredits);
 	rightColumnItems->Add(new Choice(m->T("www.ppsspp.org")))->OnClick.Handle(this, &MainScreen::OnPPSSPPOrg);
@@ -569,12 +583,6 @@ UI::EventReturn MainScreen::OnGameSelectedInstant(UI::EventParams &e) {
 UI::EventReturn MainScreen::OnGameSettings(UI::EventParams &e) {
 	// screenManager()->push(new SettingsScreen());
 	screenManager()->push(new GameSettingsScreen("",""));
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn MainScreen::OnSettings(UI::EventParams &e) {
-	// screenManager()->push(new SettingsScreen());
-	screenManager()->push(new GlobalSettingsScreen());
 	return UI::EVENT_DONE;
 }
 
@@ -653,9 +661,13 @@ void GamePauseScreen::CreateViews() {
 	saveSlots_->AddChoice("  3  ");
 	saveSlots_->AddChoice("  4  ");
 	saveSlots_->SetSelection(g_Config.iCurrentStateSlot);
+	saveSlots_->OnChoice.Handle(this, &GamePauseScreen::OnStateSelected);
+	
+	saveStateButton_ = leftColumnItems->Add(new Choice(gs->T("Save State")));
+	saveStateButton_->OnClick.Handle(this, &GamePauseScreen::OnSaveState);
 
-	leftColumnItems->Add(new Choice(gs->T("Save State")))->OnClick.Handle(this, &GamePauseScreen::OnSaveState);
-	leftColumnItems->Add(new Choice(gs->T("Load State")))->OnClick.Handle(this, &GamePauseScreen::OnLoadState);
+	loadStateButton_ = leftColumnItems->Add(new Choice(gs->T("Load State")));
+	loadStateButton_->OnClick.Handle(this, &GamePauseScreen::OnLoadState);
 
 	ViewGroup *rightColumn = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(300, FILL_PARENT, actionMenuMargins));
 	root_->Add(rightColumn);
@@ -665,17 +677,21 @@ void GamePauseScreen::CreateViews() {
 
 	rightColumnItems->Add(new Choice(i->T("Continue")))->OnClick.Handle(this, &GamePauseScreen::OnContinue);
 	rightColumnItems->Add(new Choice(i->T("Game Settings")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);
-	rightColumnItems->Add(new Choice(i->T("Main Settings")))->OnClick.Handle(this, &GamePauseScreen::OnMainSettings);
 	rightColumnItems->Add(new Choice(i->T("Exit to menu")))->OnClick.Handle(this, &GamePauseScreen::OnExitToMenu);
-}
 
-UI::EventReturn GamePauseScreen::OnMainSettings(UI::EventParams &e) {
-	screenManager()->push(new GlobalSettingsScreen());
-	return UI::EVENT_DONE;
+	UI::EventParams e;
+	e.a = g_Config.iCurrentStateSlot;
+	saveSlots_->OnChoice.Trigger(e);
 }
 
 UI::EventReturn GamePauseScreen::OnGameSettings(UI::EventParams &e) {
 	screenManager()->push(new GameSettingsScreen(gamePath_));
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GamePauseScreen::OnStateSelected(UI::EventParams &e) {
+	int st = e.a;
+	loadStateButton_->SetEnabled(SaveState::HasSaveInSlot(st));
 	return UI::EVENT_DONE;
 }
 

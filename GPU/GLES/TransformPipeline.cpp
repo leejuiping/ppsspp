@@ -33,12 +33,12 @@
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
 
-#include "StateMapping.h"
-#include "TextureCache.h"
-#include "TransformPipeline.h"
-#include "VertexDecoder.h"
-#include "ShaderManager.h"
-#include "DisplayListInterpreter.h"
+#include "GPU/GLES/StateMapping.h"
+#include "GPU/GLES/TextureCache.h"
+#include "GPU/GLES/TransformPipeline.h"
+#include "GPU/GLES/VertexDecoder.h"
+#include "GPU/GLES/ShaderManager.h"
+#include "GPU/GLES/GLES_GPU.h"
 
 const GLuint glprim[8] = {
 	GL_POINTS,
@@ -325,6 +325,7 @@ void Lighter::Light(float colorOut0[4], float colorOut1[4], const float colorIn[
 			lightScale = clamp(1.0f / (gstate_c.lightatt[l][0] + gstate_c.lightatt[l][1]*distanceToLight + gstate_c.lightatt[l][2]*distanceToLight*distanceToLight), 0.0f, 1.0f);
 			break;
 		case GE_LIGHTTYPE_SPOT:
+		case GE_LIGHTTYPE_UNKNOWN:
 			lightDir = gstate_c.lightdir[l];
 			angle = Dot(toLight.Normalized(), lightDir.Normalized());
 			if (angle >= gstate_c.lightangle[l])
@@ -683,13 +684,13 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 					Vec3f source;
 					switch (gstate.getUVProjMode())
 					{
-					case 0: // Use model space XYZ as source
+					case GE_PROJMAP_POSITION: // Use model space XYZ as source
 						source = pos;
 						break;
-					case 1: // Use unscaled UV as source
+					case GE_PROJMAP_UV: // Use unscaled UV as source
 						source = Vec3f(ruv[0], ruv[1], 0.0f);
 						break;
-					case 2: // Use normalized normal as source
+					case GE_PROJMAP_NORMALIZED_NORMAL: // Use normalized normal as source
 						if (reader.hasNormal()) {
 							source = Vec3f(norm).Normalized();
 						} else {
@@ -697,7 +698,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 							source = Vec3f::AssignToAll(0.0f);
 						}
 						break;
-					case 3: // Use non-normalized normal as source!
+					case GE_PROJMAP_NORMAL: // Use non-normalized normal as source!
 						if (reader.hasNormal()) {
 							source = Vec3f(norm);
 						} else {

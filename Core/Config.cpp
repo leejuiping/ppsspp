@@ -73,7 +73,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 		iMaxRecent = 12;
 
 	// "default" means let emulator decide, "" means disable.
-	general->Get("ReportHost", &sReportHost, "default");
+	general->Get("ReportingHost", &sReportHost, "default");
 	general->Get("Recent", recentIsos);
 	general->Get("AutoSaveSymbolMap", &bAutoSaveSymbolMap, false);
 #ifdef _WIN32
@@ -92,7 +92,11 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	cpu->Get("Jit", &bJit, true);
 #endif
 	cpu->Get("SeparateCPUThread", &bSeparateCPUThread, false);
+#ifdef __SYMBIAN32__
 	cpu->Get("SeparateIOThread", &bSeparateIOThread, false);
+#else
+	cpu->Get("SeparateIOThread", &bSeparateIOThread, true);
+#endif
 	cpu->Get("FastMemory", &bFastMemory, false);
 	cpu->Get("CPUSpeed", &iLockedCPUSpeed, 0);
 
@@ -117,7 +121,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	graphics->Get("SSAA", &bAntiAliasing, 0);
 	graphics->Get("FrameSkip", &iFrameSkip, 0);
 	graphics->Get("FrameRate", &iFpsLimit, 0);
-	graphics->Get("ForceMaxEmulatedFPS", &iForceMaxEmulatedFPS, 0);
+	graphics->Get("ForceMaxEmulatedFPS", &iForceMaxEmulatedFPS, 60);
 #ifdef USING_GLES2
 	graphics->Get("AnisotropyLevel", &iAnisotropyLevel, 0);
 #else
@@ -233,7 +237,7 @@ void Config::Save() {
 		general->Set("IgnoreBadMemAccess", bIgnoreBadMemAccess);
 		general->Set("CurrentDirectory", currentDirectory);
 		general->Set("ShowDebuggerOnLoad", bShowDebuggerOnLoad);
-		general->Set("ReportHost", sReportHost);
+		general->Set("ReportingHost", sReportHost);
 		general->Set("Recent", recentIsos);
 		general->Set("AutoSaveSymbolMap", bAutoSaveSymbolMap);
 #ifdef _WIN32
@@ -293,7 +297,7 @@ void Config::Save() {
 		sound->Set("VolumeSFX", iSFXVolume);
 
 		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
-		control->Set("ShowStick", bShowAnalogStick);
+		control->Set("ShowAnalogStick", bShowAnalogStick);
 		control->Set("ShowTouchControls", bShowTouchControls);
 		// control->Set("KeyMapping",iMappingMap);
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);

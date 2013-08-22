@@ -280,9 +280,30 @@ namespace MainWindow
 	}
 
 	void setFrameSkipping(int framesToSkip) {
-		I18NCategory *g = GetI18NCategory("Graphics");
 		g_Config.iFrameSkip = framesToSkip;
-	}
+
+		I18NCategory *g = GetI18NCategory("Graphics");
+		const char *frameskipStr = g->T("Frame Skipping");
+		const char *offStr = g->T("Off");
+		const char *autoStr = g->T("Auto");
+
+		char message[256];
+		memset(message, 0, sizeof(message));
+
+		switch(g_Config.iFrameSkip) {
+		case 0:
+			sprintf(message, "%s: %s", frameskipStr, offStr);
+			break;
+		case 1:
+			sprintf(message, "%s: %s", frameskipStr, autoStr);
+			break;
+		default:
+			sprintf(message, "%s: %d", frameskipStr, g_Config.iFrameSkip);
+			break;
+		}
+
+		osm.Show(message); 
+	} 
 
 	void enableCheats(bool cheats) {
 		g_Config.bEnableCheats = cheats;
@@ -859,8 +880,8 @@ namespace MainWindow
 					setFrameSkipping(FRAMESKIP_OFF);
 					break;
 
-				case ID_OPTIONS_FRAMESKIP_1:
-					setFrameSkipping(FRAMESKIP_1);
+				case ID_OPTIONS_FRAMESKIP_AUTO:
+					setFrameSkipping(FRAMESKIP_AUTO);
 					break;
 
 				case ID_OPTIONS_FRAMESKIP_2:
@@ -888,10 +909,6 @@ namespace MainWindow
 					break;
 
 				case ID_OPTIONS_FRAMESKIP_8:
-					setFrameSkipping(FRAMESKIP_8);
-					break;
-
-				case ID_OPTIONS_FRAMESKIP_9:
 					setFrameSkipping(FRAMESKIP_MAX);
 					break;
 
@@ -1350,7 +1367,7 @@ namespace MainWindow
 
 		static const int frameskipping[] = {
 			ID_OPTIONS_FRAMESKIP_0,
-			ID_OPTIONS_FRAMESKIP_1,
+			ID_OPTIONS_FRAMESKIP_AUTO,
 			ID_OPTIONS_FRAMESKIP_2,
 			ID_OPTIONS_FRAMESKIP_3,
 			ID_OPTIONS_FRAMESKIP_4,
@@ -1358,7 +1375,6 @@ namespace MainWindow
 			ID_OPTIONS_FRAMESKIP_6,
 			ID_OPTIONS_FRAMESKIP_7,
 			ID_OPTIONS_FRAMESKIP_8,
-			ID_OPTIONS_FRAMESKIP_9,
 		};
 		if(g_Config.iFrameSkip < FRAMESKIP_OFF)
 			g_Config.iFrameSkip = FRAMESKIP_OFF;

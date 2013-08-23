@@ -193,7 +193,10 @@ NewLanguageScreen::NewLanguageScreen() : ListPopupScreen("Language") {
 		if (tempLangs[i].name.find("README") != std::string::npos) {
 			continue;
 		}
-
+		// Skip ar_AE
+		if (tempLangs[i].name.find("ar_AE") != std::string::npos) {
+			continue;
+		}
 		FileInfo lang = tempLangs[i];
 		langs_.push_back(lang);
 
@@ -351,8 +354,15 @@ void CreditsScreen::CreateViews() {
 #ifndef GOLD
 	root_->Add(new Button(g->T("Buy Gold"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 10, false)))->OnClick.Handle(this, &CreditsScreen::OnSupport);
 #endif
-	root_->Add(new Button(g->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
-	root_->Add(new Button("www.ppsspp.org", new AnchorLayoutParams(260, 64, 10, NONE, NONE, 158, false)))->OnClick.Handle(this, &CreditsScreen::OnPPSSPPOrg);
+	if(g_Config.languageIni == "zh_CN") {
+	  root_->Add(new Button(g->T("PPSSPP Chinese Forum"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnChineseForum);
+	  root_->Add(new Button(g->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 154, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
+	  root_->Add(new Button("www.ppsspp.org", new AnchorLayoutParams(260, 64, 10, NONE, NONE, 228, false)))->OnClick.Handle(this, &CreditsScreen::OnPPSSPPOrg);
+	}
+	else {
+	  root_->Add(new Button(g->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
+	  root_->Add(new Button("www.ppsspp.org", new AnchorLayoutParams(260, 64, 10, NONE, NONE, 158, false)))->OnClick.Handle(this, &CreditsScreen::OnPPSSPPOrg);
+	}
 #ifdef GOLD
 	root_->Add(new ImageView(I_ICONGOLD, new AnchorLayoutParams(100, 64, 10, 10, NONE, NONE, false)));
 #else
@@ -376,6 +386,11 @@ UI::EventReturn CreditsScreen::OnPPSSPPOrg(UI::EventParams &e) {
 
 UI::EventReturn CreditsScreen::OnForums(UI::EventParams &e) {
 	LaunchBrowser("http://forums.ppsspp.org");
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn CreditsScreen::OnChineseForum(UI::EventParams &e) {
+	LaunchBrowser("http://tieba.baidu.com/f?ie=utf-8&kw=ppsspp");
 	return UI::EVENT_DONE;
 }
 

@@ -217,7 +217,14 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		}
 
 		// At this point, through all paths above, glBlendFuncA and glBlendFuncB will be set right somehow.
-		glstate.blendFunc.set(glBlendFuncA, glBlendFuncB);
+#if 1
+		// Fixes some Persona 2 issues, may be correct? (that is, don't change dest alpha at all if blending)
+		// If this doesn't break anything else, it's likely to be right.
+		// I guess an alternative solution would be to simply disable alpha writes if alpha blending is enabled.
+		glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ONE);
+#else
+		glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, glBlendFuncA, glBlendFuncB);
+#endif
 		glstate.blendEquation.set(eqLookup[blendFuncEq]);
 	}
 
@@ -328,21 +335,21 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 	// Scissor
 	int scissorX1 = gstate.getScissorX1();
 	int scissorY1 = gstate.getScissorY1();
-	int scissorX2 = gstate.getScissorX2();
-	int scissorY2 = gstate.getScissorY2();
+	int scissorX2 = gstate.getScissorX2() + 1;
+	int scissorY2 = gstate.getScissorY2() + 1;
 
 	// This is a bit of a hack as the render buffer isn't always that size
 	if (scissorX1 == 0 && scissorY1 == 0 
-		&& scissorX2 >= (int) (gstate_c.curRTWidth - 1) 
-		&& scissorY2 >= (int) (gstate_c.curRTHeight - 1)) {
+		&& scissorX2 >= (int) gstate_c.curRTWidth
+		&& scissorY2 >= (int) gstate_c.curRTHeight) {
 		glstate.scissorTest.disable();
 	} else {
 		glstate.scissorTest.enable();
 		glstate.scissorRect.set(
 			renderX + scissorX1 * renderWidthFactor,
 			renderY + renderHeight - (scissorY2 * renderHeightFactor),
-			(scissorX2 - scissorX1 + 1) * renderWidthFactor,
-			(scissorY2 - scissorY1 + 1) * renderHeightFactor);
+			(scissorX2 - scissorX1) * renderWidthFactor,
+			(scissorY2 - scissorY1) * renderHeightFactor);
 	}
 
 	/*

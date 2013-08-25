@@ -1002,7 +1002,6 @@ add_library(GPU OBJECT
 	GPU/GLES/ShaderManager.cpp
 	GPU/GLES/ShaderManager.h
 	GPU/GLES/Spline.cpp
-	GPU/GLES/Spline.h
 	GPU/GLES/StateMapping.cpp
 	GPU/GLES/StateMapping.h
 	GPU/GLES/TextureCache.cpp
@@ -1139,6 +1138,7 @@ set(NativeAppSource
 	UI/OnScreenDisplay.cpp
 	UI/PluginScreen.cpp
 	UI/ControlMappingScreen.cpp
+	UI/CwCheatScreen.cpp
 	UI/ui_atlas.cpp)
 if(ANDROID)
 	set(NativeAppSource ${NativeAppSource} android/jni/ArmEmitterTest.cpp)

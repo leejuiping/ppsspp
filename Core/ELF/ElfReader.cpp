@@ -68,7 +68,7 @@ void ElfReader::LoadRelocations(Elf32_Rel *rels, int numRelocs)
 
 		addr += segmentVAddr[readwrite];
 
-		u32 op = Memory::ReadUnchecked_U32(addr);
+		u32 op = Memory::Read_Instruction(addr).encoding;
 
 		const bool log = false;
 		//log=true;
@@ -91,7 +91,7 @@ void ElfReader::LoadRelocations(Elf32_Rel *rels, int numRelocs)
 			//add on to put in correct address space
 			if (log)
 				DEBUG_LOG(LOADER,"j/jal reloc %08x", addr);
-			op = (op & 0xFC000000) | (((op&0x03FFFFFF)+(relocateTo>>2))&0x03FFFFFFF);
+			op = (op & 0xFC000000) | (((op&0x03FFFFFF)+(relocateTo>>2))&0x03FFFFFF);
 			break;
 
 		case R_MIPS_HI16: //lui part of lui-addiu pairs
@@ -145,7 +145,7 @@ void ElfReader::LoadRelocations(Elf32_Rel *rels, int numRelocs)
 		case R_MIPS_16:
 			{
 				char temp[256];
-				MIPSDisAsm(op, 0, temp);
+				MIPSDisAsm(MIPSOpcode(op), 0, temp);
 				ERROR_LOG_REPORT(LOADER, "WARNING: Unsupported R_MIPS_16 reloc @ %08x : %s", addr, temp);
 			}
 			break;
@@ -157,7 +157,7 @@ void ElfReader::LoadRelocations(Elf32_Rel *rels, int numRelocs)
 		default:
 			{
 				char temp[256];
-				MIPSDisAsm(op, 0, temp);
+				MIPSDisAsm(MIPSOpcode(op), 0, temp);
 				ERROR_LOG_REPORT(LOADER,"ARGH IT'S AN UNKNOWN RELOCATION!!!!!!!! %08x, type=%d : %s", addr, type, temp);
 			}
 			break;
@@ -288,7 +288,7 @@ void ElfReader::LoadRelocations2(int rel_seg)
 			case 3: // R_MIPS_26
 			case 6: // R_MIPS_J26
 			case 7: // R_MIPS_JAL26
-				op = (op&0xFC000000) | (((op&0x03FFFFFF)+(relocate_to>>2))&0x03FFFFFFF);
+				op = (op&0xFC000000) | (((op&0x03FFFFFF)+(relocate_to>>2))&0x03FFFFFF);
 				break;
 			case 4: // R_MIPS_HI16
 				addr = ((op<<16)+lo16)+relocate_to;
@@ -297,7 +297,7 @@ void ElfReader::LoadRelocations2(int rel_seg)
 				op = (op&0xffff0000) | (addr>>16 );
 				break;
 			case 1:
-			case 5: // R)MIPS_LO16
+			case 5: // R_MIPS_LO16
 				op = (op&0xffff0000) | (((op&0xffff)+relocate_to)&0xffff);
 				break;
 			default:

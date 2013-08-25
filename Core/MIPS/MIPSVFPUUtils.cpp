@@ -23,7 +23,7 @@
 #include <limits>
 
 #define V(i)   (currentMIPS->v[i])
-#define VI(i)   (*(u32*)(&(currentMIPS->v[i])))
+#define VI(i)  (currentMIPS->vi[i])
 
 void GetVectorRegs(u8 regs[4], VectorSize N, int vectorReg) {
 	int mtx = (vectorReg >> 2) & 7;
@@ -226,7 +226,7 @@ VectorSize GetHalfVectorSize(VectorSize sz)
 	}
 }
 
-VectorSize GetVecSize(u32 op)
+VectorSize GetVecSize(MIPSOpcode op)
 {
 	int a = (op>>7)&1;
 	int b = (op>>15)&1;
@@ -241,7 +241,7 @@ VectorSize GetVecSize(u32 op)
 	}
 }
 
-MatrixSize GetMtxSize(u32 op)
+MatrixSize GetMtxSize(MIPSOpcode op)
 {
 	int a = (op>>7)&1;
 	int b = (op>>15)&1;

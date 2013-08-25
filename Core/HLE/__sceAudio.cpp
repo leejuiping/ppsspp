@@ -29,8 +29,6 @@
 #include "FixedSizeQueue.h"
 #include "Common/Thread.h"
 
-// #define LOW_LATENCY_AUDIO
-
 // Should be used to lock anything related to the outAudioQueue.
 recursive_mutex section;
 
@@ -40,30 +38,22 @@ int mixFrequency = 44100;
 
 const int hwSampleRate = 44100;
 
-#ifdef LOW_LATENCY_AUDIO
-const int hwBlockSize = 16;
-const int hostAttemptBlockSize = 256;
-#else
-const int hwBlockSize = 64;
-const int hostAttemptBlockSize = 512;
-#endif
+int hwBlockSize = 64;
+int hostAttemptBlockSize = 512;
 
-const int audioIntervalUs = (int)(1000000ULL * hwBlockSize / hwSampleRate);
-const int audioHostIntervalUs = (int)(1000000ULL * hostAttemptBlockSize / hwSampleRate);
+static int audioIntervalUs;
+static int audioHostIntervalUs;
+
+static s32 *mixBuffer;
 
 // High and low watermarks, basically.  For perfect emulation, the correct values are 0 and 1, respectively.
-// TODO: Tweak
-#ifdef LOW_LATENCY_AUDIO
-const int chanQueueMaxSizeFactor = 0;
-const int chanQueueMinSizeFactor = 1;
-#else
-const int chanQueueMaxSizeFactor = 2;
-const int chanQueueMinSizeFactor = 1;
-#endif
+// TODO: Tweak. Hm, there aren't actually even used currently...
+static int chanQueueMaxSizeFactor;
+static int chanQueueMinSizeFactor;
 
 // TODO: Need to replace this with something lockless. Mutexes in the audio pipeline
 // is bad mojo.
-FixedSizeQueue<s16, hostAttemptBlockSize * 16> outAudioQueue;
+FixedSizeQueue<s16, 512 * 16> outAudioQueue;
 
 static inline s16 clamp_s16(int i) {
 	if (i > 32767)
@@ -77,24 +67,36 @@ static inline s16 adjustvolume(s16 sample, int vol) {
 	return clamp_s16((sample * vol) >> 15);
 }
 
-void hleAudioUpdate(u64 userdata, int cyclesLate)
-{
+void hleAudioUpdate(u64 userdata, int cyclesLate) {
 	__AudioUpdate();
 
 	CoreTiming::ScheduleEvent(usToCycles(audioIntervalUs) - cyclesLate, eventAudioUpdate, 0);
 }
 
-void hleHostAudioUpdate(u64 userdata, int cyclesLate)
-{
+void hleHostAudioUpdate(u64 userdata, int cyclesLate) {
 	// Not all hosts need this call to poke their audio system once in a while, but those that don't
 	// can just ignore it.
 	host->UpdateSound();
 	CoreTiming::ScheduleEvent(usToCycles(audioHostIntervalUs) - cyclesLate, eventHostAudioUpdate, 0);
 }
 
-void __AudioInit()
-{
+void __AudioInit() {
 	mixFrequency = 44100;
+
+	if (g_Config.bLowLatencyAudio) {
+		chanQueueMaxSizeFactor = 1;
+		chanQueueMinSizeFactor = 0;
+		hwBlockSize = 16;
+		hostAttemptBlockSize = 256;
+	} else {
+		chanQueueMaxSizeFactor = 2;
+		chanQueueMinSizeFactor = 1;
+		hwBlockSize = 64;
+		hostAttemptBlockSize = 512;
+	}
+
+	audioIntervalUs = (int)(1000000ULL * hwBlockSize / hwSampleRate);
+	audioHostIntervalUs = (int)(1000000ULL * hostAttemptBlockSize / hwSampleRate);
 
 	eventAudioUpdate = CoreTiming::RegisterEvent("AudioUpdate", &hleAudioUpdate);
 	eventHostAudioUpdate = CoreTiming::RegisterEvent("AudioUpdateHost", &hleHostAudioUpdate);
@@ -103,10 +105,12 @@ void __AudioInit()
 	CoreTiming::ScheduleEvent(usToCycles(audioHostIntervalUs), eventHostAudioUpdate, 0);
 	for (u32 i = 0; i < PSP_AUDIO_CHANNEL_MAX + 1; i++)
 		chans[i].clear();
+
+	mixBuffer = new s32[hwBlockSize * 2];
+	memset(mixBuffer, 0, hwBlockSize * 2 * sizeof(s32));
 }
 
-void __AudioDoState(PointerWrap &p)
-{
+void __AudioDoState(PointerWrap &p) {
 	p.Do(eventAudioUpdate);
 	CoreTiming::RestoreRegisterEvent(eventAudioUpdate, "AudioUpdate", &hleAudioUpdate);
 	p.Do(eventHostAudioUpdate);
@@ -132,14 +136,14 @@ void __AudioDoState(PointerWrap &p)
 	p.DoMarker("sceAudio");
 }
 
-void __AudioShutdown()
-{
+void __AudioShutdown() {
+	delete [] mixBuffer;
+	mixBuffer = 0;
 	for (u32 i = 0; i < PSP_AUDIO_CHANNEL_MAX + 1; i++)
 		chans[i].clear();
 }
 
-u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
-{
+u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking) {
 	u32 ret = chan.sampleCount;
 
 	if (chan.sampleAddress == 0) {
@@ -173,17 +177,14 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
 		return ret;
 	}
 
-	if (chan.format == PSP_AUDIO_FORMAT_STEREO)
-	{
+	if (chan.format == PSP_AUDIO_FORMAT_STEREO) {
 		const u32 totalSamples = chan.sampleCount * 2;
 
-		if (IS_LITTLE_ENDIAN)
-		{
+		if (IS_LITTLE_ENDIAN) {
 			s16 *sampleData = (s16 *) Memory::GetPointer(chan.sampleAddress);
 
 			// Walking a pointer for speed.  But let's make sure we wouldn't trip on an invalid ptr.
-			if (Memory::IsValidAddress(chan.sampleAddress + (totalSamples - 1) * sizeof(s16)))
-			{
+			if (Memory::IsValidAddress(chan.sampleAddress + (totalSamples - 1) * sizeof(s16))) {
 #if 0
 				for (u32 i = 0; i < totalSamples; i += 2) {
 					chan.sampleQueue.push(adjustvolume(*sampleData++, chan.leftVolume));
@@ -197,24 +198,20 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
 				int rightVol = chan.rightVolume;
 
 				// TODO: SSE/NEON implementations
-				for (u32 i = 0; i < sz1; i += 2)
-				{
+				for (u32 i = 0; i < sz1; i += 2) {
 					buf1[i] = adjustvolume(sampleData[i], leftVol);
 					buf1[i + 1] = adjustvolume(sampleData[i + 1], rightVol);
 				}
 				if (buf2) {
 					sampleData += sz1;
-					for (u32 i = 0; i < sz2; i += 2)
-					{
+					for (u32 i = 0; i < sz2; i += 2) {
 						buf2[i] = adjustvolume(sampleData[i], leftVol);
 						buf2[i + 1] = adjustvolume(sampleData[i + 1], rightVol);
 					}
 				}
 #endif
 			}
-		}
-		else
-		{
+		} else {
 			for (u32 i = 0; i < totalSamples; i++) {
 				s16 sampleL = (s16)Memory::Read_U16(chan.sampleAddress + sizeof(s16) * i);
 				sampleL = adjustvolume(sampleL, chan.leftVolume);
@@ -226,10 +223,8 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
 			}
 		}
 	}
-	else if (chan.format == PSP_AUDIO_FORMAT_MONO)
-	{
-		for (u32 i = 0; i < chan.sampleCount; i++)
-		{
+	else if (chan.format == PSP_AUDIO_FORMAT_MONO) {
+		for (u32 i = 0; i < chan.sampleCount; i++) {
 			// Expand to stereo
 			s16 sample = (s16)Memory::Read_U16(chan.sampleAddress + 2 * i);
 			chan.sampleQueue.push(adjustvolume(sample, chan.leftVolume));
@@ -239,18 +234,15 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking)
 	return ret;
 }
 
-inline void __AudioWakeThreads(AudioChannel &chan, int result, int step)
-{
+inline void __AudioWakeThreads(AudioChannel &chan, int result, int step) {
 	u32 error;
-	for (size_t w = 0; w < chan.waitingThreads.size(); ++w)
-	{
+	for (size_t w = 0; w < chan.waitingThreads.size(); ++w) {
 		AudioChannelWaitInfo &waitInfo = chan.waitingThreads[w];
 		waitInfo.numSamples -= step;
 
 		// If it's done (there will still be samples on queue) and actually still waiting, wake it up.
 		u32 waitID = __KernelGetWaitID(waitInfo.threadID, WAITTYPE_AUDIOCHANNEL, error);
-		if (waitInfo.numSamples <= 0 && waitID != 0)
-		{
+		if (waitInfo.numSamples <= 0 && waitID != 0) {
 			// DEBUG_LOG(HLE, "Woke thread %i for some buffer filling", waitingThread);
 			u32 ret = result == 0 ? __KernelGetWaitValue(waitInfo.threadID, error) : SCE_ERROR_AUDIO_CHANNEL_NOT_RESERVED;
 			__KernelResumeThreadFromWait(waitInfo.threadID, ret);
@@ -263,13 +255,11 @@ inline void __AudioWakeThreads(AudioChannel &chan, int result, int step)
 	}
 }
 
-void __AudioWakeThreads(AudioChannel &chan, int result)
-{
+void __AudioWakeThreads(AudioChannel &chan, int result) {
 	__AudioWakeThreads(chan, result, 0x7FFFFFFF);
 }
 
-void __AudioSetOutputFrequency(int freq)
-{
+void __AudioSetOutputFrequency(int freq) {
 	WARN_LOG(HLE, "Switching audio frequency to %i", freq);
 	mixFrequency = freq;
 }
@@ -281,7 +271,6 @@ void __AudioUpdate() {
 	// Audio throttle doesn't really work on the PSP since the mixing intervals are so closely tied
 	// to the CPU. Much better to throttle the frame rate on frame display and just throw away audio
 	// if the buffer somehow gets full.
-	s32 mixBuffer[hwBlockSize * 2];
 	bool firstChannel = true;
 
 	for (u32 i = 0; i < PSP_AUDIO_CHANNEL_MAX + 1; i++)	{
@@ -340,7 +329,6 @@ void __AudioUpdate() {
 		} else {
 			// This happens quite a lot. There's still something slightly off
 			// about the amount of audio we produce.
-			DEBUG_LOG(HLE, "Audio outbuffer overrun! room = %i / %i", outAudioQueue.room(), (u32)outAudioQueue.capacity());
 		}
 	}
 }

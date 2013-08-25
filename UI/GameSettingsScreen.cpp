@@ -302,6 +302,7 @@ void GameSettingsScreen::CreateViews() {
 	 
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableAtrac3plus, a->T("Enable Atrac3+")));
+	audioSettings->Add(new CheckBox(&g_Config.bLowLatencyAudio, a->T("Low latency (may stutter)")));
 
 	// Control
 	ViewGroup *controlsSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -346,12 +347,9 @@ void GameSettingsScreen::CreateViews() {
 
 	enableReports_ = g_Config.sReportHost != "default";
 
-#ifndef ANDROID
 	systemSettings->Add(new ItemHeader(s->T("Cheats", "Cheats (experimental, see forums)")));
 	// Need to move the cheat config dir somewhere where it can be read/written on android
 	systemSettings->Add(new CheckBox(&g_Config.bEnableCheats, s->T("Enable Cheats")));
-	systemSettings->Add(new Choice(s->T("Reload Cheats")))->OnClick.Handle(this, &GameSettingsScreen::OnReloadCheats);
-#endif
 
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	systemSettings->SetSpacing(0);
@@ -477,18 +475,9 @@ UI::EventReturn GameSettingsScreen::OnChangeNickname(UI::EventParams &e) {
 	char name[name_len];
 	memset(name, 0, sizeof(name));
 
-	size_t default_len = strlen(g_Config.sNickName.c_str());
-
-	char *defaultVal = new char[default_len];
-	memset(defaultVal, 0, sizeof(default_len));
-	strcat(defaultVal, g_Config.sNickName.c_str());
-
-	if (host->InputBoxGetString("Enter a new PSP nickname", defaultVal, name, name_len)) {
+	if (host->InputBoxGetString("Enter a new PSP nickname", g_Config.sNickName.c_str(), name, name_len)) {
 		g_Config.sNickName = name;
 	}
-
-	delete [] defaultVal;
-	defaultVal = NULL;
 
 	#endif
 	return UI::EVENT_DONE;

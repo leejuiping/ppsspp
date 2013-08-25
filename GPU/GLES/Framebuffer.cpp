@@ -76,7 +76,7 @@ enum {
 };
 
 static bool MaskedEqual(u32 addr1, u32 addr2) {
-	return (addr1 & 0x3FFFFFF) == (addr2 & 0x3FFFFFF);
+	return (addr1 & 0x03FFFFFF) == (addr2 & 0x03FFFFFF);
 }
 
 inline u16 RGBA8888toRGB565(u32 px) {
@@ -146,6 +146,9 @@ void DisableState() {
 	glstate.depthTest.disable();
 	glstate.scissorTest.disable();
 	glstate.stencilTest.disable();
+#if !defined(USING_GLES2)
+	glstate.colorLogicOp.disable();
+#endif
 }
 
 void FramebufferManager::CompileDraw2DProgram() {
@@ -472,7 +475,7 @@ void FramebufferManager::SetRenderFrameBuffer() {
 	// As there are no clear "framebuffer width" and "framebuffer height" registers,
 	// we need to infer the size of the current framebuffer somehow. Let's try the viewport.
 	
-	GEBufferFormat fmt = static_cast<GEBufferFormat>(gstate.framebufpixformat & 3);
+	GEBufferFormat fmt = gstate.FrameBufFormat();
 
 	int drawing_width, drawing_height;
 	GuessDrawingSize(drawing_width, drawing_height);
@@ -1193,7 +1196,7 @@ void FramebufferManager::DecimateFBOs() {
 		VirtualFramebuffer *vfb = vfbs_[i];
 		int age = frameLastFramebufUsed - vfb->last_frame_used;
 
-		if(useMem && !age && !vfb->memoryUpdated) { 
+		if(useMem && age == 0 && !vfb->memoryUpdated) { 
 			ReadFramebufferToMemory(vfb);
 		}
 

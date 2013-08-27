@@ -85,7 +85,7 @@ void __AudioInit() {
 
 	if (g_Config.bLowLatencyAudio) {
 		chanQueueMaxSizeFactor = 1;
-		chanQueueMinSizeFactor = 0;
+		chanQueueMinSizeFactor = 1;
 		hwBlockSize = 16;
 		hostAttemptBlockSize = 256;
 	} else {
@@ -163,7 +163,7 @@ u32 __AudioEnqueue(AudioChannel &chan, int chanNum, bool blocking) {
 			AudioChannelWaitInfo waitInfo = {__KernelGetCurThread(), blockSamples};
 			chan.waitingThreads.push_back(waitInfo);
 			// Also remember the value to return in the waitValue.
-			__KernelWaitCurThread(WAITTYPE_AUDIOCHANNEL, (SceUID)chanNum + 1, ret, 0, false, "blocking audio waited");
+			__KernelWaitCurThread(WAITTYPE_AUDIOCHANNEL, (SceUID)chanNum + 1, ret, 0, false, "blocking audio");
 
 			// Fall through to the sample queueing, don't want to lose the samples even though
 			// we're getting full.  The PSP would enqueue after blocking.

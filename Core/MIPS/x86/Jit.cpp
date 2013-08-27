@@ -328,6 +328,14 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 
 		js.compilerPC += 4;
 		js.numInstructions++;
+
+		// Safety check, in case we get a bunch of really large jit ops without a lot of branching.
+		if (GetSpaceLeft() < 0x800)
+		{
+			FlushAll();
+			WriteExit(js.compilerPC, js.nextExit++);
+			js.compiling = false;
+		}
 	}
 
 	b->codeSize = (u32)(GetCodePtr() - b->normalEntry);
@@ -358,7 +366,7 @@ void Jit::Comp_Generic(MIPSOpcode op)
 			ABI_CallFunctionC((void *)func, op.encoding);
 	}
 	else
-		ERROR_LOG_REPORT(JIT, "Trying to compile instruction that can't be interpreted");
+		ERROR_LOG_REPORT(JIT, "Trying to compile instruction %08x that can't be interpreted", op.encoding);
 
 	const MIPSInfo info = MIPSGetInfo(op);
 	if ((info & IS_VFPU) != 0 && (info & VFPU_NO_PREFIX) == 0)
@@ -495,7 +503,7 @@ bool Jit::CheckJitBreakpoint(u32 addr, int downcountOffset)
 	return false;
 }
 
-Jit::JitSafeMem::JitSafeMem(Jit *jit, int raddr, s32 offset, u32 alignMask)
+Jit::JitSafeMem::JitSafeMem(Jit *jit, MIPSGPReg raddr, s32 offset, u32 alignMask)
 	: jit_(jit), raddr_(raddr), offset_(offset), needsCheck_(false), needsSkip_(false), alignMask_(alignMask)
 {
 	// This makes it more instructions, so let's play it safe and say we need a far jump.

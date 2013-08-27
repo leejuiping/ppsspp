@@ -346,11 +346,10 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new PopupSliderChoice(&g_Config.iLockedCPUSpeed, 0, 1000, s->T("Change CPU Clock", "Change CPU Clock (0 = default)"), screenManager()));
 
 	enableReports_ = g_Config.sReportHost != "default";
-
+//#ifndef ANDROID 
 	systemSettings->Add(new ItemHeader(s->T("Cheats", "Cheats (experimental, see forums)")));
-	// Need to move the cheat config dir somewhere where it can be read/written on android
 	systemSettings->Add(new CheckBox(&g_Config.bEnableCheats, s->T("Enable Cheats")));
-
+//#endif
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	systemSettings->SetSpacing(0);
 	systemSettings->Add(new ItemHeader(g->T("General")));
@@ -365,6 +364,7 @@ void GameSettingsScreen::CreateViews() {
 #ifdef _WIN32
 	systemSettings->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeNickname);
 #endif
+	systemSettings->Add(new Choice(s->T("Clear Recent Section")))->OnClick.Handle(this, &GameSettingsScreen::OnClearRecents);
 	systemSettings->Add(new CheckBox(&enableReports_, s->T("Enable Compatibility Server Reports")));
 	systemSettings->Add(new Choice(s->T("Developer Tools")))->OnClick.Handle(this, &GameSettingsScreen::OnDeveloperTools);
 
@@ -377,6 +377,12 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iTimeFormat, s->T("Time Format"), timeFormat, 1, 2, s, screenManager()));
 	static const char *buttonPref[] = { "Use O to confirm", "Use X to confirm" };
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iButtonPreference, s->T("Confirmation Button"), buttonPref, 0, 2, s, screenManager()));
+}
+
+UI::EventReturn GameSettingsScreen::OnClearRecents(UI::EventParams &e) {
+	g_Config.recentIsos.clear();
+
+	return UI::EVENT_DONE;
 }
 
 UI::EventReturn GameSettingsScreen::OnReloadCheats(UI::EventParams &e) {

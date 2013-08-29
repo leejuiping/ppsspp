@@ -115,6 +115,8 @@ static int actualFlips = 0;  // taking frameskip into account
 static int lastActualFlips = 0;
 static float actualFps = 0;
 static u64 lastFlipCycles = 0;
+// For the "max 60 fps" setting.
+static int lastFlipsTooFrequent = 0;
 
 void hleEnterVblank(u64 userdata, int cyclesLate);
 void hleLeaveVblank(u64 userdata, int cyclesLate);
@@ -135,6 +137,7 @@ void __DisplayInit() {
 	framebuf.pspFramebufFormat = GE_FORMAT_8888;
 	framebuf.pspFramebufLinesize = 480; // ??
 	lastFlipCycles = 0;
+	lastFlipsTooFrequent = 0;
 
 	enterVblankEvent = CoreTiming::RegisterEvent("EnterVBlank", &hleEnterVblank);
 	leaveVblankEvent = CoreTiming::RegisterEvent("LeaveVBlank", &hleLeaveVblank);
@@ -272,6 +275,8 @@ void __DisplayGetDebugStats(char stats[2048]) {
 		"Most active syscall: %s : %0.2f ms\n"
 		"Draw calls: %i, flushes %i\n"
 		"Cached Draw calls: %i\n"
+		"Alpha Tested draws: %i\n"
+		"Non Alpha Tested draws: %i\n"
 		"Num Tracked Vertex Arrays: %i\n"
 		"Cycles executed: %d (%f per vertex)\n"
 		"Commands per call level: %i %i %i %i\n"
@@ -294,6 +299,8 @@ void __DisplayGetDebugStats(char stats[2048]) {
 		gpuStats.numDrawCalls,
 		gpuStats.numFlushes,
 		gpuStats.numCachedDrawCalls,
+		gpuStats.numAlphaTestedDraws,
+		gpuStats.numNonAlphaTestedDraws,
 		gpuStats.numTrackedVertexArrays,
 		gpuStats.vertexGPUCycles + gpuStats.otherGPUCycles,
 		vertexAverageCycles,
@@ -520,16 +527,27 @@ u32 sceDisplaySetFramebuf(u32 topaddr, int linesize, int pixelformat, int sync) 
 	}
 
 	s64 delayCycles = 0;
-	if (topaddr != framebuf.topaddr) {
-		if (g_Config.iForceMaxEmulatedFPS) {
-			u64 now = CoreTiming::GetTicks();
-			u64 expected = msToCycles(1000) / g_Config.iForceMaxEmulatedFPS;
-			u64 actual = now - lastFlipCycles;
-			if (actual < expected) {
+	if (topaddr != framebuf.topaddr && g_Config.iForceMaxEmulatedFPS > 0) {
+		// Sometimes we get a small number, there's probably no need to delay the thread for this.
+		// sceDisplaySetFramebuf() isn't supposed to delay threads at all.  This is a hack.
+		const int FLIP_DELAY_CYCLES_MIN = 10;
+		// Some games (like Final Fantasy 4) only call this too much in spurts.
+		// The goal is to fix games where this would result in a consistent overhead.
+		const int FLIP_DELAY_MIN_FLIPS = 30;
+
+		u64 now = CoreTiming::GetTicks();
+		u64 expected = msToCycles(1000) / g_Config.iForceMaxEmulatedFPS;
+		u64 actual = now - lastFlipCycles;
+		if (actual < expected - FLIP_DELAY_CYCLES_MIN) {
+			if (lastFlipsTooFrequent >= FLIP_DELAY_MIN_FLIPS) {
 				delayCycles = expected - actual;
+			} else {
+				++lastFlipsTooFrequent;
 			}
-			lastFlipCycles = CoreTiming::GetTicks();
+		} else {
+			--lastFlipsTooFrequent;
 		}
+		lastFlipCycles = CoreTiming::GetTicks();
 	}
 
 	if (sync == PSP_DISPLAY_SETBUF_IMMEDIATE) {
@@ -549,6 +567,7 @@ u32 sceDisplaySetFramebuf(u32 topaddr, int linesize, int pixelformat, int sync) 
 	if (delayCycles > 0) {
 		// Okay, the game is going at too high a frame rate.  God of War and Fat Princess both do this.
 		// Simply eating the cycles works and is fast, but breaks other games (like Jeanne d'Arc.)
+		// So, instead, we delay this HLE thread only (a small deviation from correct behavior.)
 		return hleDelayResult(0, "set framebuf", cyclesToUs(delayCycles));
 	} else {
 		return 0;

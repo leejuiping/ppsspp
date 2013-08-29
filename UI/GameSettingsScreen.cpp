@@ -364,7 +364,7 @@ void GameSettingsScreen::CreateViews() {
 #ifdef _WIN32
 	systemSettings->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeNickname);
 #endif
-	systemSettings->Add(new Choice(s->T("Clear Recent Section")))->OnClick.Handle(this, &GameSettingsScreen::OnClearRecents);
+	systemSettings->Add(new Choice(s->T("Clear Recent Games List")))->OnClick.Handle(this, &GameSettingsScreen::OnClearRecents);
 	systemSettings->Add(new CheckBox(&enableReports_, s->T("Enable Compatibility Server Reports")));
 	systemSettings->Add(new Choice(s->T("Developer Tools")))->OnClick.Handle(this, &GameSettingsScreen::OnDeveloperTools);
 
@@ -523,7 +523,7 @@ void DeveloperToolsScreen::CreateViews() {
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->SetSpacing(0);
 	list->Add(new ItemHeader(g->T("General")));
-	list->Add(new Choice(g->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
+	list->Add(new Choice(d->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
 	list->Add(new Choice(d->T("Run CPU Tests")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
 #ifndef __SYMBIAN32__
 	list->Add(new CheckBox(&g_Config.bSoftwareRendering, gs->T("Software Rendering", "Software Rendering (experimental)")));

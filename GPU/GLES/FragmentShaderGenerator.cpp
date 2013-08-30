@@ -73,7 +73,6 @@ static bool IsAlphaTestTriviallyTrue() {
 		
 	// Non-zero check. If we have no depth testing (and thus no depth writing), and an alpha func that will result in no change if zero alpha, get rid of the alpha test.
 	// Speeds up Lumines by a LOT on PowerVR.
-	case GE_COMP_NOTEQUAL:
 	case GE_COMP_GREATER:
 		{
 			bool depthTest = gstate.isDepthTestEnabled();
@@ -90,6 +89,10 @@ static bool IsAlphaTestTriviallyTrue() {
 	case GE_COMP_LEQUAL:
 		return alphaTestRef == 255;
 
+	case GE_COMP_EQUAL:
+	case GE_COMP_LESS:
+	case GE_COMP_NOTEQUAL:
+		return false;
 	default:
 		return false;
 	}
@@ -104,6 +107,9 @@ static bool IsColorTestTriviallyTrue() {
 	case GE_COMP_ALWAYS:
 		return true;
 
+	case GE_COMP_EQUAL:
+	case GE_COMP_NOTEQUAL:
+		return false;
 	default:
 		return false;
 	}

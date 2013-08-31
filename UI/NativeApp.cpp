@@ -37,6 +37,7 @@
 #include "native/ext/stb_image_write/stb_image_writer.h"
 #include "native/ext/jpge/jpge.h"
 #include "gfx_es2/gl_state.h"
+#include "gfx_es2/draw_text.h"
 #include "gfx/gl_lost_manager.h"
 #include "gfx/texture.h"
 #include "i18n/i18n.h"
@@ -371,6 +372,13 @@ void NativeInit(int argc, const char *argv[],
 #endif	
 
 	i18nrepo.LoadIni(g_Config.languageIni);
+	I18NCategory *d = GetI18NCategory("DesktopUI");
+	// Note to translators: do not translate this/add this to PPSSPP-lang's files. 
+	// It's intended to be custom for every user. 
+	// Only add it to your own personal copies of PPSSPP.
+#ifdef _WIN32
+	g_Config.sFont = d->T("Font", "Trebuchet MS");
+#endif
 
 	if (!boot_filename.empty() && stateToLoad != NULL)
 		SaveState::Load(stateToLoad);
@@ -399,14 +407,22 @@ void NativeInitGraphics() {
 	CheckGLExtensions();
 	gl_lost_manager_init();
 	ui_draw2d.SetAtlas(&ui_atlas);
+	ui_draw2d_front.SetAtlas(&ui_atlas);
 
 	UIShader_Init();
 
 	// memset(&ui_theme, 0, sizeof(ui_theme));
 	// New style theme
-	ui_theme.uiFont = UBUNTU24;
-	ui_theme.uiFontSmall = UBUNTU24;
-	ui_theme.uiFontSmaller = UBUNTU24;
+#ifdef _WIN32
+	ui_theme.uiFont = UI::FontStyle(UBUNTU24, g_Config.sFont.c_str(), 20);
+	ui_theme.uiFontSmall = UI::FontStyle(UBUNTU24, g_Config.sFont.c_str(), 14);
+	ui_theme.uiFontSmaller = UI::FontStyle(UBUNTU24, g_Config.sFont.c_str(), 11);
+#else
+	ui_theme.uiFont = UI::FontStyle(UBUNTU24, "", 20);
+	ui_theme.uiFontSmall = UI::FontStyle(UBUNTU24, "", 14);
+	ui_theme.uiFontSmaller = UI::FontStyle(UBUNTU24, "", 11);
+#endif
+
 	ui_theme.checkOn = I_CHECKEDBOX;
 	ui_theme.checkOff = I_SQUARE;
 	ui_theme.whiteImage = I_SOLIDWHITE;
@@ -452,7 +468,8 @@ void NativeInitGraphics() {
 	uiContext = new UIContext();
 	uiContext->theme = &ui_theme;
 	uiContext->Init(UIShader_Get(), UIShader_GetPlain(), uiTexture, &ui_draw2d, &ui_draw2d_front);
-
+	if (uiContext->Text())
+		uiContext->Text()->SetFont("Tahoma", 20, 0);
 	screenManager->setUIContext(uiContext);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -548,6 +565,8 @@ void NativeRender() {
 	glUniformMatrix4fv(UIShader_Get()->u_worldviewproj, 1, GL_FALSE, ortho.getReadPtr());
 
 	screenManager->render();
+	if (screenManager->getUIContext()->Text())
+		screenManager->getUIContext()->Text()->OncePerFrame();
 
 	if (g_TakeScreenshot) {
 		TakeScreenshot();

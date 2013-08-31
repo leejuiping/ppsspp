@@ -151,7 +151,7 @@ void PromptScreen::CreateViews() {
 	ViewGroup *leftColumn = new AnchorLayout(new LinearLayoutParams(1.0f));
 	root_->Add(leftColumn);
 
-	leftColumn->Add(new TextView(message_, ALIGN_LEFT, 1.0f, new AnchorLayoutParams(10, 10, NONE, NONE)));
+	leftColumn->Add(new TextView(message_, ALIGN_LEFT, false, new AnchorLayoutParams(10, 10, NONE, NONE)));
 
 	ViewGroup *rightColumnItems = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(300, FILL_PARENT, actionMenuMargins));
 	root_->Add(rightColumnItems);
@@ -172,7 +172,7 @@ UI::EventReturn PromptScreen::OnNo(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
-NewLanguageScreen::NewLanguageScreen() : ListPopupScreen("Language") {
+NewLanguageScreen::NewLanguageScreen(const std::string &title) : ListPopupScreen(title) {
 	// Disable annoying encoding warning
 #ifdef _MSC_VER
 #pragma warning(disable:4566)
@@ -301,13 +301,13 @@ void LogoScreen::render() {
 	char temp[256];
 	sprintf(temp, "%s Henrik Rydgård", c->T("created", "Created by"));
 
-	dc.Draw()->SetFontScale(1.5f, 1.5f);
 	dc.Draw()->DrawImage(I_LOGO, dp_xres / 2, dp_yres / 2 - 30, 1.5f, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	//dc.Draw()->DrawTextShadow(UBUNTU48, "PPSSPP", dp_xres / 2, dp_yres / 2 - 30, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	dc.Draw()->SetFontScale(1.0f, 1.0f);
-	dc.Draw()->DrawTextShadow(UBUNTU24, temp, dp_xres / 2, dp_yres / 2 + 40, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
-	dc.Draw()->DrawTextShadow(UBUNTU24, c->T("license", "Free Software under GPL 2.0"), dp_xres / 2, dp_yres / 2 + 70, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
-	dc.Draw()->DrawTextShadow(UBUNTU24, "www.ppsspp.org", dp_xres / 2, dp_yres / 2 + 130, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
+	dc.SetFontStyle(dc.theme->uiFont);
+	dc.DrawText(temp, dp_xres / 2, dp_yres / 2 + 40, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
+	dc.DrawText(c->T("license", "Free Software under GPL 2.0"), dp_xres / 2, dp_yres / 2 + 70, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
+	dc.DrawText("www.ppsspp.org", dp_xres / 2, dp_yres / 2 + 130, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	if (bootFilename_.size()) {
 		ui_draw2d.DrawTextShadow(UBUNTU24, bootFilename_.c_str(), dp_xres / 2, dp_yres / 2 + 180, colorAlpha(0xFFFFFFFF, alphaText), ALIGN_CENTER);
 	}
@@ -329,8 +329,13 @@ void SystemInfoScreen::CreateViews() {
 	scroll->Add(new InfoItem("System Name :", System_GetName()));
 	scroll->Add(new InfoItem("GPU Vendor :", (char *)glGetString(GL_VENDOR)));
 	scroll->Add(new InfoItem("GPU Model :", (char *)glGetString(GL_RENDERER)));
+	scroll->Add(new InfoItem("OpenGL Version Supported :", (char *)glGetString(GL_VERSION)));
 	
+#ifdef _WIN32
+	scroll->Add(new ItemHeader("OpenGL Extensions"));
+#else
 	scroll->Add(new ItemHeader("OpenGL ES 2.0 Extensions"));
+#endif
 	std::vector<std::string> exts;
 	SplitString(g_all_gl_extensions, ' ', exts);
 	for (size_t i = 0; i < exts.size(); i++) {
@@ -348,19 +353,20 @@ void SystemInfoScreen::CreateViews() {
 void CreditsScreen::CreateViews() {
 	using namespace UI;
 	I18NCategory *g = GetI18NCategory("General");
+	I18NCategory *c = GetI18NCategory("PSPCredits");
 
 	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
 	root_->Add(new Button(g->T("Back"), new AnchorLayoutParams(260, 64, NONE, NONE, 10, 10, false)))->OnClick.Handle(this, &CreditsScreen::OnOK);
 #ifndef GOLD
-	root_->Add(new Button(g->T("Buy Gold"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 10, false)))->OnClick.Handle(this, &CreditsScreen::OnSupport);
+	root_->Add(new Button(c->T("Buy Gold"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 10, false)))->OnClick.Handle(this, &CreditsScreen::OnSupport);
 #endif
 	if(g_Config.languageIni == "zh_CN" ||g_Config.languageIni == "zh_TW") {
-	  root_->Add(new Button(g->T("PPSSPP Chinese Forum"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnChineseForum);
-	  root_->Add(new Button(g->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 154, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
+	  root_->Add(new Button(c->T("PPSSPP Chinese Forum"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnChineseForum);
+	  root_->Add(new Button(c->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 154, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
 	  root_->Add(new Button("www.ppsspp.org", new AnchorLayoutParams(260, 64, 10, NONE, NONE, 228, false)))->OnClick.Handle(this, &CreditsScreen::OnPPSSPPOrg);
 	}
 	else {
-	  root_->Add(new Button(g->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
+	  root_->Add(new Button(c->T("PPSSPP Forums"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnForums);
 	  root_->Add(new Button("www.ppsspp.org", new AnchorLayoutParams(260, 64, 10, NONE, NONE, 158, false)))->OnClick.Handle(this, &CreditsScreen::OnPPSSPPOrg);
 	}
 #ifdef GOLD
@@ -463,6 +469,7 @@ void CreditsScreen::render() {
 		"solarmystic (testing)",
 		"all the forum mods",
 		"",
+		c->T("this translation by", ""),   // Empty string as this is the original :)
 		"",
 		c->T("written", "Written in C++ for speed and portability"),
 		"",

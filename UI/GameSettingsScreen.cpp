@@ -110,7 +110,8 @@ void PopupMultiChoice::ChoiceCallback(int num) {
 void PopupMultiChoice::Draw(UIContext &dc) {
 	Choice::Draw(dc);
 	int paddingX = 12;
-	dc.Draw()->DrawText(dc.theme->uiFont, valueText_.c_str(), bounds_.x2() - paddingX, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
+	dc.SetFontStyle(dc.theme->uiFont);
+	dc.DrawText(valueText_.c_str(), bounds_.x2() - paddingX, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
 }
 
 class PopupSliderChoice : public Choice {
@@ -160,7 +161,8 @@ void PopupSliderChoice::Draw(UIContext &dc) {
 	Choice::Draw(dc);
 	char temp[32];
 	sprintf(temp, "%i", *value_);
-	dc.Draw()->DrawText(dc.theme->uiFont, temp, bounds_.x2() - 12, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
+	dc.SetFontStyle(dc.theme->uiFont);
+	dc.DrawText(temp, bounds_.x2() - 12, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
 }
 
 EventReturn PopupSliderChoiceFloat::HandleClick(EventParams &e) {
@@ -173,7 +175,8 @@ void PopupSliderChoiceFloat::Draw(UIContext &dc) {
 	Choice::Draw(dc);
 	char temp[32];
 	sprintf(temp, "%2.2f", *value_);
-	dc.Draw()->DrawText(dc.theme->uiFont, temp, bounds_.x2() - 12, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
+	dc.SetFontStyle(dc.theme->uiFont);
+	dc.DrawText(temp, bounds_.x2() - 12, bounds_.centerY(), 0xFFFFFFFF, ALIGN_RIGHT | ALIGN_VCENTER);
 }
 
 }
@@ -228,7 +231,7 @@ void GameSettingsScreen::CreateViews() {
 	tabHolder->AddTab(ms->T("Graphics"), graphicsSettingsScroll);
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Rendering Mode")));
-	static const char *renderingMode[] = { "Non-Buffered Rendering", "Buffered Rendering", "Read Framebuffers To Memory(CPU)", "Read Framebuffers To Memory(GPU)"};
+	static const char *renderingMode[] = { "Non-Buffered Rendering", "Buffered Rendering", "Read Framebuffers To Memory (CPU)", "Read Framebuffers To Memory (GPU)"};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iRenderingMode, gs->T("Mode"), renderingMode, 0, 4, gs, screenManager()));
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Frame Rate Control")));
@@ -302,7 +305,7 @@ void GameSettingsScreen::CreateViews() {
 	 
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
 	audioSettings->Add(new CheckBox(&g_Config.bEnableAtrac3plus, a->T("Enable Atrac3+")));
-	audioSettings->Add(new CheckBox(&g_Config.bLowLatencyAudio, a->T("Low latency (may stutter)")));
+	audioSettings->Add(new CheckBox(&g_Config.bLowLatencyAudio, a->T("Low latency audio")));
 
 	// Control
 	ViewGroup *controlsSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -352,7 +355,7 @@ void GameSettingsScreen::CreateViews() {
 //#endif
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	systemSettings->SetSpacing(0);
-	systemSettings->Add(new ItemHeader(g->T("General")));
+	systemSettings->Add(new ItemHeader(s->T("General")));
 	systemSettings->Add(new Choice(s->T("System Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
 #ifdef _WIN32
 	// Screenshot functionality is not yet available on non-Windows
@@ -495,7 +498,8 @@ UI::EventReturn GameSettingsScreen::OnFactoryReset(UI::EventParams &e) {
 }
 
 UI::EventReturn GameSettingsScreen::OnLanguage(UI::EventParams &e) {
-	screenManager()->push(new NewLanguageScreen());
+	I18NCategory *d = GetI18NCategory("Developer");
+	screenManager()->push(new NewLanguageScreen(d->T("Language")));
 	return UI::EVENT_DONE;
 }
 
@@ -519,18 +523,19 @@ void DeveloperToolsScreen::CreateViews() {
 	I18NCategory *d = GetI18NCategory("Developer");
 	I18NCategory *gs = GetI18NCategory("Graphics");
 	I18NCategory *a = GetI18NCategory("Audio");
+	I18NCategory *s = GetI18NCategory("System");
 
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->SetSpacing(0);
-	list->Add(new ItemHeader(g->T("General")));
+	list->Add(new ItemHeader(s->T("General")));
 	list->Add(new Choice(d->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
 	list->Add(new Choice(d->T("Run CPU Tests")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
-	list->Add(new Choice(d->T("Restore PPSSPP Default Settings")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRestoreDefaultSettings);
+	list->Add(new Choice(d->T("Restore Default Settings")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRestoreDefaultSettings);
 #ifndef __SYMBIAN32__
 	list->Add(new CheckBox(&g_Config.bSoftwareRendering, gs->T("Software Rendering", "Software Rendering (experimental)")));
 #endif
 	list->Add(new CheckBox(&enableLogging_, d->T("Enable Logging")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoggingChanged);
-	list->Add(new ItemHeader(g->T("Language")));
+	list->Add(new ItemHeader(d->T("Language")));
 	list->Add(new Choice(d->T("Load language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoadLanguageIni);
 	list->Add(new Choice(d->T("Save language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSaveLanguageIni);
 	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &DeveloperToolsScreen::OnBack);

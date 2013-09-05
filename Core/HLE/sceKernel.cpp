@@ -70,6 +70,7 @@
 #include "sceUsb.h"
 #include "scePspNpDrm_user.h"
 #include "sceVaudio.h"
+#include "sceHeap.h"
 
 #include "../Util/PPGeDraw.h"
 
@@ -218,6 +219,7 @@ void __KernelDoState(PointerWrap &p)
 	__UtilityDoState(p);
 	__UsbDoState(p);
 	__VaudioDoState(p);
+	__HeapDoState(p);
 
 	__PPGeDoState(p);
 
@@ -509,11 +511,12 @@ void KernelObjectPool::DoState(PointerWrap &p)
 		{
 			p.Do(type);
 			pool[i] = CreateByIDType(type);
-			pool[i]->uid = i + handleOffset;
 
 			// Already logged an error.
 			if (pool[i] == NULL)
 				return;
+
+			pool[i]->uid = i + handleOffset;
 		}
 		else
 		{

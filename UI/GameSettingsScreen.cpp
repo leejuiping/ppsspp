@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2013- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include "UI/MiscScreens.h"
 #include "UI/ControlMappingScreen.h"
 #include "Core/Config.h"
+#include "Core/Host.h"
 #include "android/jni/TestRunner.h"
 #include "GPU/GPUInterface.h"
 #include "base/colorutil.h"
@@ -44,8 +45,9 @@
 #ifdef _WIN32
 namespace MainWindow {
 	enum { 
-		WM_USER_LOG_STATUS_CHANGED = WM_USER + 200,
-		WM_USER_ATRAC_STATUS_CHANGED = WM_USER + 300,
+		WM_USER_LOG_STATUS_CHANGED = WM_USER + 101,
+		WM_USER_ATRAC_STATUS_CHANGED = WM_USER + 102,
+		WM_USER_UPDATE_UI = WM_USER + 103,
 	};
 	extern HWND hwndMain;
 }
@@ -63,6 +65,7 @@ public:
 		I18NCategory *category, ScreenManager *screenManager, LayoutParams *layoutParams = 0)
 		: Choice(text, "", false, layoutParams), value_(value), choices_(choices), minVal_(minVal), numChoices_(numChoices), 
 		category_(category), screenManager_(screenManager) {
+		if (*value >= numChoices+minVal) *value = numChoices+minVal-1;
 		if (*value < minVal) *value = minVal;
 		OnClick.Handle(this, &PopupMultiChoice::HandleClick);
 		UpdateText();
@@ -211,19 +214,20 @@ void GameSettingsScreen::CreateViews() {
 	// Scrolling action menu to the right.
 	using namespace UI;
 
-	I18NCategory *g = GetI18NCategory("General");
+	I18NCategory *d = GetI18NCategory("Dialog");
 	I18NCategory *gs = GetI18NCategory("Graphics");
 	I18NCategory *c = GetI18NCategory("Controls");
 	I18NCategory *a = GetI18NCategory("Audio");
 	I18NCategory *s = GetI18NCategory("System");
 	I18NCategory *ms = GetI18NCategory("MainSettings");
+	I18NCategory *dev = GetI18NCategory("Developer");
 
 	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
 
 	ViewGroup *leftColumn = new AnchorLayout(new LinearLayoutParams(1.0f));
 	root_->Add(leftColumn);
 
-	root_->Add(new Choice(g->T("Back"), "", false, new AnchorLayoutParams(150, WRAP_CONTENT, 10, NONE, NONE, 10)))->OnClick.Handle(this, &GameSettingsScreen::OnBack);
+	root_->Add(new Choice(d->T("Back"), "", false, new AnchorLayoutParams(150, WRAP_CONTENT, 10, NONE, NONE, 10)))->OnClick.Handle(this, &GameSettingsScreen::OnBack);
 
 	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new AnchorLayoutParams(10, 0, 10, 0, false));
 
@@ -364,7 +368,7 @@ void GameSettingsScreen::CreateViews() {
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	systemSettings->SetSpacing(0);
 	systemSettings->Add(new ItemHeader(s->T("General")));
-	systemSettings->Add(new Choice(s->T("System Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
+	systemSettings->Add(new Choice(dev->T("Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
 #ifdef _WIN32
 	// Screenshot functionality is not yet available on non-Windows
 	systemSettings->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, s->T("Screenshots as PNG")));
@@ -453,6 +457,12 @@ void GameSettingsScreen::update(InputState &input) {
 	g_Config.iFpsLimit = alternateSpeedTable[iAlternateSpeedPercent_];
 }
 
+void GameSettingsScreen::sendMessage(const char *message, const char *value) {
+	if (!strcmp(message, "language")) {
+		RecreateViews();
+	}
+}
+
 UI::EventReturn GameSettingsScreen::OnDownloadPlugin(UI::EventParams &e) {
 	screenManager()->push(new PluginScreen());
 	return UI::EVENT_DONE;
@@ -475,9 +485,7 @@ UI::EventReturn GameSettingsScreen::OnBack(UI::EventParams &e) {
 	Reporting::Enable(enableReports_, "report.ppsspp.org");
 	g_Config.Save();
 
-#ifdef _WIN32
-	PostMessage(MainWindow::hwndMain, MainWindow::WM_USER_ATRAC_STATUS_CHANGED, 0, 0);
-#endif
+	host->UpdateUI();
 
 	KeyMap::UpdateConfirmCancelKeys();
 
@@ -514,8 +522,8 @@ UI::EventReturn GameSettingsScreen::OnFactoryReset(UI::EventParams &e) {
 }
 
 UI::EventReturn GameSettingsScreen::OnLanguage(UI::EventParams &e) {
-	I18NCategory *d = GetI18NCategory("Developer");
-	auto langScreen = new NewLanguageScreen(d->T("Language"));
+	I18NCategory *de = GetI18NCategory("Developer");
+	auto langScreen = new NewLanguageScreen(de->T("Language"));
 	langScreen->OnChoice.Handle(this, &GameSettingsScreen::OnLanguageChange);
 	screenManager()->push(langScreen);
 	return UI::EVENT_DONE;
@@ -524,6 +532,9 @@ UI::EventReturn GameSettingsScreen::OnLanguage(UI::EventParams &e) {
 UI::EventReturn GameSettingsScreen::OnLanguageChange(UI::EventParams &e) {
 	RecreateViews();
 	OnLanguageChanged.Trigger(e);
+#ifdef _WIN32
+	PostMessage(MainWindow::hwndMain, MainWindow::WM_USER_UPDATE_UI, 0, 0);
+#endif
 	return UI::EVENT_DONE;
 }
 
@@ -543,8 +554,8 @@ void DeveloperToolsScreen::CreateViews() {
 
 	enableLogging_ = g_Config.bEnableLogging;
 
-	I18NCategory *g = GetI18NCategory("General");
-	I18NCategory *d = GetI18NCategory("Developer");
+	I18NCategory *d = GetI18NCategory("Dialog");
+	I18NCategory *de = GetI18NCategory("Developer");
 	I18NCategory *gs = GetI18NCategory("Graphics");
 	I18NCategory *a = GetI18NCategory("Audio");
 	I18NCategory *s = GetI18NCategory("System");
@@ -552,17 +563,17 @@ void DeveloperToolsScreen::CreateViews() {
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->SetSpacing(0);
 	list->Add(new ItemHeader(s->T("General")));
-	list->Add(new Choice(d->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
-	list->Add(new Choice(d->T("Run CPU Tests")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
-	list->Add(new Choice(d->T("Restore Default Settings")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRestoreDefaultSettings);
+	list->Add(new Choice(de->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
+	list->Add(new Choice(de->T("Run CPU Tests")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
+	list->Add(new Choice(de->T("Restore Default Settings")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRestoreDefaultSettings);
 #ifndef __SYMBIAN32__
 	list->Add(new CheckBox(&g_Config.bSoftwareRendering, gs->T("Software Rendering", "Software Rendering (experimental)")));
 #endif
-	list->Add(new CheckBox(&enableLogging_, d->T("Enable Logging")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoggingChanged);
-	list->Add(new ItemHeader(d->T("Language")));
-	list->Add(new Choice(d->T("Load language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoadLanguageIni);
-	list->Add(new Choice(d->T("Save language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSaveLanguageIni);
-	list->Add(new Choice(g->T("Back")))->OnClick.Handle(this, &DeveloperToolsScreen::OnBack);
+	list->Add(new CheckBox(&enableLogging_, de->T("Enable Logging")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoggingChanged);
+	list->Add(new ItemHeader(de->T("Language")));
+	list->Add(new Choice(de->T("Load language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoadLanguageIni);
+	list->Add(new Choice(de->T("Save language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSaveLanguageIni);
+	list->Add(new Choice(d->T("Back")))->OnClick.Handle(this, &DeveloperToolsScreen::OnBack);
 }
 
 UI::EventReturn DeveloperToolsScreen::OnBack(UI::EventParams &e) {
@@ -583,10 +594,10 @@ void DeveloperToolsScreen::CallbackRestoreDefaults(bool yes) {
 }
 
 UI::EventReturn DeveloperToolsScreen::OnRestoreDefaultSettings(UI::EventParams &e) {
+	I18NCategory *de = GetI18NCategory("Developer");
 	I18NCategory *d = GetI18NCategory("Dialog");
-	I18NCategory *g = GetI18NCategory("General");
 	screenManager()->push(
-	new PromptScreen(d->T("RestoreDefaultSettings", "Are you sure you want to restore all settings(except control mapping)\nback to their defaults?\nYou can't undo this.\nPlease restart PPSSPP after restoring settings."), g->T("OK"), g->T("Cancel"),
+	new PromptScreen(de->T("RestoreDefaultSettings", "Are you sure you want to restore all settings(except control mapping)\nback to their defaults?\nYou can't undo this.\nPlease restart PPSSPP after restoring settings."), d->T("OK"), d->T("Cancel"),
 	std::bind(&DeveloperToolsScreen::CallbackRestoreDefaults, this, placeholder::_1)));
 
 	return UI::EVENT_DONE;

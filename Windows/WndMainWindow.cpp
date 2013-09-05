@@ -89,6 +89,8 @@ extern InputState input_state;
 #define HID_USAGE_GENERIC_MOUSE        ((USHORT) 0x02)
 #endif
 
+extern std::map<std::string, std::pair<std::string, int>> GetLangValuesMapping();
+
 namespace MainWindow
 {
 	HWND hwndMain;
@@ -106,6 +108,7 @@ namespace MainWindow
 	static size_t rawInputBufferSize;
 	static int currentSavestateSlot = 0;
 	static std::map<int, std::string> initialMenuKeys;
+	static std::vector<std::string> countryCodes;
 
 #define MAX_LOADSTRING 100
 	const TCHAR *szTitle = TEXT("PPSSPP");
@@ -237,6 +240,29 @@ namespace MainWindow
 		}
 	}
 
+	// These are used as an offset
+	// to determine which menu item to change.
+	// Make sure to count(from 0) the separators too, when dealing with submenus!!
+	enum MenuID{
+		// Main menus
+		MENU_FILE = 0,
+		MENU_EMULATION = 1,
+		MENU_DEBUG = 2,
+		MENU_OPTIONS = 3,
+		MENU_LANGUAGE = 4,
+		MENU_HELP = 5,
+
+		// Emulation submenus
+		SUBMENU_RENDERING_BACKEND = 11,
+
+		// Game Settings submenus
+		SUBMENU_RENDERING_RESOLUTION = 4,
+		SUBMENU_RENDERING_MODE = 5,
+		SUBMENU_FRAME_SKIPPING = 6,
+		SUBMENU_TEXTURE_FILTERING = 7,
+		SUBMENU_TEXTURE_SCALING = 8,
+	};
+
 	std::string GetMenuItemText(int menuID) {
 		MENUITEMINFO menuInfo;
 		memset(&menuInfo, 0, sizeof(menuInfo));
@@ -263,27 +289,77 @@ namespace MainWindow
 		return initialMenuKeys[menuID];
 	}
 
-	// These are used as an offset
-	// to determine which menu item to change.
-	// Make sure to count(from 0) the separators too, when dealing with submenus!!
-	enum MenuID{
-		// Main menus
-		MENU_FILE = 0,
-		MENU_EMULATION = 1,
-		MENU_DEBUG = 2,
-		MENU_OPTIONS = 3,
-		MENU_HELP = 4,
+	void CreateHelpMenu() {
+		HMENU helpMenu = CreatePopupMenu();
 
-		// Emulation submenus
-		SUBMENU_RENDERING_BACKEND = 11,
+		I18NCategory *desktopUI = GetI18NCategory("DesktopUI");
 
-		// Game Settings submenus
-		SUBMENU_RENDERING_RESOLUTION = 4,
-		SUBMENU_RENDERING_MODE = 5,
-		SUBMENU_FRAME_SKIPPING = 6,
-		SUBMENU_TEXTURE_FILTERING = 7,
-		SUBMENU_TEXTURE_SCALING = 8,
-	};
+		const std::wstring help = ConvertUTF8ToWString(desktopUI->T("Help"));
+		const std::wstring visitMainWebsite = ConvertUTF8ToWString(desktopUI->T("www.ppsspp.org"));
+		const std::wstring visitForum = ConvertUTF8ToWString(desktopUI->T("PPSSPP Forums"));
+		const std::wstring buyGold = ConvertUTF8ToWString(desktopUI->T("Buy Gold"));
+		const std::wstring aboutPPSSPP = ConvertUTF8ToWString(desktopUI->T("About PPSSPP..."));
+
+		// Simply remove the old help menu and create a new one.
+		RemoveMenu(menu, MENU_HELP, MF_BYPOSITION);
+		InsertMenu(menu, MENU_HELP, MF_POPUP | MF_STRING | MF_BYPOSITION, (UINT_PTR)helpMenu, help.c_str());
+
+		AppendMenu(helpMenu, MF_STRING | MF_BYCOMMAND, ID_HELP_OPENWEBSITE, visitMainWebsite.c_str());
+		AppendMenu(helpMenu, MF_STRING | MF_BYCOMMAND, ID_HELP_OPENFORUM, visitForum.c_str());
+		// Repeat the process for other languages, if necessary.
+		if(g_Config.languageIni == "zh_CN" || g_Config.languageIni == "zh_TW") {
+			const std::wstring visitChineseForum = ConvertUTF8ToWString(desktopUI->T("PPSSPP Chinese Forum"));
+			AppendMenu(helpMenu, MF_STRING | MF_BYCOMMAND, ID_HELP_CHINESE_FORUM, visitChineseForum.c_str());
+		}
+		AppendMenu(helpMenu, MF_STRING | MF_BYCOMMAND, ID_HELP_BUYGOLD, buyGold.c_str());
+		AppendMenu(helpMenu, MF_SEPARATOR, 0, 0);
+		AppendMenu(helpMenu, MF_STRING | MF_BYCOMMAND, ID_HELP_ABOUT, aboutPPSSPP.c_str());
+	}
+
+	void CreateLanguageMenu() {
+		// Please don't remove this boolean. 
+		// We don't want this menu to be created multiple times.
+		static bool langMenuCreated = false;
+
+		if(langMenuCreated) return;
+
+		HMENU langMenu = CreatePopupMenu();
+
+		I18NCategory *c = GetI18NCategory("DesktopUI");
+		// Don't translate this right here, translate it in TranslateMenus. 
+		// Think of it as a string defined in ppsspp.rc.
+		const std::wstring languageKey = L"Language";
+
+		// Insert the new menu.
+		InsertMenu(menu, MENU_LANGUAGE, MF_POPUP | MF_STRING | MF_BYPOSITION, (UINT_PTR)langMenu, languageKey.c_str());
+
+		// Get the new menu's info and then set its ID so we can have it be translatable.
+		MENUITEMINFO menuItemInfo;
+		memset(&menuItemInfo, 0, sizeof(MENUITEMINFO));
+		menuItemInfo.cbSize = sizeof(MENUITEMINFO);
+		GetMenuItemInfo(menu, MENU_LANGUAGE, TRUE, &menuItemInfo);
+		menuItemInfo.fMask = MIIM_ID;
+		menuItemInfo.wID = ID_LANGUAGE_BASE;
+		SetMenuItemInfo(menu, MENU_LANGUAGE, TRUE, &menuItemInfo);
+
+		// Create the Language menu items by creating a new menu item for each
+		// language with its full name("English", "Magyar", etc.) as the value.
+		// Also collect the country codes while we're at it so we can send them to
+		// NativeMessageReceived easier.
+		auto langValuesMap = GetLangValuesMapping();
+
+		// Start adding items after ID_LANGUAGE_BASE.
+		int item = ID_LANGUAGE_BASE + 1;
+		std::wstring fullLanguageName;
+
+		for(auto i = langValuesMap.begin(); i != langValuesMap.end(); ++i) {
+			fullLanguageName = ConvertUTF8ToWString(i->second.first);
+			AppendMenu(langMenu, MF_STRING | MF_BYPOSITION, item++, fullLanguageName.c_str());
+			countryCodes.push_back(i->first);
+		}
+
+		langMenuCreated = true;
+	}
 
 	void TranslateMenuItembyText(const int menuID, const char *menuText, const char *category="", const bool enabled = true, const bool checked = false, const std::wstring& accelerator = L"") {
 		I18NCategory *c = GetI18NCategory(category);
@@ -354,7 +430,7 @@ namespace MainWindow
 		TranslateMenuItem(ID_CPU_DYNAREC, desktopUI);
 		TranslateMenuItem(ID_CPU_MULTITHREADED, desktopUI);
 		TranslateMenuItem(ID_IO_MULTITHREADED, desktopUI);
-
+		
 		// Debug menu
 		TranslateMenuItem(ID_DEBUG_LOADMAPFILE, desktopUI);
 		TranslateMenuItem(ID_DEBUG_SAVEMAPFILE, desktopUI);
@@ -363,7 +439,7 @@ namespace MainWindow
 		TranslateMenuItem(ID_DEBUG_TAKESCREENSHOT, desktopUI, true, false, L"\tF12");
 		TranslateMenuItem(ID_DEBUG_DISASSEMBLY, desktopUI, true, false, L"\tCtrl+D");
 		TranslateMenuItem(ID_DEBUG_LOG, desktopUI, true, false, L"\tCtrl+L");
-		TranslateMenuItem(ID_DEBUG_MEMORYVIEW, desktopUI, L"\tCtrl+M");
+		TranslateMenuItem(ID_DEBUG_MEMORYVIEW, desktopUI, true, false, L"\tCtrl+M");
 
 		// Options menu
 		TranslateMenuItem(ID_OPTIONS_FULLSCREEN, desktopUI, true, false, L"\tAlt+Return, F11");
@@ -401,11 +477,11 @@ namespace MainWindow
 		TranslateMenuItem(ID_OPTIONS_FASTMEMORY, desktopUI);
 		TranslateMenuItem(ID_OPTIONS_IGNOREILLEGALREADS, desktopUI);
 
-		// Help menu
-		TranslateMenuItem(ID_HELP_OPENWEBSITE, desktopUI);
-		TranslateMenuItem(ID_HELP_OPENFORUM, desktopUI);
-		TranslateMenuItem(ID_HELP_BUYGOLD, desktopUI);
-		TranslateMenuItem(ID_HELP_ABOUT, desktopUI);
+		// Language menu
+		TranslateMenuItem(ID_LANGUAGE_BASE, desktopUI);
+
+		// Help menu: it's translated in CreateHelpMenu.
+		CreateHelpMenu();
 
 		// Now do the menu headers and a few submenus...
 		TranslateMenuHeader(menu, desktopUI, "File", MENU_FILE);
@@ -1281,6 +1357,10 @@ namespace MainWindow
 					ShellExecute(NULL, L"open", L"http://forums.ppsspp.org/", NULL, NULL, SW_SHOWNORMAL);
 					break;
 
+				case ID_HELP_CHINESE_FORUM:
+					ShellExecute(NULL, L"open", L"http://tieba.baidu.com/f?ie=utf-8&kw=ppsspp", NULL, NULL, SW_SHOWNORMAL);
+					break;
+
 				case ID_HELP_ABOUT:
 					DialogManager::EnableAll(FALSE);
 					DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, (DLGPROC)About);
@@ -1292,7 +1372,26 @@ namespace MainWindow
 					break;
 
 				default:
-					MessageBox(hwndMain, L"Unimplemented", L"Sorry",0);
+					{
+						// Just handle language switching here.
+						// The Menu ID is contained in wParam, so subtract
+						// ID_LANGUAGE_BASE and an additional 1 off it.
+						int index = (wParam - ID_LANGUAGE_BASE - 1);
+						if(index >= 0 && index < countryCodes.size()) {
+							std::string oldLang = g_Config.languageIni;
+							g_Config.languageIni = countryCodes[index];
+
+							if(i18nrepo.LoadIni(g_Config.languageIni)) {
+								NativeMessageReceived("language", "");
+								PostMessage(hwndMain, WM_USER_UPDATE_UI, 0, 0);
+							}
+							else
+								g_Config.languageIni = oldLang;
+
+							break;
+						}
+						MessageBox(hwndMain, L"Unimplemented", L"Sorry",0);
+					}
 					break;
 				}
 			}
@@ -1429,6 +1528,7 @@ namespace MainWindow
 			break;
 
 		case WM_USER_UPDATE_UI:
+			CreateLanguageMenu();
 			TranslateMenus();
 			Update();
 			break;

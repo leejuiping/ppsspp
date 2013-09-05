@@ -21,6 +21,7 @@
 #include "Common/FileUtil.h"
 #include "Config.h"
 #include "file/ini_file.h"
+#include "i18n/i18n.h"
 #include "HLE/sceUtility.h"
 #include "Common/CPUDetect.h"
 
@@ -55,7 +56,16 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	general->Get("IgnoreBadMemAccess", &bIgnoreBadMemAccess, true);
 	general->Get("CurrentDirectory", &currentDirectory, "");
 	general->Get("ShowDebuggerOnLoad", &bShowDebuggerOnLoad, false);
-	general->Get("Language", &languageIni, "en_US");
+
+	std::string defaultLangRegion = "en_US";
+	if (bFirstRun) {
+		std::string langRegion = System_GetProperty(SYSPROP_LANGREGION);
+		if (i18nrepo.IniExists(langRegion))
+			defaultLangRegion = langRegion;
+		// TODO: Be smart about same language, different country
+	}
+
+	general->Get("Language", &languageIni, defaultLangRegion.c_str());
 	general->Get("NumWorkerThreads", &iNumWorkerThreads, cpu_info.num_cores);
 	general->Get("EnableCheats", &bEnableCheats, false);
 	general->Get("ScreenshotsAsPNG", &bScreenshotsAsPNG, false);
@@ -166,7 +176,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 #ifdef BLACKBERRY
 	control->Get("ShowTouchControls", &bShowTouchControls, pixel_xres != pixel_yres);
 #elif defined(USING_GLES2)
-	std::string name = System_GetName();
+	std::string name = System_GetProperty(SYSPROP_NAME);
 	if (name == "NVIDIA:SHIELD" || name == "Sony Ericsson:R800i" || name == "Sony Ericsson:zeus") {
 		control->Get("ShowTouchControls", &bShowTouchControls, false);
 	} else {

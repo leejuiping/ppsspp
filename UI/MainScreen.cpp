@@ -35,6 +35,8 @@
 #include "UI/GameSettingsScreen.h"
 #include "UI/CwCheatScreen.h"
 #include "UI/MiscScreens.h"
+#include "UI/ControlMappingScreen.h"
+#include "UI/PluginScreen.h"
 #include "UI/ui_atlas.h"
 #include "Core/Config.h"
 #include "GPU/GPUInterface.h"
@@ -329,7 +331,7 @@ private:
 };
 
 GameBrowser::GameBrowser(std::string path, bool allowBrowsing, bool *gridStyle, std::string lastText, std::string lastLink, UI::LayoutParams *layoutParams) 
-	: LinearLayout(UI::ORIENT_VERTICAL, layoutParams), path_(path), allowBrowsing_(allowBrowsing), gridStyle_(gridStyle), gameList_(0), lastText_(lastText), lastLink_(lastLink) {
+	: LinearLayout(UI::ORIENT_VERTICAL, layoutParams), path_(path), gameList_(0), allowBrowsing_(allowBrowsing), gridStyle_(gridStyle), lastText_(lastText), lastLink_(lastLink) {
 	using namespace UI;
 	Refresh();
 }
@@ -543,7 +545,9 @@ void MainScreen::CreateViews() {
 	rightColumnItems->Add(new Choice(m->T("Game Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
 	rightColumnItems->Add(new Choice(m->T("Exit")))->OnClick.Handle(this, &MainScreen::OnExit);
 	rightColumnItems->Add(new Choice(m->T("Credits")))->OnClick.Handle(this, &MainScreen::OnCredits);
+#ifndef __SYMBIAN32__
 	rightColumnItems->Add(new Choice(m->T("www.ppsspp.org")))->OnClick.Handle(this, &MainScreen::OnPPSSPPOrg);
+#endif
 	rightColumnItems->Add(new Choice(m->T("Support PPSSPP")))->OnClick.Handle(this, &MainScreen::OnSupport);
 }
 
@@ -553,6 +557,12 @@ void MainScreen::sendMessage(const char *message, const char *value) {
 	}
 	if (!strcmp(message, "language")) {
 		RecreateViews();
+	}
+	if (!strcmp(message, "control mapping")) {
+		screenManager()->push(new ControlMappingScreen());
+	}
+	if (!strcmp(message, "settings")) {
+		screenManager()->push(new GameSettingsScreen(""));
 	}
 }
 
@@ -591,11 +601,20 @@ UI::EventReturn MainScreen::OnGameSettings(UI::EventParams &e) {
 	// screenManager()->push(new SettingsScreen());
 	auto gameSettings = new GameSettingsScreen("", "");
 	gameSettings->OnLanguageChanged.Handle(this, &MainScreen::OnLanguageChange);
+	gameSettings->OnRecentChanged.Handle(this, &MainScreen::OnRecentChange);
 	screenManager()->push(gameSettings);
 	return UI::EVENT_DONE;
 }
 
 UI::EventReturn MainScreen::OnLanguageChange(UI::EventParams &e) {
+	RecreateViews();
+	if (host) {
+		host->UpdateUI();
+	}
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn MainScreen::OnRecentChange(UI::EventParams &e) {
 	RecreateViews();
 	if (host) {
 		host->UpdateUI();
@@ -681,10 +700,11 @@ void GamePauseScreen::CreateViews() {
 	leftColumn->Add(leftColumnItems);
 
 	saveSlots_ = leftColumnItems->Add(new ChoiceStrip(ORIENT_HORIZONTAL, new LinearLayoutParams(300, WRAP_CONTENT)));
-	saveSlots_->AddChoice("  1  ");
-	saveSlots_->AddChoice("  2  ");
-	saveSlots_->AddChoice("  3  ");
-	saveSlots_->AddChoice("  4  ");
+	saveSlots_->AddChoice(" 1 ");
+	saveSlots_->AddChoice(" 2 ");
+	saveSlots_->AddChoice(" 3 ");
+	saveSlots_->AddChoice(" 4 ");
+	saveSlots_->AddChoice(" 5 ");
 	saveSlots_->SetSelection(g_Config.iCurrentStateSlot);
 	saveSlots_->OnChoice.Handle(this, &GamePauseScreen::OnStateSelected);
 	

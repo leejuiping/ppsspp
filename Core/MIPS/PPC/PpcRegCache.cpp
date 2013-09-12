@@ -50,7 +50,7 @@ const PPCReg *PpcRegCache::GetMIPSAllocationOrder(int &count) {
 	// R9 and upwards are reserved for jit basics.
 	if (options_->downcountInRegister) {
 		static const PPCReg allocationOrder[] = {
-			/*R14, R15, R16, R17, R18, */R19,
+			/*R14, R15, R16, R17, R18, R19,*/
 			R20, R21, R22, R23, R24, R25, 
 			R26, R27, R28, R29,	R30, R31,
 		};
@@ -58,7 +58,7 @@ const PPCReg *PpcRegCache::GetMIPSAllocationOrder(int &count) {
 		return allocationOrder;
 	} else {
 		static const PPCReg allocationOrder2[] = {
-			/*R14, R15, R16, R17, R18,*/ R19,
+			/*R14, R15, R16, R17, R18, R19,*/
 			R20, R21, R22, R23, R24, R25, 
 			R26, R27, R28, R29,	R30, R31,
 		};
@@ -84,7 +84,7 @@ PPCReg PpcRegCache::MapReg(MIPSReg mipsReg, int mapFlags) {
 	// with that flag immediately writes a "known" value to the register.
 	if (mr[mipsReg].loc == ML_PPCREG) {
 		if (ar[mr[mipsReg].reg].mipsReg != mipsReg) {
-			ERROR_LOG(HLE, "Register mapping out of sync! %i", mipsReg);
+			ERROR_LOG(JIT, "Register mapping out of sync! %i", mipsReg);
 		}
 		if (mapFlags & MAP_DIRTY) {
 			ar[mr[mipsReg].reg].isDirty = true;
@@ -196,7 +196,7 @@ void PpcRegCache::FlushPpcReg(PPCReg r) {
 		mr[ar[r].mipsReg].reg = INVALID_REG;
 		mr[ar[r].mipsReg].imm = 0;
 	} else {
-		ERROR_LOG(HLE, "Dirty but no mipsreg?");
+		ERROR_LOG(JIT, "Dirty but no mipsreg?");
 	}
 	ar[r].isDirty = false;
 	ar[r].mipsReg = -1;
@@ -212,7 +212,7 @@ void PpcRegCache::FlushR(MIPSReg r) {
 
 	case ML_PPCREG:
 		if (mr[r].reg == INVALID_REG) {
-			ERROR_LOG(HLE, "FlushMipsReg: MipsReg had bad PpcReg");
+			ERROR_LOG(JIT, "FlushMipsReg: MipsReg had bad PpcReg");
 		}
 		if (ar[mr[r].reg].isDirty) {
 			emit_->STW((PPCReg)mr[r].reg, CTXREG, GetMipsRegOffset(r));

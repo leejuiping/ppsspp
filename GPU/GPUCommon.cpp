@@ -265,7 +265,7 @@ u32 GPUCommon::DequeueList(int listid) {
 		dlQueue.remove(listid);
 
 	dls[listid].waitTicks = 0;
-	__GeTriggerWait(WAITTYPE_GELISTSYNC, listid, "GeListSync");
+	__GeTriggerWait(WAITTYPE_GELISTSYNC, listid);
 
 	CheckDrawSync();
 
@@ -493,7 +493,7 @@ void GPUCommon::SlowRunLoop(DisplayList &list)
 			char temp[256];
 			u32 prev = Memory::ReadUnchecked_U32(list.pc - 4);
 			GeDisassembleOp(list.pc, op, prev, temp);
-			NOTICE_LOG(HLE, "%s", temp);
+			NOTICE_LOG(G3D, "%s", temp);
 		}
 		gstate.cmdmem[cmd] = op;
 
@@ -606,7 +606,7 @@ void GPUCommon::ProcessDLQueueInternal() {
 
 	// Seems to be correct behaviour to process the list anyway?
 	if (startingTicks < busyTicks) {
-		DEBUG_LOG(HLE, "Can't execute a list yet, still busy for %lld ticks", busyTicks - startingTicks);
+		DEBUG_LOG(G3D, "Can't execute a list yet, still busy for %lld ticks", busyTicks - startingTicks);
 		//return;
 	}
 
@@ -893,7 +893,7 @@ void GPUCommon::InterruptEnd(int listid) {
 	// TODO: Unless the signal handler could change it?
 	if (dl.state == PSP_GE_DL_STATE_COMPLETED || dl.state == PSP_GE_DL_STATE_NONE) {
 		dl.waitTicks = 0;
-		__GeTriggerWait(WAITTYPE_GELISTSYNC, listid, "GeListSync", true);
+		__GeTriggerWait(WAITTYPE_GELISTSYNC, listid);
 	}
 
 	if (dl.signal == PSP_GE_SIGNAL_HANDLER_PAUSE)

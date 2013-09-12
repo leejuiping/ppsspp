@@ -49,8 +49,11 @@
 
 #include "UI/MainScreen.h"
 #include "UI/EmuScreen.h"
+#include "UI/DevScreens.h"
 #include "UI/GameInfoCache.h"
 #include "UI/MiscScreens.h"
+#include "UI/ControlMappingScreen.h"
+#include "UI/GameSettingsScreen.h"
 
 
 EmuScreen::EmuScreen(const std::string &filename)
@@ -73,20 +76,22 @@ void EmuScreen::bootGame(const std::string &filename) {
 	coreParam.enableDebugging = false;
 	coreParam.printfEmuLog = false;
 	coreParam.headLess = false;
-#ifndef _WIN32
-	if (g_Config.iWindowZoom < 1 || g_Config.iWindowZoom > 2)
-		g_Config.iWindowZoom = 1;
-#endif
-	coreParam.renderWidth = 480 * g_Config.iWindowZoom;
-	coreParam.renderHeight = 272 * g_Config.iWindowZoom;
+
+	if (g_Config.iInternalResolution == 0) {
+		coreParam.renderWidth = dp_xres;
+		coreParam.renderHeight = dp_yres;
+	} else {
+		if (g_Config.iInternalResolution < 0)
+			g_Config.iInternalResolution = 1;
+		coreParam.renderWidth = 480 * g_Config.iInternalResolution;
+		coreParam.renderHeight = 272 * g_Config.iInternalResolution;
+	}
+
 	coreParam.outputWidth = dp_xres;
 	coreParam.outputHeight = dp_yres;
 	coreParam.pixelWidth = pixel_xres;
 	coreParam.pixelHeight = pixel_yres;
-	if (g_Config.bAntiAliasing) {
-		coreParam.renderWidth *= 2;
-		coreParam.renderHeight *= 2;
-	}
+
 	std::string error_string;
 	if (PSP_Init(coreParam, &error_string)) {
 		invalid_ = false;
@@ -159,6 +164,12 @@ void EmuScreen::sendMessage(const char *message, const char *value) {
 	else if (!strcmp(message, "boot")) {
 		PSP_Shutdown();
 		bootGame(value);
+	}
+	else if (!strcmp(message, "control mapping")) {
+		screenManager()->push(new ControlMappingScreen());
+	}
+	else if (!strcmp(message, "settings")) {
+		screenManager()->push(new GameSettingsScreen(gamePath_));
 	}
 }
 
@@ -321,6 +332,8 @@ void EmuScreen::axis(const AxisInput &axis) {
 
 void EmuScreen::processAxis(const AxisInput &axis, int direction) {
 	int result = KeyMap::AxisToPspButton(axis.deviceId, axis.axisId, direction);
+	int resultOpposite = KeyMap::AxisToPspButton(axis.deviceId, axis.axisId, -direction);
+
 	if (result == KEYMAP_ERROR_UNKNOWN_KEY)
 		return;
 
@@ -360,7 +373,9 @@ void EmuScreen::processAxis(const AxisInput &axis, int direction) {
 			if (result != KEYMAP_ERROR_UNKNOWN_KEY)
 				pspKey(result, KEY_UP);
 		} else {
+			// Release both directions, trying to deal with some erratic controllers that can cause it to stick.
 			pspKey(result, KEY_UP);
+			pspKey(resultOpposite, KEY_UP);
 		}
 	}
 }
@@ -384,6 +399,14 @@ static const struct { int from, to; } legacy_touch_mapping[12] = {
 
 void EmuScreen::CreateViews() {
 	root_ = CreatePadLayout(&pauseTrigger_);
+	if (g_Config.bShowDeveloperMenu) {
+		root_->Add(new UI::Button("DevMenu"))->OnClick.Handle(this, &EmuScreen::OnDevTools);
+	}
+}
+
+UI::EventReturn EmuScreen::OnDevTools(UI::EventParams &params) {
+	screenManager()->push(new DevMenu());
+	return UI::EVENT_DONE;
 }
 
 void EmuScreen::update(InputState &input) {
@@ -424,9 +447,10 @@ void EmuScreen::update(InputState &input) {
 	__CtrlSetRapidFire(virtKeys[VIRTKEY_RAPID_FIRE - VIRTKEY_FIRST]);
 
 	// Apply tilt to left stick
+	// TODO: Make into an axis
 	if (g_Config.bAccelerometerToAnalogHoriz) {
 		// TODO: Deadzone, etc.
-		leftstick_x += clamp1(curve1(input.acc.y) * 2.0f);
+		leftstick_x += clamp1(curve1(input.acc.y) * 2.0f) * g_Config.iTiltSensitivity / 100;
 		__CtrlSetAnalogX(clamp1(leftstick_x), CTRL_STICK_LEFT);
 	}
 
@@ -496,8 +520,9 @@ void EmuScreen::render() {
 	if (g_Config.bShowDebugStats) {
 		char statbuf[4096] = {0};
 		__DisplayGetDebugStats(statbuf);
-		if (statbuf[4095])
-			ERROR_LOG(HLE, "Statbuf too big");
+		if (statbuf[4095]) {
+			ELOG("Statbuf too small! :(");
+		}
 		ui_draw2d.SetFontScale(.7f, .7f);
 		ui_draw2d.DrawText(UBUNTU24, statbuf, 11, 11, 0xc0000000, FLAG_DYNAMIC_ASCII);
 		ui_draw2d.DrawText(UBUNTU24, statbuf, 10, 10, 0xFFFFFFFF, FLAG_DYNAMIC_ASCII);

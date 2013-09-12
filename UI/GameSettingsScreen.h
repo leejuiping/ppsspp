@@ -30,6 +30,7 @@ public:
 	virtual void update(InputState &input);
 
 	UI::Event OnLanguageChanged;
+	UI::Event OnRecentChanged;
 
 protected:
 	virtual void CreateViews();
@@ -59,6 +60,7 @@ private:
 	UI::EventReturn OnChangeNickname(UI::EventParams &e);
 	UI::EventReturn OnClearRecents(UI::EventParams &e);
 	UI::EventReturn OnRenderingMode(UI::EventParams &e);
+	UI::EventReturn OnResolutionChange(UI::EventParams &e);
 
 	// Temporaries to convert bools to int settings
 	bool cap60FPS_;
@@ -95,6 +97,7 @@ private:
 	UI::EventReturn OnLoadLanguageIni(UI::EventParams &e);
 	UI::EventReturn OnSaveLanguageIni(UI::EventParams &e);
 	UI::EventReturn OnRestoreDefaultSettings(UI::EventParams &e);
+	UI::EventReturn OnLogConfig(UI::EventParams &e);
 
 	// Temporary variable.
 	bool enableLogging_;

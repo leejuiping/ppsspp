@@ -25,6 +25,7 @@
 #include "ui/viewgroup.h"
 
 #include "Core/HLE/sceCtrl.h"
+#include "Core/System.h"
 #include "Common/KeyMap.h"
 #include "Core/Config.h"
 #include "UI/ui_atlas.h"
@@ -191,8 +192,7 @@ void ControlMappingScreen::CreateViews() {
 	leftColumn->Add(new Choice(k->T("Clear All")))->OnClick.Handle(this, &ControlMappingScreen::OnClearMapping);
 	leftColumn->Add(new Choice(k->T("Default All")))->OnClick.Handle(this, &ControlMappingScreen::OnDefaultMapping);
 	leftColumn->Add(new Spacer(new LinearLayoutParams(1.0f)));
-	leftColumn->Add(new Choice(d->T("Back")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-
+	leftColumn->Add(new Choice(d->T("Back")))->OnClick.Handle(this, &ControlMappingScreen::OnBack);
 	/*
 	ChoiceStrip *mode = leftColumn->Add(new ChoiceStrip(ORIENT_VERTICAL));
 	mode->AddChoice("Replace");
@@ -212,6 +212,17 @@ void ControlMappingScreen::CreateViews() {
 	}
 }
 
+UI::EventReturn ControlMappingScreen::OnBack(UI::EventParams &e) {
+	// If we're in-game, return to the game via DR_CANCEL.
+	if(PSP_IsInited()) {
+		screenManager()->finishDialog(this, DR_CANCEL);
+	} else {
+		screenManager()->finishDialog(this, DR_OK);
+	}
+
+	return UI::EVENT_DONE;
+}
+
 UI::EventReturn ControlMappingScreen::OnClearMapping(UI::EventParams &params) {
 	KeyMap::g_controllerMap.clear();
 	RecreateViews();
@@ -229,7 +240,6 @@ void KeyMappingNewKeyDialog::CreatePopupContents(UI::ViewGroup *parent) {
 	using namespace UI;
 
 	I18NCategory *keyI18N = GetI18NCategory("KeyMapping");
-	I18NCategory *generalI18N = GetI18NCategory("General");
 
 	std::string pspButtonName = KeyMap::GetPspButtonName(this->pspBtn_);
 

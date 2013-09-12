@@ -118,6 +118,9 @@ static inline void GetTexelCoordinates(int level, float s, float t, unsigned int
 	int width = 1 << (gstate.texsize[level] & 0xf);
 	int height = 1 << ((gstate.texsize[level]>>8) & 0xf);
 
+	// TODO: These should really be multiplied by 256 to get fixed point coordinates
+	// so we can do texture filtering later.
+
 	u = (unsigned int)(s * width); // TODO: width-1 instead?
 	v = (unsigned int)(t * height); // TODO: width-1 instead?
 }
@@ -234,6 +237,9 @@ static inline u32 GetPixelColor(int x, int y)
 
 	case GE_FORMAT_8888:
 		return *(u32*)&fb[4*x + 4*y*gstate.FrameBufStride()];
+
+	case GE_FORMAT_INVALID:
+		_dbg_assert_msg_(G3D, false, "Software: invalid framebuf format.");
 	}
 	return 0;
 }
@@ -256,6 +262,9 @@ static inline void SetPixelColor(int x, int y, u32 value)
 	case GE_FORMAT_8888:
 		*(u32*)&fb[4*x + 4*y*gstate.FrameBufStride()] = value;
 		break;
+
+	case GE_FORMAT_INVALID:
+		_dbg_assert_msg_(G3D, false, "Software: invalid framebuf format.");
 	}
 }
 
@@ -299,7 +308,7 @@ static inline bool DepthTestPassed(int x, int y, u16 z)
 	if (gstate.isModeClear())
 		return true;
 
-	switch (gstate.getDepthTestFunc()) {
+	switch (gstate.getDepthTestFunction()) {
 	case GE_COMP_NEVER:
 		return false;
 
@@ -478,6 +487,10 @@ static inline bool ColorTestPassed(Vec3<int> color)
 
 		case GE_COMP_NOTEQUAL:
 			return c != ref;
+
+		default:
+			ERROR_LOG_REPORT(G3D, "Software: Invalid colortest function: %d", gstate.getColorTestFunction());
+			break;
 	}
 	return true;
 }

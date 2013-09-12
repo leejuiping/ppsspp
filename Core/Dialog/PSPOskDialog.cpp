@@ -217,27 +217,27 @@ int PSPOskDialog::Init(u32 oskPtr)
 	// Seems like this should crash?
 	if (!Memory::IsValidAddress(oskPtr))
 	{
-		ERROR_LOG_REPORT(HLE, "sceUtilityOskInitStart: invalid params (%08x)", oskPtr);
+		ERROR_LOG_REPORT(SCEUTILITY, "sceUtilityOskInitStart: invalid params (%08x)", oskPtr);
 		return -1;
 	}
 
 	oskParams = oskPtr;
 	if (oskParams->base.size != sizeof(SceUtilityOskParams))
 	{
-		ERROR_LOG(HLE, "sceUtilityOskInitStart: invalid size (%d)", oskParams->base.size);
+		ERROR_LOG(SCEUTILITY, "sceUtilityOskInitStart: invalid size (%d)", oskParams->base.size);
 		return SCE_ERROR_UTILITY_INVALID_PARAM_SIZE;
 	}
 	// Also seems to crash.
 	if (!oskParams->fields.IsValid())
 	{
-		ERROR_LOG_REPORT(HLE, "sceUtilityOskInitStart: invalid field data (%08x)", oskParams->fields.ptr);
+		ERROR_LOG_REPORT(SCEUTILITY, "sceUtilityOskInitStart: invalid field data (%08x)", oskParams->fields.ptr);
 		return -1;
 	}
 
 	if (oskParams->unk_60 != 0)
-		WARN_LOG_REPORT(HLE, "sceUtilityOskInitStart: unknown param is non-zero (%08x)", oskParams->unk_60);
+		WARN_LOG_REPORT(SCEUTILITY, "sceUtilityOskInitStart: unknown param is non-zero (%08x)", oskParams->unk_60);
 	if (oskParams->fieldCount != 1)
-		WARN_LOG_REPORT(HLE, "sceUtilityOskInitStart: unsupported field count %d", oskParams->fieldCount);
+		WARN_LOG_REPORT(SCEUTILITY, "sceUtilityOskInitStart: unsupported field count %d", oskParams->fieldCount);
 
 	status = SCE_UTILITY_STATUS_INITIALIZE;
 	selectedChar = 0;
@@ -767,66 +767,57 @@ void PSPOskDialog::RenderKeyboard()
 // re-opening the dialog box? I don't get it.
 int PSPOskDialog::NativeKeyboard()
 {
-	wchar_t *input = new wchar_t[FieldMaxLength()];
-	memset(input, 0, sizeof(input));
-
-	if (status == SCE_UTILITY_STATUS_INITIALIZE)
+	switch(status)
 	{
+	case SCE_UTILITY_STATUS_INITIALIZE:
 		status = SCE_UTILITY_STATUS_RUNNING;
-	}
+		break;
 
-	else if (status == SCE_UTILITY_STATUS_RUNNING)
-	{
-		std::wstring titleText;
-		GetWideStringFromPSPPointer(titleText, oskParams->fields[0].desc);
-
-		std::wstring defaultText;
-		GetWideStringFromPSPPointer(defaultText, oskParams->fields[0].intext);
-
-		if(defaultText.length() <= 0)
-			defaultText.assign(L"VALUE");
-
-		std::wstring inputWide;
-
-		if(!host->InputBoxGetWString(titleText.c_str(), defaultText, inputWide)) 
+	case SCE_UTILITY_STATUS_RUNNING:
 		{
-			wcsncat(input, L"", wcslen(L""));
-		}
-		else 
-		{
-			size_t maxInputLength = FieldMaxLength();
+			std::wstring titleText;
+			GetWideStringFromPSPPointer(titleText, oskParams->fields[0].desc);
 
-			if(inputWide.length() < maxInputLength)
+			std::wstring defaultText;
+			GetWideStringFromPSPPointer(defaultText, oskParams->fields[0].intext);
+
+			if(defaultText.empty())
+				defaultText.assign(L"VALUE");
+
+			if(host->InputBoxGetWString(titleText.c_str(), defaultText, inputChars)) 
 			{
-				wcsncat(input, inputWide.c_str(), inputWide.length());
+				u32 maxLength = FieldMaxLength();
+				if (inputChars.length() > maxLength)
+				{
+					ERROR_LOG(SCEUTILITY, "NativeKeyboard: input text too long(%d characters/glyphs max), truncating to game-requested length.", maxLength);
+					inputChars.erase(maxLength, std::string::npos);
+				}
 			}
-			else 
-			{
-				ERROR_LOG(HLE, "NativeKeyboard: input text too long(%d characters/glyphs max), truncating to game-requested length.", maxInputLength);
-				wcsncat(input, inputWide.c_str(), maxInputLength);
-			}
+			status = SCE_UTILITY_STATUS_FINISHED;
 		}
-		status = SCE_UTILITY_STATUS_FINISHED;
-	}
-	else if (status == SCE_UTILITY_STATUS_FINISHED)
-	{
+		break;
+
+	case SCE_UTILITY_STATUS_FINISHED:
 		status = SCE_UTILITY_STATUS_SHUTDOWN;
+		break;
 	}
 	
 	u16_le *outText = oskParams->fields[0].outtext;
-	for (u32 i = 0, end = oskParams->fields[0].outtextlength; i < end; ++i)
+
+	size_t end = oskParams->fields[0].outtextlength;
+	if (end > inputChars.size())
+		end = inputChars.size() + 1;
+	// Only write the bytes of the output and the null terminator, don't write the rest.
+	for (size_t i = 0; i < end; ++i)
 	{
 		u16 value = 0;
 		if (i < FieldMaxLength())
-			value = input[i];
+			value = inputChars[i];
 		outText[i] = value;
 	}
 
 	oskParams->base.result = 0;
 	oskParams->fields[0].result = PSP_UTILITY_OSK_RESULT_CHANGED;
-
-	delete [] input;
-	input = NULL;
 
 	return 0;
 }
@@ -949,7 +940,11 @@ int PSPOskDialog::Update()
 	}
 
 	u16_le *outText = oskParams->fields[0].outtext;
-	for (u32 i = 0, end = oskParams->fields[0].outtextlength; i < end; ++i)
+	size_t end = oskParams->fields[0].outtextlength;
+	// Only write the bytes of the output and the null terminator, don't write the rest.
+	if (end > inputChars.size())
+		end = inputChars.size() + 1;
+	for (size_t i = 0; i < end; ++i)
 	{
 		u16 value = 0;
 		if (i < inputChars.size())

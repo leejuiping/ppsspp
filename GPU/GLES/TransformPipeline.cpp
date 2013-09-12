@@ -839,13 +839,8 @@ void TransformDrawEngine::SubmitPrim(void *verts, void *inds, GEPrimitiveType pr
 	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawCalls >= MAX_DEFERRED_DRAW_CALLS)
 		Flush();
 		
+	// TODO: Is this the right thing to do?
 	if (prim == GE_PRIM_KEEP_PREVIOUS) {
-		switch(prevPrim_) {
-		case GE_PRIM_LINE_STRIP:
-		case GE_PRIM_TRIANGLE_STRIP:
-		case GE_PRIM_TRIANGLE_FAN:
-			break;
-		}
 		prim = prevPrim_;
 	}
 	prevPrim_ = prim;
@@ -947,7 +942,7 @@ void TransformDrawEngine::DecodeVerts() {
 
 	// Sanity check
 	if (indexGen.Prim() < 0) {
-		ERROR_LOG(HLE, "DecodeVerts: Failed to deduce prim: %i", indexGen.Prim());
+		ERROR_LOG_REPORT(G3D, "DecodeVerts: Failed to deduce prim: %i", indexGen.Prim());
 		// Force to points (0)
 		indexGen.AddPrim(GE_PRIM_POINTS, 0);
 	}
@@ -1024,7 +1019,7 @@ void TransformDrawEngine::DecimateTrackedVertexArrays() {
 		char *ptr = buffer;
 		ptr += dec->second->ToString(ptr);
 //		*ptr++ = '\n';
-		NOTICE_LOG(HLE, buffer);
+		NOTICE_LOG(G3D, buffer);
 	}
 #endif
 }

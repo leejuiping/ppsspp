@@ -54,7 +54,7 @@ static const DefMappingStruct defaultKeyboardKeyMap[] = {
 
 	{CTRL_START, NKCODE_ENTER},
 #ifdef _WIN32
-	{CTRL_SELECT, NKCODE_V},
+	{CTRL_SELECT, NKCODE_SPACE},
 #else
 	{CTRL_SELECT, NKCODE_SPACE},
 #endif

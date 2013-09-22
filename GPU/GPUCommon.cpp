@@ -48,6 +48,17 @@ void GPUCommon::PopDLQueue() {
 	}
 }
 
+bool GPUCommon::BusyDrawing() {
+	u32 state = DrawSync(1);
+	if (state == PSP_GE_LIST_DRAWING || state == PSP_GE_LIST_STALLING) {
+		lock_guard guard(listLock);
+		if (currentList && currentList->state != PSP_GE_DL_STATE_PAUSED) {
+			return true;
+		}
+	}
+	return false;
+}
+
 u32 GPUCommon::DrawSync(int mode) {
 	// FIXME: Workaround for displaylists sometimes hanging unprocessed.  Not yet sure of the cause.
 	if (g_Config.bSeparateCPUThread) {
@@ -252,6 +263,7 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<Ps
 	dl.waitTicks = (u64)-1;
 	dl.interruptsEnabled = interruptsEnabled_;
 	dl.started = false;
+	dl.offsetAddr = 0;
 	if (args.IsValid() && args->context.IsValid())
 		dl.context = args->context;
 	else
@@ -377,7 +389,7 @@ u32 GPUCommon::Break(int mode) {
 		return SCE_KERNEL_ERROR_INVALID_MODE;
 
 	if (!currentList)
-		return 0x80000020;
+		return SCE_KERNEL_ERROR_ALREADY;
 
 	if (mode == 1)
 	{
@@ -410,9 +422,9 @@ u32 GPUCommon::Break(int mode) {
 				ERROR_LOG_REPORT(G3D, "sceGeBreak: can't break signal-pausing list");
 			}
 			else
-				return 0x80000020;
+				return SCE_KERNEL_ERROR_ALREADY;
 		}
-		return 0x80000021;
+		return SCE_KERNEL_ERROR_BUSY;
 	}
 
 	if (currentList->state == PSP_GE_DL_STATE_QUEUED)
@@ -456,16 +468,14 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	}
 	list.started = true;
 
-	// I don't know if this is the correct place to zero this, but something
-	// need to do it. See Sol Trigger title screen.
-	// TODO: Maybe this is per list?  Should a stalled list remember the old value?
-	gstate_c.offsetAddr = 0;
+	gstate_c.offsetAddr = list.offsetAddr;
 
 	if (!Memory::IsValidAddress(list.pc)) {
 		ERROR_LOG_REPORT(G3D, "DL PC = %08x WTF!!!!", list.pc);
 		return true;
 	}
 
+	// TODO: Use new interface.
 #if defined(USING_QT_UI)
 	if (host->GpuStep()) {
 		host->SendGPUStart();
@@ -480,9 +490,8 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	gpuState = list.pc == list.stall ? GPUSTATE_STALL : GPUSTATE_RUNNING;
 	guard.unlock();
 
-	const bool dumpThisFrame = dumpThisFrame_;
-	// TODO: Add check for displaylist debugger.
-	const bool useFastRunLoop = !dumpThisFrame;
+	const bool useDebugger = host->GPUDebuggingActive();
+	const bool useFastRunLoop = !dumpThisFrame_ && !useDebugger;
 	while (gpuState == GPUSTATE_RUNNING) {
 		{
 			easy_guard innerGuard(listLock);
@@ -514,6 +523,8 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 		UpdatePC(list.pc - 4, list.pc);
 	}
 
+	list.offsetAddr = gstate_c.offsetAddr;
+
 	if (g_Config.bShowDebugStats) {
 		time_update();
 		gpuStats.msProcessingDisplayLists += time_now_d() - start;
@@ -526,9 +537,11 @@ void GPUCommon::SlowRunLoop(DisplayList &list)
 	const bool dumpThisFrame = dumpThisFrame_;
 	while (downcount > 0)
 	{
+		host->GPUNotifyCommand(list.pc);
 		u32 op = Memory::ReadUnchecked_U32(list.pc);
 		u32 cmd = op >> 24;
 
+		// TODO: Replace.
 #if defined(USING_QT_UI)
 		if (host->GpuStep())
 			host->SendGPUWait(cmd, list.pc, &gstate);
@@ -962,4 +975,102 @@ void GPUCommon::SyncEnd(WaitType waitType, int listid, bool wokeThreads) {
 			}
 		}
 	}
+}
+
+bool GPUCommon::GetCurrentDisplayList(DisplayList &list) {
+	easy_guard guard(listLock);
+	if (!currentList) {
+		return false;
+	}
+	list = *currentList;
+	return true;
+}
+
+std::vector<DisplayList> GPUCommon::ActiveDisplayLists() {
+	std::vector<DisplayList> result;
+
+	easy_guard guard(listLock);
+	for (auto it = dlQueue.begin(), end = dlQueue.end(); it != end; ++it) {
+		result.push_back(dls[*it]);
+	}
+
+	return result;
+}
+
+void GPUCommon::ResetListPC(int listID, u32 pc) {
+	if (listID < 0 || listID >= DisplayListMaxCount) {
+		_dbg_assert_msg_(G3D, false, "listID out of range: %d", listID);
+		return;
+	}
+
+	easy_guard guard(listLock);
+	dls[listID].pc = pc;
+}
+
+void GPUCommon::ResetListStall(int listID, u32 stall) {
+	if (listID < 0 || listID >= DisplayListMaxCount) {
+		_dbg_assert_msg_(G3D, false, "listID out of range: %d", listID);
+		return;
+	}
+
+	easy_guard guard(listLock);
+	dls[listID].stall = stall;
+}
+
+void GPUCommon::ResetListState(int listID, DisplayListState state) {
+	if (listID < 0 || listID >= DisplayListMaxCount) {
+		_dbg_assert_msg_(G3D, false, "listID out of range: %d", listID);
+		return;
+	}
+
+	easy_guard guard(listLock);
+	dls[listID].state = state;
+}
+
+GPUDebugOp GPUCommon::DissassembleOp(u32 pc, u32 op) {
+	char buffer[1024];
+	GeDisassembleOp(pc, op, Memory::Read_U32(pc - 4), buffer);
+
+	GPUDebugOp info;
+	info.pc = pc;
+	info.cmd = op >> 24;
+	info.op = op;
+	info.desc = buffer;
+	return info;
+}
+
+std::vector<GPUDebugOp> GPUCommon::DissassembleOpRange(u32 startpc, u32 endpc) {
+	char buffer[1024];
+	std::vector<GPUDebugOp> result;
+	GPUDebugOp info;
+
+	u32 prev = Memory::Read_U32(startpc - 4);
+	for (u32 pc = startpc; pc < endpc; pc += 4) {
+		u32 op = Memory::Read_U32(pc);
+		GeDisassembleOp(pc, op, prev, buffer);
+		prev = op;
+
+		info.pc = pc;
+		info.cmd = op >> 24;
+		info.op = op;
+		info.desc = buffer;
+		result.push_back(info);
+	}
+	return result;
+}
+
+u32 GPUCommon::GetRelativeAddress(u32 data) {
+	return gstate_c.getRelativeAddress(data);
+}
+
+u32 GPUCommon::GetVertexAddress() {
+	return gstate_c.vertexAddr;
+}
+
+u32 GPUCommon::GetIndexAddress() {
+	return gstate_c.indexAddr;
+}
+
+GPUgstate GPUCommon::GetGState() {
+	return gstate;
 }

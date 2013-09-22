@@ -38,6 +38,7 @@
 #include "Windows/OpenGLBase.h"
 #include "Windows/Debugger/Debugger_Disasm.h"
 #include "Windows/Debugger/Debugger_MemoryDlg.h"
+#include "Windows/Debugger/GEDebugger.h"
 #include "main.h"
 
 #include "Core/Core.h"
@@ -499,6 +500,7 @@ namespace MainWindow
 		TranslateMenuItem(ID_DEBUG_IGNOREILLEGALREADS);
 		TranslateMenuItem(ID_DEBUG_RUNONLOAD);
 		TranslateMenuItem(ID_DEBUG_DISASSEMBLY, L"\tCtrl+D");
+		TranslateMenuItem(ID_DEBUG_GEDEBUGGER);
 		TranslateMenuItem(ID_DEBUG_LOG, L"\tCtrl+L");
 		TranslateMenuItem(ID_DEBUG_MEMORYVIEW, L"\tCtrl+M");
 
@@ -650,23 +652,49 @@ namespace MainWindow
 		windowTitle = title;
 	}
 
-	BOOL Show(HINSTANCE hInstance, int nCmdShow) {
-		hInst = hInstance; // Store instance handle in our global variable.
-
+	RECT DetermineWindowRectangle() {
 		RECT rc;
+
+		if (!g_Config.bFullScreen) {
+			const int screenWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+			const int screenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+			const int screenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+			const int screenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+			bool visibleHorizontally = ((g_Config.iWindowX + g_Config.iWindowWidth) >= screenX) &&
+				((g_Config.iWindowX + g_Config.iWindowWidth) < (screenWidth + g_Config.iWindowWidth));
+
+			bool visibleVertically = ((g_Config.iWindowY + g_Config.iWindowHeight) >= screenY) &&
+				((g_Config.iWindowY + g_Config.iWindowHeight) < (screenHeight + g_Config.iWindowHeight));
+
+			if (!visibleHorizontally)
+				g_Config.iWindowX = 0;
+
+			if (!visibleVertically)
+				g_Config.iWindowY = 0;
+		}
+
 		rc.left = g_Config.iWindowX;
 		rc.top = g_Config.iWindowY;
-		if (g_Config.iWindowWidth == 0) {
+		if (g_Config.iWindowWidth <= 0 || g_Config.iWindowHeight <= 0) {
 			RECT rcInner = rc, rcOuter;
 			GetWindowRectAtResolution(2 * 480, 2 * 272, rcInner, rcOuter);
 			rc.right = rc.left + (rcOuter.right - rcOuter.left);
-			rc.bottom = rc.top + (rcOuter.bottom- rcOuter.top);
+			rc.bottom = rc.top + (rcOuter.bottom - rcOuter.top);
 			g_Config.iWindowWidth = rc.right - rc.left;
 			g_Config.iWindowHeight = rc.bottom - rc.top;
 		} else {
 			rc.right = g_Config.iWindowX + g_Config.iWindowWidth;
 			rc.bottom = g_Config.iWindowY + g_Config.iWindowHeight;
 		}
+
+		return rc;
+	}
+
+	BOOL Show(HINSTANCE hInstance, int nCmdShow) {
+		hInst = hInstance; // Store instance handle in our global variable.
+
+		RECT rc = DetermineWindowRectangle();
 
 		u32 style = WS_OVERLAPPEDWINDOW;
 
@@ -738,6 +766,9 @@ namespace MainWindow
 		disasmWindow[0] = new CDisasm(MainWindow::GetHInstance(), MainWindow::GetHWND(), currentDebugMIPS);
 		DialogManager::AddDlg(disasmWindow[0]);
 		disasmWindow[0]->Show(g_Config.bShowDebuggerOnLoad);
+
+		geDebuggerWindow = new CGEDebugger(MainWindow::GetHInstance(), MainWindow::GetHWND());
+		DialogManager::AddDlg(geDebuggerWindow);
 
 		memoryWindow[0] = new CMemoryDlg(MainWindow::GetHInstance(), MainWindow::GetHWND(), currentDebugMIPS);
 		DialogManager::AddDlg(memoryWindow[0]);
@@ -1266,6 +1297,10 @@ namespace MainWindow
 
 				case ID_DEBUG_DISASSEMBLY:
 					disasmWindow[0]->Show(true);
+					break;
+
+				case ID_DEBUG_GEDEBUGGER:
+					geDebuggerWindow->Show(true);
 					break;
 
 				case ID_DEBUG_MEMORYVIEW:

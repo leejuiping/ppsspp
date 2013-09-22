@@ -134,6 +134,7 @@ struct DisplayList
 	bool pendingInterrupt;
 	bool started;
 	u32_le *context;
+	u32 offsetAddr;
 };
 
 enum GPUInvalidationType {
@@ -237,12 +238,12 @@ public:
 	virtual void Resized() = 0;
 	virtual bool FramebufferDirty() = 0;
 	virtual bool FramebufferReallyDirty() = 0;
+	virtual bool BusyDrawing() = 0;
 
 	// Debugging
 	virtual void DumpNextFrame() = 0;
 	virtual void GetReportingInfo(std::string &primaryInfo, std::string &fullInfo) = 0;
 	virtual const std::list<int>& GetDisplayLists() = 0;
-	virtual DisplayList* GetCurrentDisplayList() = 0;
 	virtual bool DecodeTexture(u8* dest, GPUgstate state) = 0;
 	virtual std::vector<FramebufferInfo> GetFramebufferList() = 0;
 };

@@ -111,7 +111,7 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_CLEARMODE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_TEXTUREMAPENABLE, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 	{GE_CMD_FOGENABLE, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_TEXMODE, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_TEXMODE, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 	{GE_CMD_TEXSHADELS, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_SHADEMODE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_TEXFUNC, FLAG_FLUSHBEFOREONCHANGE},
@@ -135,8 +135,8 @@ static const CommandTableEntry commandTable[] = {
 
 	// This changes both shaders so need flushing.
 	{GE_CMD_LIGHTMODE, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_TEXFILTER, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_TEXWRAP, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_TEXFILTER, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
+	{GE_CMD_TEXWRAP, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 
 	// Uniform changes
 	{GE_CMD_ALPHATEST, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
@@ -275,7 +275,7 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_CLIPENABLE, 0},
 	{GE_CMD_TEXFLUSH, 0},
 	{GE_CMD_TEXLODSLOPE, 0},
-	{GE_CMD_TEXLEVEL, 0},  // we don't support this anyway, no need to flush.
+	{GE_CMD_TEXLEVEL, FLAG_EXECUTE},  // we don't support this anyway, no need to flush.
 	{GE_CMD_TEXSYNC, 0},
 
 	// These are just nop or part of other later commands.
@@ -336,22 +336,22 @@ static const CommandTableEntry commandTable[] = {
 
 	// "Missing" commands (gaps in the sequence)
 	// "Missing" commands (gaps in the sequence)
-	{GE_CMD_UNKNOWN_03, 0},
-	{GE_CMD_UNKNOWN_0D, 0},
-	{GE_CMD_UNKNOWN_11, 0},
-	{GE_CMD_UNKNOWN_29, 0},
-	{GE_CMD_UNKNOWN_34, 0},
-	{GE_CMD_UNKNOWN_35, 0},
-	{GE_CMD_UNKNOWN_39, 0},
-	{GE_CMD_UNKNOWN_4E, 0},
-	{GE_CMD_UNKNOWN_4F, 0},
-	{GE_CMD_UNKNOWN_52, 0},
-	{GE_CMD_UNKNOWN_59, 0},
-	{GE_CMD_UNKNOWN_5A, 0},
-	{GE_CMD_UNKNOWN_B6, 0},
-	{GE_CMD_UNKNOWN_B7, 0},
-	{GE_CMD_UNKNOWN_D1, 0},
-	{GE_CMD_UNKNOWN_ED, 0},
+	{GE_CMD_UNKNOWN_03, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_0D, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_11, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_29, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_34, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_35, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_39, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_4E, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_4F, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_52, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_59, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_5A, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_B6, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_B7, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_D1, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_ED, FLAG_EXECUTE},
 };
 
 
@@ -765,13 +765,9 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 				DEBUG_LOG_REPORT(G3D, "Bezier + skinning: %i", vertTypeGetNumBoneWeights(gstate.vertType));
 			}
 
-			// TODO: Get rid of this old horror...
+			GEPatchPrimType patchPrim = gstate.getPatchPrimitiveType();
 			int bz_ucount = data & 0xFF;
 			int bz_vcount = (data >> 8) & 0xFF;
-			//transformDraw_.DrawBezier(bz_ucount, bz_vcount);
-
-			// And instead use this.
-			GEPatchPrimType patchPrim = gstate.getPatchPrimitiveType();
 			transformDraw_.SubmitBezier(control_points, indices, bz_ucount, bz_vcount, patchPrim, gstate.vertType);
 		}
 		break;
@@ -993,7 +989,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			// Can we skip this on SkipDraw?
 			DoBlockTransfer();
 
-			// Fixes Gran Turismo's funky text issue.
+			// Fixes Gran Turismo's funky text issue, since it overwrites the current texture.
 			gstate_c.textureChanged = true;
 			break;
 		}
@@ -1207,11 +1203,15 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		break;
 
 	case GE_CMD_TEXFUNC:
-	case GE_CMD_TEXFILTER:
+	case GE_CMD_TEXFLUSH:
+		break;
+
 	case GE_CMD_TEXMODE:
 	case GE_CMD_TEXFORMAT:
-	case GE_CMD_TEXFLUSH:
+	case GE_CMD_TEXFILTER:
 	case GE_CMD_TEXWRAP:
+		if (diff)
+			gstate_c.textureChanged = true;
 		break;
 
 	//////////////////////////////////////////////////////////////////
@@ -1356,6 +1356,8 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			WARN_LOG_REPORT_ONCE(texLevel1, G3D, "Unsupported texture level bias settings: %06x", data)
 		else if (data != 0)
 			WARN_LOG_REPORT_ONCE(texLevel2, G3D, "Unsupported texture level bias settings: %06x", data);
+		if (diff)
+			gstate_c.textureChanged = true;
 		break;
 #endif
 
@@ -1375,7 +1377,8 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 	case GE_CMD_UNKNOWN_B7:
 	case GE_CMD_UNKNOWN_D1:
 	case GE_CMD_UNKNOWN_ED:
-		WARN_LOG_REPORT_ONCE(unknowncmd, G3D, "Unknown GE command : %08x ", op);
+		if (data != 0)
+			WARN_LOG_REPORT_ONCE(unknowncmd, G3D, "Unknown GE command : %08x ", op);
 		break;
 		
 	default:
@@ -1503,4 +1506,9 @@ void GLES_GPU::DoState(PointerWrap &p) {
 
 	gstate_c.textureChanged = true;
 	framebufferManager_.DestroyAllFBOs();
+}
+
+bool GLES_GPU::GetCurrentFramebuffer(GPUDebugBuffer &buffer)
+{
+	return framebufferManager_.GetCurrentFramebuffer(buffer);
 }

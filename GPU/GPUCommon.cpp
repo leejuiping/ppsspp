@@ -264,6 +264,8 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<Ps
 	dl.interruptsEnabled = interruptsEnabled_;
 	dl.started = false;
 	dl.offsetAddr = 0;
+	dl.bboxResult = false;
+
 	if (args.IsValid() && args->context.IsValid())
 		dl.context = args->context;
 	else
@@ -653,6 +655,9 @@ void GPUCommon::ProcessDLQueueInternal() {
 	cyclesExecuted = 0;
 	UpdateTickEstimate(std::max(busyTicks, startingTicks + cyclesExecuted));
 
+	// Game might've written new texture data.
+	gstate_c.textureChanged = true;
+
 	// Seems to be correct behaviour to process the list anyway?
 	if (startingTicks < busyTicks) {
 		DEBUG_LOG(G3D, "Can't execute a list yet, still busy for %lld ticks", busyTicks - startingTicks);
@@ -715,6 +720,20 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 				currentList->pc = target - 4; // pc will be increased after we return, counteract that
 			} else {
 				ERROR_LOG_REPORT(G3D, "JUMP to illegal address %08x - ignoring! data=%06x", target, data);
+			}
+		}
+		break;
+
+	case GE_CMD_BJUMP:
+		if (!currentList->bboxResult) {
+			// bounding box jump.
+			easy_guard guard(listLock);
+			u32 target = gstate_c.getRelativeAddress(data);
+			if (Memory::IsValidAddress(target)) {
+				UpdatePC(currentList->pc, target - 4);
+				currentList->pc = target - 4; // pc will be increased after we return, counteract that
+			} else {
+				ERROR_LOG_REPORT(G3D, "BJUMP to illegal address %08x - ignoring! data=%06x", target, data);
 			}
 		}
 		break;
@@ -893,6 +912,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 					__GeTriggerSync(WAITTYPE_GELISTSYNC, currentList->id, currentList->waitTicks);
 					if (currentList->started && currentList->context != NULL) {
 						gstate.Restore(currentList->context);
+						ReapplyGfxStateInternal();
 					}
 				}
 				break;
@@ -952,6 +972,7 @@ void GPUCommon::InterruptEnd(int listid) {
 	if (dl.state == PSP_GE_DL_STATE_COMPLETED || dl.state == PSP_GE_DL_STATE_NONE) {
 		if (dl.started && dl.context != NULL) {
 			gstate.Restore(dl.context);
+			ReapplyGfxState();
 		}
 		dl.waitTicks = 0;
 		__GeTriggerWait(WAITTYPE_GELISTSYNC, listid);

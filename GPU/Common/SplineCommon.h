@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,22 +17,13 @@
 
 #pragma once
 
-#include "Common/CommonWindows.h"
-#include "Globals.h"
-#include "Windows/resource.h"
-#include "Windows/W32Util/DialogManager.h"
-#include "Windows/GEDebugger/SimpleGLWindow.h"
+#include "Common/CommonTypes.h"
+#include "GPU/Math3D.h"
 
-class CGEDebugger : public Dialog {
-public:
-	CGEDebugger(HINSTANCE _hInstance, HWND _hParent);
-	~CGEDebugger();
-
-protected:
-	BOOL DlgProc(UINT message, WPARAM wParam, LPARAM lParam);
-
-private:
-	void SetupFrameWindow();
-
-	SimpleGLWindow *frameWindow;
+// PSP compatible format so we can use the end of the pipeline in beziers etc
+struct SimpleVertex {
+	float uv[2];
+	u8 color[4];
+	Vec3f nrm;
+	Vec3f pos;
 };

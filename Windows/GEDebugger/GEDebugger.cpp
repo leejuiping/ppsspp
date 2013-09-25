@@ -22,6 +22,7 @@
 #include "native/base/mutex.h"
 #include "Windows/GEDebugger/GEDebugger.h"
 #include "Windows/GEDebugger/SimpleGLWindow.h"
+#include "Windows/GEDebugger/CtrlDisplayListView.h"
 #include "Windows/WindowsHost.h"
 #include "Windows/main.h"
 #include "GPU/GPUInterface.h"
@@ -56,6 +57,11 @@ static GPUDebugBuffer buffer;
 
 // TODO: Simplify and move out of windows stuff, just block in a common way for everyone.
 
+void CGEDebugger::init() {
+	SimpleGLWindow::registerClass();
+	CtrlDisplayListView::registerClass();
+}
+
 static void SetPauseAction(PauseAction act) {
 	{
 		lock_guard guard(pauseLock);
@@ -88,6 +94,16 @@ static void RunPauseAction() {
 CGEDebugger::CGEDebugger(HINSTANCE _hInstance, HWND _hParent)
 	: Dialog((LPCSTR)IDD_GEDEBUGGER, _hInstance, _hParent), frameWindow(NULL) {
 	breakCmds.resize(256, false);
+
+	// it's ugly, but .rc coordinates don't match actual pixels and it screws
+	// up both the size and the aspect ratio
+	// TODO: Could be scrollable in case the framebuf is larger?  Also should be better positioned.
+	RECT frameRect;
+	HWND frameWnd = GetDlgItem(m_hDlg,IDC_GEDBG_FRAME);
+
+	GetWindowRect(frameWnd,&frameRect);
+	MapWindowPoints(HWND_DESKTOP,m_hDlg,(LPPOINT)&frameRect,2);
+	MoveWindow(frameWnd,frameRect.left,frameRect.top,512,272,TRUE);
 }
 
 CGEDebugger::~CGEDebugger() {
@@ -96,14 +112,16 @@ CGEDebugger::~CGEDebugger() {
 
 void CGEDebugger::SetupFrameWindow() {
 	if (frameWindow == NULL) {
-		// TODO: Could be scrollable in case the framebuf is larger?  Also should be better positioned.
-		frameWindow = new SimpleGLWindow(m_hInstance, m_hDlg, (750 - 512) / 2, 40, 512, 272);
+		frameWindow = SimpleGLWindow::getFrom(GetDlgItem(m_hDlg,IDC_GEDBG_FRAME));
+		frameWindow->Initialize();
 		// TODO: Why doesn't this work?
 		frameWindow->Clear();
 	}
 }
 
 BOOL CGEDebugger::DlgProc(UINT message, WPARAM wParam, LPARAM lParam) {
+	CtrlDisplayListView* displayList = CtrlDisplayListView::getFrom(GetDlgItem(m_hDlg,IDC_GEDBG_CURRENTDISPLAYLIST));
+
 	switch (message) {
 	case WM_INITDIALOG:
 		return TRUE;
@@ -125,6 +143,14 @@ BOOL CGEDebugger::DlgProc(UINT message, WPARAM wParam, LPARAM lParam) {
 		case IDC_GEDBG_BREAK:
 			attached = true;
 			SetupFrameWindow();
+
+			DisplayList list;
+			// todo: for some reason this sometimes fails when hitting break
+			// when the core is running. then only works when stepping through
+			// in the debugger or when the core is already paused
+			if (gpuDebug->GetCurrentDisplayList(list)) {
+				displayList->setDisplayList(list);
+			}
 			//breakNextOp = true;
 			pauseWait.notify_one();
 			breakNextDraw = true;

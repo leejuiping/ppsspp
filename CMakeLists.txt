@@ -226,6 +226,8 @@ elseif(X86)
 	set(CommonExtra ${CommonExtra}
 		Common/ABI.cpp
 		Common/ABI.h
+		Common/ArmEmitter.h
+		Common/ArmEmitter.cpp
 		Common/CPUDetect.cpp
 		Common/CPUDetect.h
 		Common/Thunk.cpp
@@ -718,7 +720,8 @@ elseif(X86)
 		Core/MIPS/x86/RegCache.cpp
 		Core/MIPS/x86/RegCache.h
 		Core/MIPS/x86/RegCacheFPU.cpp
-		Core/MIPS/x86/RegCacheFPU.h)
+		Core/MIPS/x86/RegCacheFPU.h
+		ext/disarm.cpp)
 endif()
 
 # atrac3plus.cpp used dl* functions on non-win32 platforms
@@ -1159,7 +1162,11 @@ if(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
 	elseif(MACOSX)
 		set(PLATFORM_ARCH "macosx/x86_64")
 	elseif(LINUX)
-		set(PLATFORM_ARCH "linux/x86_64")
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			set(PLATFORM_ARCH "linux/x86_64")
+		else()
+			set(PLATFORM_ARCH "linux/x86")
+		endif()
 	endif()
 	# Using static libraries
 	if (DEFINED PLATFORM_ARCH)

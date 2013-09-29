@@ -178,11 +178,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	graphics->Get("DisableStencilTest", &bDisableStencilTest, false);
 	graphics->Get("AlwaysDepthWrite", &bAlwaysDepthWrite, false);
 	graphics->Get("LowQualitySplineBezier", &bLowQualitySplineBezier, false);
-#ifdef USING_GLES2
-	bFXAA = false;
-#else
 	graphics->Get("FXAA", &bFXAA, false);
-#endif
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
@@ -232,6 +228,10 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	debugConfig->Get("DisasmWindowY", &iDisasmWindowY, -1);
 	debugConfig->Get("DisasmWindowW", &iDisasmWindowW, -1);
 	debugConfig->Get("DisasmWindowH", &iDisasmWindowH, -1);
+	debugConfig->Get("GEWindowX", &iGEWindowX, -1);
+	debugConfig->Get("GEWindowY", &iGEWindowY, -1);
+	debugConfig->Get("GEWindowW", &iGEWindowW, -1);
+	debugConfig->Get("GEWindowH", &iGEWindowH, -1);
 	debugConfig->Get("ConsoleWindowX", &iConsoleWindowX, -1);
 	debugConfig->Get("ConsoleWindowY", &iConsoleWindowY, -1);
 	debugConfig->Get("FontWidth", &iFontWidth, 8);
@@ -382,6 +382,10 @@ void Config::Save() {
 		debugConfig->Set("DisasmWindowY", iDisasmWindowY);
 		debugConfig->Set("DisasmWindowW", iDisasmWindowW);
 		debugConfig->Set("DisasmWindowH", iDisasmWindowH);
+		debugConfig->Set("GEWindowX", iGEWindowX);
+		debugConfig->Set("GEWindowY", iGEWindowY);
+		debugConfig->Set("GEWindowW", iGEWindowW);
+		debugConfig->Set("GEWindowH", iGEWindowH);
 		debugConfig->Set("ConsoleWindowX", iConsoleWindowX);
 		debugConfig->Set("ConsoleWindowY", iConsoleWindowY);
 		debugConfig->Set("FontWidth", iFontWidth);

@@ -190,7 +190,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	CtrlDisAsmView::init();
 	CtrlMemView::init();
 	CtrlRegisterList::init();
-	CGEDebugger::init();
+	CGEDebugger::Init();
 
 	DialogManager::AddDlg(memoryWindow[0] = new CMemoryDlg(_hInstance, hwndMain, currentDebugMIPS));
 	DialogManager::AddDlg(vfpudlg = new CVFPUDlg(_hInstance, hwndMain, currentDebugMIPS));
@@ -224,12 +224,21 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		//Translate accelerators and dialog messages...
 		HWND wnd;
 		HACCEL accel;
-		if (g_debuggerActive) {
-			wnd = disasmWindow[0]->GetDlgHandle();
-			accel = hDebugAccelTable;
-		} else {
+		switch (g_activeWindow)
+		{
+		case WINDOW_MAINWINDOW:
 			wnd = hwndMain;
 			accel = hAccelTable;
+			break;
+		case WINDOW_CPUDEBUGGER:
+			wnd = disasmWindow[0]->GetDlgHandle();
+			accel = hDebugAccelTable;
+			break;
+		case WINDOW_GEDEBUGGER:
+		default:
+			wnd = 0;
+			accel = 0;
+			break;
 		}
 
 		if (!TranslateAccelerator(wnd, accel, &msg))

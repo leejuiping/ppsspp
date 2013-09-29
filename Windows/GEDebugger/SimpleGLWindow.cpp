@@ -17,17 +17,18 @@
 
 #include "math/lin/matrix4x4.h"
 #include "gfx_es2/glsl_program.h"
+#include "Common/Common.h"
 #include "Windows/GEDebugger/SimpleGLWindow.h"
 
 const PTCHAR SimpleGLWindow::windowClass = _T("SimpleGLWindow");
 
-void SimpleGLWindow::registerClass() {
+void SimpleGLWindow::RegisterClass() {
 	WNDCLASSEX wndClass;
 
 	wndClass.cbSize         = sizeof(wndClass);
 	wndClass.lpszClassName  = windowClass;
 	wndClass.hInstance      = GetModuleHandle(0);
-	wndClass.lpfnWndProc    = wndProc;
+	wndClass.lpfnWndProc    = WndProc;
 	wndClass.hCursor        = LoadCursor (NULL, IDC_ARROW);
 	wndClass.hIcon          = 0;
 	wndClass.lpszMenuName   = 0;
@@ -47,8 +48,8 @@ static const char tex_fs[] =
 	"uniform sampler2D sampler0;\n"
 	"varying vec2 v_texcoord0;\n"
 	"void main() {\n"
-	"	gl_FragColor.rgb = texture2D(sampler0, v_texcoord0).rgb;\n"
-	"	gl_FragColor.a = 1.0;\n"
+	"	gl_FragColor = texture2D(sampler0, v_texcoord0);\n"
+	"	gl_FragColor.a = clamp(gl_FragColor.a, 0.2, 1.0);\n"
 	"}\n";
 
 static const char basic_vs[] =
@@ -65,7 +66,7 @@ static const char basic_vs[] =
 	"}\n";
 
 SimpleGLWindow::SimpleGLWindow(HWND wnd)
-	: hWnd_(wnd), valid_(false), drawProgram_(NULL), tex_(0) {
+	: hWnd_(wnd), valid_(false), drawProgram_(NULL), tex_(0), flags_(0) {
 	SetWindowLongPtr(wnd, GWLP_USERDATA, (LONG) this);
 }
 
@@ -79,10 +80,11 @@ SimpleGLWindow::~SimpleGLWindow() {
 	}
 };
 
-void SimpleGLWindow::Initialize() {
+void SimpleGLWindow::Initialize(u32 flags) {
 	RECT rect;
 	GetWindowRect(hWnd_, &rect);
 
+	SetFlags(flags);
 	SetupGL();
 	ResizeGL(rect.right-rect.left,rect.bottom-rect.top);
 	CreateProgram();
@@ -200,10 +202,16 @@ void SimpleGLWindow::DrawChecker() {
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, indices);
 }
 
-void SimpleGLWindow::Draw(u8 *data, int w, int h, bool flipped, Format fmt, ResizeType resize) {
+void SimpleGLWindow::Draw(u8 *data, int w, int h, bool flipped, Format fmt) {
 	DrawChecker();
 
-	glDisable(GL_BLEND);
+	if (flags_ & ALPHA_BLEND) {
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glBlendEquation(GL_FUNC_ADD);
+	} else {
+		glDisable(GL_BLEND);
+	}
 	glViewport(0, 0, w_, h_);
 	glScissor(0, 0, w_, h_);
 
@@ -212,6 +220,9 @@ void SimpleGLWindow::Draw(u8 *data, int w, int h, bool flipped, Format fmt, Resi
 	if (fmt == FORMAT_8888) {
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 		glfmt = GL_UNSIGNED_BYTE;
+	} else if (fmt == FORMAT_FLOAT) {
+		glfmt = GL_FLOAT;
+		components = GL_RED;
 	} else {
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
 		if (fmt == FORMAT_4444) {
@@ -221,6 +232,11 @@ void SimpleGLWindow::Draw(u8 *data, int w, int h, bool flipped, Format fmt, Resi
 		} else if (fmt == FORMAT_565) {
 			glfmt = GL_UNSIGNED_SHORT_5_6_5;
 			components = GL_RGB;
+		} else if (fmt == FORMAT_16BIT) {
+			glfmt = GL_UNSIGNED_SHORT;
+			components = GL_RED;
+		} else {
+			_dbg_assert_msg_(COMMON, false, "Invalid SimpleGLWindow format.");
 		}
 	}
 
@@ -235,7 +251,7 @@ void SimpleGLWindow::Draw(u8 *data, int w, int h, bool flipped, Format fmt, Resi
 
 	float fw = (float)w, fh = (float)h;
 	float x = 0.0f, y = 0.0f;
-	if (resize == RESIZE_SHRINK_FIT || resize == RESIZE_SHRINK_CENTER) {
+	if (flags_ & (RESIZE_SHRINK_FIT | RESIZE_SHRINK_CENTER)) {
 		float wscale = fw / w_, hscale = fh / h_;
 
 		// Too wide, and width is the biggest problem, so scale based on that.
@@ -247,7 +263,7 @@ void SimpleGLWindow::Draw(u8 *data, int w, int h, bool flipped, Format fmt, Resi
 			fh = (float)h_;
 		}
 
-		if (resize == RESIZE_SHRINK_CENTER) {
+		if (flags_ & RESIZE_SHRINK_CENTER) {
 			x = ((float)w_ - fw) / 2;
 			y = ((float)h_ - fh) / 2;
 		}
@@ -273,12 +289,12 @@ void SimpleGLWindow::Clear() {
 	Swap();
 }
 
-SimpleGLWindow *SimpleGLWindow::getFrom(HWND hwnd) {
+SimpleGLWindow *SimpleGLWindow::GetFrom(HWND hwnd) {
 	return (SimpleGLWindow*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
 }
 
-LRESULT CALLBACK SimpleGLWindow::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-	SimpleGLWindow *win = SimpleGLWindow::getFrom(hwnd);
+LRESULT CALLBACK SimpleGLWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	SimpleGLWindow *win = SimpleGLWindow::GetFrom(hwnd);
 
 	switch(msg)
 	{

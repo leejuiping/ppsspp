@@ -170,6 +170,7 @@ class Jit : public Gen::XCodeBlock
 {
 public:
 	Jit(MIPSState *mips);
+	~Jit();
 	void DoState(PointerWrap &p);
 	static void DoDummyState(PointerWrap &p);
 
@@ -235,6 +236,7 @@ public:
 	void Comp_Vx2i(MIPSOpcode op);
 	void Comp_Vf2i(MIPSOpcode op);
 	void Comp_Vi2f(MIPSOpcode op);
+	void Comp_Vh2f(MIPSOpcode op);
 	void Comp_Vcst(MIPSOpcode op);
 	void Comp_Vhoriz(MIPSOpcode op);
 	void Comp_VRot(MIPSOpcode op);
@@ -338,8 +340,7 @@ private:
 
 	MIPSState *mips_;
 
-	class JitSafeMem
-	{
+	class JitSafeMem {
 	public:
 		JitSafeMem(Jit *jit, MIPSGPReg raddr, s32 offset, u32 alignMask = 0xFFFFFFFF);
 
@@ -366,8 +367,7 @@ private:
 		void NextSlowRead(void *safeFunc, int suboffset);
 
 	private:
-		enum ReadType
-		{
+		enum ReadType {
 			MEM_READ,
 			MEM_WRITE,
 		};

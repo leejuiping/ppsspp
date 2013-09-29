@@ -17,7 +17,7 @@ void trim2(std::string& str);
 
 void __CheatInit() {
 	gameTitle = g_paramSFO.GetValueString("DISC_ID");
-#ifdef ANDROID
+#if defined(ANDROID) || defined(__SYMBIAN32__) //tried to correcrt cwcheat for symbian correct if wrong
 	activeCheatFile = g_Config.memCardDirectory + "PSP/Cheats/" + gameTitle + ".ini";
 #else
 	activeCheatFile = CHEATS_DIR + "/" + gameTitle + ".ini";
@@ -192,7 +192,7 @@ std::vector<std::string> CWCheatEngine::GetCodesList() { //Reads the entire chea
 	std::ifstream list(activeCheatFile.c_str());
 	for (int i = 0; !list.eof(); i ++) {
 		getline(list, line, '\n');
-		if (line.length() > 8){
+		if (line.length() > 3 && line.substr(0,1) == "_"){
 			codesList.push_back(line);
 		}
 	}
@@ -237,7 +237,7 @@ void CWCheatEngine::Run() {
 				break;
 			case 0x3: // Increment/Decrement
 				{
-					addr = GetAddress(arg);
+					addr = GetAddress(arg & 0x0FFFFFFF);
 					value = 0;
 					int increment = 0;
 					// Read value from memory

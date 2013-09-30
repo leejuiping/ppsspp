@@ -189,7 +189,6 @@ inline void TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, V
 			if (entry->format != framebuffer->format) {
 				WARN_LOG_REPORT_ONCE(diffFormat1, G3D, "Render to texture with different formats %d != %d", entry->format, framebuffer->format);
 				// If it already has one, let's hope that one is correct.
-				// If "AttachFramebufferValid" , Evangelion Jo and Kurohyou 2 will be 'blue background' in-game
 				AttachFramebufferInvalid(entry, framebuffer);
 			} else {
 				AttachFramebufferValid(entry, framebuffer);
@@ -211,8 +210,6 @@ inline void TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, V
 			if (framebuffer->format != entry->format) {
 				WARN_LOG_REPORT_ONCE(diffFormat2, G3D, "Render to texture with different formats %d != %d at %08x", entry->format, framebuffer->format, address);
 				// TODO: Use an FBO to translate the palette?
-				// If 'AttachFramebufferInvalid' , Kurohyou 2 will be missing battle scene in-game and FF Type-0 will have black box shadow/'blue fog' and 3rd birthday will have 'blue fog'
-				// If 'AttachFramebufferValid' , DBZ VS Tag will have 'burning effect' , 
 				AttachFramebufferValid(entry, framebuffer);
 			} else if ((entry->addr - address) / entry->bufw < framebuffer->height) {
 				WARN_LOG_REPORT_ONCE(subarea, G3D, "Render to area containing texture at %08x", address);
@@ -514,19 +511,15 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 	
 	//Workaround to fix a clamping bug in pre-HD ATI/AMD drivers
 	if (gl_extensions.ATIClampBug && entry.framebuffer)
-	{
 		return;
-	}
-	else
-	{
-		if (force || entry.sClamp != sClamp) {
+	
+	if (force || entry.sClamp != sClamp) {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
 		entry.sClamp = sClamp;
-		}
-		if (force || entry.tClamp != tClamp) {
+	}
+	if (force || entry.tClamp != tClamp) {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, tClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
 		entry.tClamp = tClamp;
-		}
 	}
 }
 
@@ -869,14 +862,21 @@ void TextureCache::SetTexture(bool force) {
 
 		if (match) {
 			if (entry->lastFrame != gpuStats.numFlips) {
+				u32 diff = gpuStats.numFlips - entry->lastFrame;
 				entry->numFrames++;
-			}
-			if (entry->framesUntilNextFullHash == 0) {
-				// Exponential backoff up to 2048 frames.  Textures are often reused.
-				entry->framesUntilNextFullHash = std::min(2048, entry->numFrames);
-				rehash = true;
-			} else {
-				--entry->framesUntilNextFullHash;
+
+				if (entry->framesUntilNextFullHash < diff) {
+					// Exponential backoff up to 512 frames.  Textures are often reused.
+					if (entry->numFrames > 32) {
+						// Also, try to add some "randomness" to avoid rehashing several textures the same frame.
+						entry->framesUntilNextFullHash = std::min(512, entry->numFrames) + (entry->texture & 15);
+					} else {
+						entry->framesUntilNextFullHash = entry->numFrames;
+					}
+					rehash = true;
+				} else {
+					entry->framesUntilNextFullHash -= diff;
+				}
 			}
 
 			// If it's not huge or has been invalidated many times, recheck the whole texture.

@@ -78,6 +78,7 @@
 #define ID_MEMVIEW_COPYADDRESS          249
 #define IDD_GEDEBUGGER                  250
 #define IDD_TABDISPLAYLISTS             251
+#define IDD_GEDBG_TAB_VALUES            252
 
 #define IDC_STOPGO                      1001
 #define IDC_ADDRESS                     1002
@@ -144,6 +145,7 @@
 #define IDC_THREADNAME                  1179
 #define IDC_DISASMSTATUSBAR             1180
 #define IDC_STACKFRAMES                 1181
+#define IDC_GEDBG_VALUES                1182
 
 // Don't define anything else in the 3000 range.
 // It's reserved for languages.
@@ -270,6 +272,9 @@
 #define IDC_GEDBG_LISTS_STACK            40124
 #define IDC_GEDBG_LISTS_SELECTEDLIST     40125
 #define ID_OPTIONS_FXAA                  40126
+#define IDC_DEBUG_BOTTOMTABS             40127
+#define ID_DEBUG_HIDEBOTTOMTABS          40128
+#define ID_DEBUG_TOGGLEBOTTOMTABTITLES   40129
 
 // Dummy option to let the buffered rendering hotkey cycle through all the options.
 #define ID_OPTIONS_BUFFEREDRENDERINGDUMMY 40500
@@ -281,9 +286,9 @@
 // Next default values for new objects
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        252
-#define _APS_NEXT_COMMAND_VALUE         40126
-#define _APS_NEXT_CONTROL_VALUE         1181
+#define _APS_NEXT_RESOURCE_VALUE        253
+#define _APS_NEXT_COMMAND_VALUE         40130
+#define _APS_NEXT_CONTROL_VALUE         1183
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

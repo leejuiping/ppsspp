@@ -50,8 +50,10 @@ static PauseAction pauseAction = PAUSE_CONTINUE;
 static recursive_mutex actionLock;
 static condition_variable actionWait;
 
+static recursive_mutex breaksLock;
 static std::vector<bool> breakCmds;
 static std::set<u32> breakPCs;
+static std::set<u32> breakTextures;
 static bool breakNextOp = false;
 static bool breakNextDraw = false;
 
@@ -64,6 +66,39 @@ static GPUDebugBuffer bufferTex;
 void CGEDebugger::Init() {
 	SimpleGLWindow::RegisterClass();
 	CtrlDisplayListView::registerClass();
+}
+
+bool CGEDebugger::IsAddressBreakPoint(u32 pc) {
+	lock_guard guard(breaksLock);
+	return breakPCs.find(pc) != breakPCs.end();
+}
+
+bool CGEDebugger::IsOpBreakPoint(u32 op) {
+	u8 cmd = op >> 24;
+	return breakCmds[cmd];
+}
+
+bool CGEDebugger::IsTextureBreakPoint(u32 op) {
+	u8 cmd = op >> 24;
+	bool interesting = (cmd >= GE_CMD_TEXADDR0 && cmd <= GE_CMD_TEXADDR7);
+	interesting = interesting || (cmd >= GE_CMD_TEXBUFWIDTH0 && cmd <= GE_CMD_TEXBUFWIDTH7);
+	if (!interesting || !gpuDebug) {
+		return false;
+	}
+
+	// Okay, so we just set a texture of some sort, check if it was one we were waiting for.
+	auto state = gpuDebug->GetGState();
+	lock_guard guard(breaksLock);
+	for (int level = 0; level <= 7; ++level) {
+		if (breakTextures.find(state.getTextureAddress(level)) != breakTextures.end()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool CGEDebugger::IsOpOrTextureBreakPoint(u32 op) {
+	return IsOpBreakPoint(op) || IsTextureBreakPoint(op);
 }
 
 static void SetPauseAction(PauseAction act) {
@@ -341,6 +376,19 @@ BOOL CGEDebugger::DlgProc(UINT message, WPARAM wParam, LPARAM lParam) {
 		breakNextOp = true;
 		breakNextDraw = false;
 		break;
+
+	case WM_GEDBG_TOGGLEPCBREAKPOINT:
+		{
+			lock_guard guard(breaksLock);
+			u32 pc = (u32)wParam;
+			auto iter = breakPCs.find(pc);
+			if (iter != breakPCs.end())
+				breakPCs.erase(iter);
+			else
+				breakPCs.insert(pc);
+		}
+		break;
+
 	}
 
 	return FALSE;
@@ -354,7 +402,7 @@ bool WindowsHost::GPUDebuggingActive() {
 
 static void PauseWithMessage(UINT msg, WPARAM wParam = NULL, LPARAM lParam = NULL) {
 	lock_guard guard(pauseLock);
-	if (Core_IsInactive()) {
+	if (coreState != CORE_RUNNING && coreState != CORE_NEXTFRAME) {
 		return;
 	}
 
@@ -370,8 +418,7 @@ void WindowsHost::GPUNotifyCommand(u32 pc) {
 	u32 op = Memory::ReadUnchecked_U32(pc);
 	u8 cmd = op >> 24;
 
-	const bool breakPC = breakPCs.find(pc) != breakPCs.end();
-	if (breakNextOp || breakCmds[cmd] || breakPC) {
+	if (breakNextOp || CGEDebugger::IsOpOrTextureBreakPoint(op) || CGEDebugger::IsAddressBreakPoint(pc)) {
 		PauseWithMessage(WM_GEDBG_BREAK_CMD, (WPARAM) pc);
 	}
 }

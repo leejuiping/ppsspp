@@ -1,6 +1,7 @@
 ﻿#include "Windows/GEDebugger/CtrlDisplayListView.h"
 #include "Core/Config.h"
 #include "Windows/GEDebugger/GEDebugger.h"
+#include <algorithm>
 
 const PTCHAR CtrlDisplayListView::windowClass = _T("CtrlDisplayListView");
 
@@ -149,6 +150,8 @@ void CtrlDisplayListView::onPaint(WPARAM wParam, LPARAM lParam)
 	HPEN oldPen=(HPEN)SelectObject(hdc,nullPen);
 	HBRUSH oldBrush=(HBRUSH)SelectObject(hdc,nullBrush);
 	HFONT oldFont = (HFONT)SelectObject(hdc,(HGDIOBJ)font);
+	
+	HICON breakPoint = (HICON)LoadIcon(GetModuleHandle(0),(LPCWSTR)IDI_STOP);
 
 	for (int i = 0; i < visibleRows+2; i++)
 	{
@@ -185,6 +188,13 @@ void CtrlDisplayListView::onPaint(WPARAM wParam, LPARAM lParam)
 		DeleteObject(backgroundBrush);
 		DeleteObject(backgroundPen);
 
+		// display address/symbol
+		if (CGEDebugger::IsAddressBreakPoint(address))
+		{
+			textColor = 0x0000FF;
+			int yOffset = std::max(-1,(rowHeight-14+1)/2);
+			DrawIconEx(hdc,2,rowY1+1+yOffset,breakPoint,32,32,0,0,DI_NORMAL);
+		}
 		SetTextColor(hdc,textColor);
 
 		GPUDebugOp op = gpuDebug->DissassembleOp(address);
@@ -219,7 +229,14 @@ void CtrlDisplayListView::onPaint(WPARAM wParam, LPARAM lParam)
 	DeleteObject(nullBrush);
 	DeleteObject(currentBrush);
 	
+	DestroyIcon(breakPoint);
+
 	EndPaint(wnd, &ps);
+}
+
+void CtrlDisplayListView::toggleBreakpoint()
+{
+	SendMessage(GetParent(wnd),WM_GEDBG_TOGGLEPCBREAKPOINT,curAddress,0);
 }
 
 void CtrlDisplayListView::onMouseDown(WPARAM wParam, LPARAM lParam, int button)
@@ -229,6 +246,15 @@ void CtrlDisplayListView::onMouseDown(WPARAM wParam, LPARAM lParam, int button)
 
 	int line = y/rowHeight;
 	u32 newAddress = windowStart + line*instructionSize;
+
+	if (button == 1)
+	{
+		if (newAddress == curAddress && hasFocus)
+		{
+			toggleBreakpoint();
+		}
+	}
+
 	setCurAddress(newAddress);
 
 	SetFocus(wnd);
@@ -292,6 +318,9 @@ void CtrlDisplayListView::onKeyDown(WPARAM wParam, LPARAM lParam)
 	case VK_LEFT:
 		gotoAddr(list.pc);
 		return;
+	case VK_SPACE:
+		toggleBreakpoint();
+		break;
 	case VK_F10:
 	case VK_F11:
 		SendMessage(GetParent(wnd),WM_GEDBG_STEPDISPLAYLIST,0,0);

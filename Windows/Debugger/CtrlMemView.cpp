@@ -16,6 +16,7 @@
 #include "Debugger_Disasm.h"
 #include "DebuggerShared.h"
 #include "CtrlMemView.h"
+#include "DumpMemoryWindow.h"
 
 wchar_t CtrlMemView::szClassName[] = L"CtrlMemView";
 extern HMENU g_hPopupMenus;
@@ -421,7 +422,6 @@ void CtrlMemView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 		//popup menu?
 		POINT pt;
 		GetCursorPos(&pt);
-		FILE* outputfile;
 		switch (TrackPopupMenuEx(GetSubMenu(g_hPopupMenus,0),TPM_RIGHTBUTTON|TPM_RETURNCMD,pt.x,pt.y,wnd,0))
 		{
 		case ID_MEMVIEW_DUMP:
@@ -433,9 +433,8 @@ void CtrlMemView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 			}
 			else
 			{
-				outputfile = fopen("Ram.dump","wb");		// Could also dump Vram, but not useful for now.
-				fwrite(Memory::GetPointer(0x08800000), 1, 0x01800000, outputfile);
-				fclose(outputfile);
+				DumpMemoryWindow dump(wnd,debugger);
+				dump.exec();
 				break;
 			}
 

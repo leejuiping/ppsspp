@@ -905,32 +905,28 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 	case GE_CMD_TEXSCALEU:
 		if (diff) {
 			gstate_c.uv.uScale = getFloat24(data);
-			if (!g_Config.bPrescaleUV)
-				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
 		}
 		break;
 
 	case GE_CMD_TEXSCALEV:
 		if (diff) {
 			gstate_c.uv.vScale = getFloat24(data);
-			if (!g_Config.bPrescaleUV)
-				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
 		}
 		break;
 
 	case GE_CMD_TEXOFFSETU:
 		if (diff) {
 			gstate_c.uv.uOff = getFloat24(data);
-			if (!g_Config.bPrescaleUV)
-				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
 		}
 		break;
 
 	case GE_CMD_TEXOFFSETV:
 		if (diff) {
 			gstate_c.uv.vOff = getFloat24(data);
-			if (!g_Config.bPrescaleUV)
-				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
 		}
 		break;
 
@@ -1562,7 +1558,7 @@ bool GLES_GPU::GetCurrentTexture(GPUDebugBuffer &buffer) {
 	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
 	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
 
-	buffer.Allocate(w, h, GE_FORMAT_8888, false);
+	buffer.Allocate(w, h, GE_FORMAT_8888, gstate_c.flipTexture);
 	glPixelStorei(GL_PACK_ALIGNMENT, 4);
 	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.GetData());
 

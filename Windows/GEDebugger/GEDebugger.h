@@ -29,7 +29,17 @@ enum {
 	WM_GEDBG_BREAK_DRAW,
 	WM_GEDBG_STEPDISPLAYLIST,
 	WM_GEDBG_TOGGLEPCBREAKPOINT,
-	WM_GEDBG_RUNTOWPARAM
+	WM_GEDBG_RUNTOWPARAM,
+	WM_GEDBG_SETCMDWPARAM,
+};
+
+enum BreakNextType {
+	BREAK_NONE,
+	BREAK_NEXT_OP,
+	BREAK_NEXT_DRAW,
+	BREAK_NEXT_TEX,
+	BREAK_NEXT_NONTEX,
+	BREAK_NEXT_FRAME,
 };
 
 class CtrlDisplayListView;
@@ -60,6 +70,7 @@ private:
 	void UpdatePreviews();
 	void UpdateSize(WORD width, WORD height);
 	void SavePosition();
+	void SetBreakNext(BreakNextType type);
 
 	CtrlDisplayListView *displayList;
 	TabDisplayLists *lists;
@@ -70,6 +81,7 @@ private:
 	SimpleGLWindow *frameWindow;
 	SimpleGLWindow *texWindow;
 	TabControl *tabs;
+	TabControl *fbTabs;
 
 	int minWidth,minHeight;
 };

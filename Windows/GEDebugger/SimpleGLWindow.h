@@ -32,12 +32,14 @@ struct SimpleGLWindow {
 
 		FORMAT_FLOAT = 0x10,
 		FORMAT_16BIT = 0x11,
+		FORMAT_8BIT = 0x12,
 	};
 
 	enum Flags {
 		RESIZE_NONE = 0x00,
+		RESIZE_CENTER = 0x02,
 		RESIZE_SHRINK_FIT = 0x01,
-		RESIZE_SHRINK_CENTER = 0x02,
+		RESIZE_SHRINK_CENTER = 0x03,
 		ALPHA_IGNORE = 0x00,
 		ALPHA_BLEND = 0x04,
 	};
@@ -47,6 +49,7 @@ struct SimpleGLWindow {
 
 	void Clear();
 	void Draw(u8 *data, int w, int h, bool flipped = false, Format = FORMAT_8888);
+	void Redraw();
 	void Initialize(u32 flags);
 	static SimpleGLWindow *GetFrom(HWND hwnd);
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -66,16 +69,34 @@ protected:
 	void CreateProgram();
 	void GenerateChecker();
 	void DrawChecker();
+	bool DragStart(int mouseX, int mouseY);
+	bool DragContinue(int mouseX, int mouseY);
+	bool DragEnd(int mouseX, int mouseY);
+	bool ToggleZoom();
 
 	HWND hWnd_;
 	HDC hDC_;
 	HGLRC hGLRC_;
 	bool valid_;
+	// Width and height of the window.
 	int w_;
 	int h_;
+	// Last texture size/flipped for Redraw().
+	int tw_;
+	int th_;
+	bool tflipped_;
 
 	GLSLProgram *drawProgram_;
 	GLuint checker_;
 	GLuint tex_;
 	u32 flags_;
+	// Disable shrink (toggled by double click.)
+	bool zoom_;
+	bool dragging_;
+	int dragStartX_;
+	int dragStartY_;
+	u32 dragLastUpdate_;
+	// Offset to position the texture is drawn at.
+	int offsetX_;
+	int offsetY_;
 };

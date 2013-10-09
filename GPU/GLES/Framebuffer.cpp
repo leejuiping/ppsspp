@@ -36,9 +36,13 @@
 #include <algorithm>
 
 #if defined(USING_GLES2)
+#ifndef GL_READ_FRAMEBUFFER
 #define GL_READ_FRAMEBUFFER GL_FRAMEBUFFER
 #define GL_DRAW_FRAMEBUFFER GL_FRAMEBUFFER
+#endif
+#ifndef GL_RGBA8
 #define GL_RGBA8 GL_RGBA
+#endif
 #ifndef GL_DEPTH_COMPONENT24
 #define GL_DEPTH_COMPONENT24 GL_DEPTH_COMPONENT24_OES
 #endif
@@ -516,10 +520,10 @@ void FramebufferManager::SetRenderFrameBuffer() {
 	gstate_c.framebufChanged = false;
 
 	// Get parameters
-	u32 fb_address = (gstate.fbptr & 0xFFFFFF) | ((gstate.fbwidth & 0xFF0000) << 8);
+	u32 fb_address = gstate.getFrameBufRawAddress();
 	int fb_stride = gstate.fbwidth & 0x3C0;
 
-	u32 z_address = (gstate.zbptr & 0xFFFFFF) | ((gstate.zbwidth & 0xFF0000) << 8);
+	u32 z_address = gstate.getDepthBufRawAddress();
 	int z_stride = gstate.zbwidth & 0x3C0;
 
 	// Yeah this is not completely right. but it'll do for now.
@@ -1383,7 +1387,7 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size) {
 				if (useBufferedRendering_ && vfb->fbo) {
 					fbo_bind_as_render_target(vfb->fbo);
 					needUnbind = true;
-					DrawPixels(Memory::GetPointer(addr), vfb->format, vfb->fb_stride);
+					DrawPixels(Memory::GetPointer(addr | 0x04000000), vfb->format, vfb->fb_stride);
 				} else {
 					INFO_LOG(SCEGE, "Invalidating FBO for %08x (%i x %i x %i)", vfb->fb_address, vfb->width, vfb->height, vfb->format)
 					DestroyFramebuf(vfb);
@@ -1402,7 +1406,7 @@ void FramebufferManager::Resized() {
 }
 
 bool FramebufferManager::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
-	u32 fb_address = (gstate.fbptr & 0xFFFFFF) | ((gstate.fbwidth & 0xFF0000) << 8);
+	u32 fb_address = gstate.getFrameBufRawAddress();
 	int fb_stride = gstate.fbwidth & 0x3C0;
 
 	VirtualFramebuffer *vfb = currentRenderVfb_;
@@ -1412,13 +1416,16 @@ bool FramebufferManager::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
 
 	if (!vfb) {
 		// If there's no vfb and we're drawing there, must be memory?
-		buffer = GPUDebugBuffer(Memory::GetPointer(fb_address), fb_stride, 512, gstate.FrameBufFormat());
+		buffer = GPUDebugBuffer(Memory::GetPointer(fb_address | 0x04000000), fb_stride, 512, gstate.FrameBufFormat());
 		return true;
 	}
 
 	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GE_FORMAT_8888, true);
 	if (vfb->fbo)
 		fbo_bind_for_read(vfb->fbo);
+#ifndef USING_GLES2
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+#endif
 	glPixelStorei(GL_PACK_ALIGNMENT, 4);
 	glReadPixels(0, 0, vfb->renderWidth, vfb->renderHeight, GL_RGBA, GL_UNSIGNED_BYTE, buffer.GetData());
 
@@ -1426,10 +1433,10 @@ bool FramebufferManager::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
 }
 
 bool FramebufferManager::GetCurrentDepthbuffer(GPUDebugBuffer &buffer) {
-	u32 fb_address = (gstate.fbptr & 0xFFFFFF) | ((gstate.fbwidth & 0xFF0000) << 8);
+	u32 fb_address = gstate.getFrameBufRawAddress();
 	int fb_stride = gstate.fbwidth & 0x3C0;
 
-	u32 z_address = (gstate.zbptr & 0xFFFFFF) | ((gstate.zbwidth & 0xFF0000) << 8);
+	u32 z_address = gstate.getDepthBufRawAddress();
 	int z_stride = gstate.zbwidth & 0x3C0;
 
 	VirtualFramebuffer *vfb = currentRenderVfb_;
@@ -1440,16 +1447,17 @@ bool FramebufferManager::GetCurrentDepthbuffer(GPUDebugBuffer &buffer) {
 	if (!vfb) {
 		// If there's no vfb and we're drawing there, must be memory?
 		// TODO: Is the value 16-bit?  It seems to be.
-		buffer = GPUDebugBuffer(Memory::GetPointer(z_address), z_stride, 512, GPU_DBG_FORMAT_16BIT);
+		buffer = GPUDebugBuffer(Memory::GetPointer(z_address | 0x04000000), z_stride, 512, GPU_DBG_FORMAT_16BIT);
 		return true;
 	}
 
 #ifndef USING_GLES2
-	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GPU_DBG_FORMAT_FLOAT, true);
+	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GPU_DBG_FORMAT_16BIT, true);
 	if (vfb->fbo)
 		fbo_bind_for_read(vfb->fbo);
+	glReadBuffer(GL_DEPTH_ATTACHMENT);
 	glPixelStorei(GL_PACK_ALIGNMENT, 4);
-	glReadPixels(0, 0, vfb->renderWidth, vfb->renderHeight, GL_DEPTH_COMPONENT, GL_FLOAT, buffer.GetData());
+	glReadPixels(0, 0, vfb->renderWidth, vfb->renderHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, buffer.GetData());
 
 	return true;
 #else
@@ -1458,7 +1466,7 @@ bool FramebufferManager::GetCurrentDepthbuffer(GPUDebugBuffer &buffer) {
 }
 
 bool FramebufferManager::GetCurrentStencilbuffer(GPUDebugBuffer &buffer) {
-	u32 fb_address = (gstate.fbptr & 0xFFFFFF) | ((gstate.fbwidth & 0xFF0000) << 8);
+	u32 fb_address = gstate.getFrameBufRawAddress();
 	int fb_stride = gstate.fbwidth & 0x3C0;
 
 	VirtualFramebuffer *vfb = currentRenderVfb_;
@@ -1468,16 +1476,18 @@ bool FramebufferManager::GetCurrentStencilbuffer(GPUDebugBuffer &buffer) {
 
 	if (!vfb) {
 		// If there's no vfb and we're drawing there, must be memory?
-		buffer = GPUDebugBuffer(Memory::GetPointer(fb_address), fb_stride, 512, GPU_DBG_FORMAT_8888);
+		// TODO: Actually get the stencil.
+		buffer = GPUDebugBuffer(Memory::GetPointer(fb_address | 0x04000000), fb_stride, 512, GPU_DBG_FORMAT_8888);
 		return true;
 	}
 
 #ifndef USING_GLES2
-	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GPU_DBG_FORMAT_16BIT, true);
+	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GPU_DBG_FORMAT_8BIT, true);
 	if (vfb->fbo)
 		fbo_bind_for_read(vfb->fbo);
+	glReadBuffer(GL_STENCIL_ATTACHMENT);
 	glPixelStorei(GL_PACK_ALIGNMENT, 2);
-	glReadPixels(0, 0, vfb->renderWidth, vfb->renderHeight, GL_STENCIL_INDEX, GL_UNSIGNED_SHORT, buffer.GetData());
+	glReadPixels(0, 0, vfb->renderWidth, vfb->renderHeight, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, buffer.GetData());
 
 	return true;
 #else

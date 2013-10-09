@@ -48,6 +48,8 @@
 #include <QDir>
 #endif
 
+#include <sstream>
+
 #ifdef _WIN32
 namespace MainWindow {
 	void BrowseAndBoot(std::string defaultPath, bool browseDirectory = false);
@@ -327,10 +329,10 @@ private:
 	bool *gridStyle_;
 	bool allowBrowsing_;
 	std::string lastText_;
-	std::string lastLink_; 
+	std::string lastLink_;
 };
 
-GameBrowser::GameBrowser(std::string path, bool allowBrowsing, bool *gridStyle, std::string lastText, std::string lastLink, UI::LayoutParams *layoutParams) 
+GameBrowser::GameBrowser(std::string path, bool allowBrowsing, bool *gridStyle, std::string lastText, std::string lastLink, UI::LayoutParams *layoutParams)
 	: LinearLayout(UI::ORIENT_VERTICAL, layoutParams), path_(path), gameList_(0), allowBrowsing_(allowBrowsing), gridStyle_(gridStyle), lastText_(lastText), lastLink_(lastLink) {
 	using namespace UI;
 	Refresh();
@@ -365,7 +367,8 @@ void GameBrowser::Refresh() {
 
 	if (allowBrowsing_) {
 		LinearLayout *topBar = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
-		topBar->Add(new TextView(path_.GetFriendlyPath().c_str(), ALIGN_VCENTER, 0.7f, new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT, 1.0f)));
+		Margins pathMargins(5, 0);
+		topBar->Add(new TextView(path_.GetFriendlyPath().c_str(), ALIGN_VCENTER, 0.7f, new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT, 1.0f, pathMargins)));
 #ifdef ANDROID
 		topBar->Add(new Choice(m->T("Home")))->OnClick.Handle(this, &GameBrowser::HomeClick);
 #endif
@@ -376,7 +379,7 @@ void GameBrowser::Refresh() {
 		layoutChoice->OnChoice.Handle(this, &GameBrowser::LayoutChange);
 		Add(topBar);
 	}
-	
+
 	if (*gridStyle_) {
 		gameList_ = new UI::GridLayout(UI::GridLayoutSettings(150, 85), new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 	} else {
@@ -707,6 +710,8 @@ GamePauseScreen::~GamePauseScreen() {
 }
 
 void GamePauseScreen::CreateViews() {
+	static const int NUM_SAVESLOTS = 5; 
+
 	using namespace UI;
 	Margins actionMenuMargins(0, 100, 15, 0);
 	I18NCategory *gs = GetI18NCategory("Graphics");
@@ -721,14 +726,21 @@ void GamePauseScreen::CreateViews() {
 
 	ViewGroup *leftColumnItems = new LinearLayout(ORIENT_VERTICAL);
 	leftColumn->Add(leftColumnItems);
-
 	saveSlots_ = leftColumnItems->Add(new ChoiceStrip(ORIENT_HORIZONTAL, new LinearLayoutParams(300, WRAP_CONTENT)));
-	saveSlots_->AddChoice(" 1 ");
-	saveSlots_->AddChoice(" 2 ");
-	saveSlots_->AddChoice(" 3 ");
-	saveSlots_->AddChoice(" 4 ");
-	saveSlots_->AddChoice(" 5 ");
+	
+	
+	for (int i = 0; i < NUM_SAVESLOTS; i++){
+		std::stringstream saveSlotText;
+		saveSlotText<<" "<<i + 1<<" ";
+		
+		saveSlots_->AddChoice(saveSlotText.str());
+
+		if (SaveState::HasSaveInSlot(i)) {
+			saveSlots_->HighlightChoice(i);
+		}
+	}
 	saveSlots_->SetSelection(g_Config.iCurrentStateSlot);
+
 	saveSlots_->OnChoice.Handle(this, &GamePauseScreen::OnStateSelected);
 	
 	saveStateButton_ = leftColumnItems->Add(new Choice(i->T("Save State")));

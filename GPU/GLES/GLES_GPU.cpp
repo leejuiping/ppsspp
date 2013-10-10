@@ -386,7 +386,7 @@ GLES_GPU::GLES_GPU()
 	}
 
 #ifdef ANDROID
-	if (gl_extensions.QCOM_binning_control)
+	if (gl_extensions.QCOM_binning_control) {
 		/*
 		We can try different HINTS later or even with option to toggle for Adreno GPU
 
@@ -405,6 +405,7 @@ GLES_GPU::GLES_GPU()
 		// There have been no reports of a consistent speedup with it on, so meh.
 		//
 		// glHint(GL_BINNING_CONTROL_HINT_QCOM, GL_RENDER_DIRECT_TO_FRAMEBUFFER_QCOM);
+	}
 #endif
 
 	shaderManager_ = new ShaderManager();
@@ -605,7 +606,7 @@ void GLES_GPU::CopyDisplayToOutputInternal() {
 	framebufferManager_.CopyDisplayToOutput();
 	framebufferManager_.EndFrame();
 
-	shaderManager_->EndFrame();
+	shaderManager_->DirtyLastShader();
 
 	// If buffered, discard the depth buffer of the backbuffer. Don't even know if we need one.
 #if 0

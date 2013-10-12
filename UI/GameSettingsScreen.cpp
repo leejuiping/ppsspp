@@ -138,20 +138,23 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")));
 #endif
-	graphicsSettings->Add(new ItemHeader(gs->T("Antialiasing"))); 
+	
+	graphicsSettings->Add(new ItemHeader(gs->T("Antialiasing and postprocessing"))); 
+	graphicsSettings->Add(new Choice(gs->T("Postprocessing shader")))->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
+
 	// In case we're going to add few other antialiasing option like MSAA in the future.
-	graphicsSettings->Add(new CheckBox(&g_Config.bFXAA, gs->T("FXAA")));
+	// graphicsSettings->Add(new CheckBox(&g_Config.bFXAA, gs->T("FXAA")));
 	graphicsSettings->Add(new ItemHeader(gs->T("Overlay Information")));
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gs, screenManager()));
 	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")));
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture Scaling")));
 #ifndef USING_GLES2
-	static const char *texScaleLevels[] = {"Off", "2x", "3x","4x", "5x"};
+	static const char *texScaleLevels[] = {"Auto", "Off", "2x", "3x","4x", "5x"};
 #else
-	static const char *texScaleLevels[] = {"Off", "2x", "3x"};
+	static const char *texScaleLevels[] = {"Auto", "Off", "2x", "3x"};
 #endif
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Upscale Level"), texScaleLevels, 1, ARRAY_SIZE(texScaleLevels), gs, screenManager()));
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingLevel, gs->T("Upscale Level"), texScaleLevels, 0, ARRAY_SIZE(texScaleLevels), gs, screenManager()));
 	static const char *texScaleAlgos[] = { "xBRZ", "Hybrid", "Bicubic", "Hybrid + Bicubic", };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iTexScalingType, gs->T("Upscale Type"), texScaleAlgos, 0, ARRAY_SIZE(texScaleAlgos), gs, screenManager()));
 	graphicsSettings->Add(new CheckBox(&g_Config.bTexDeposterize, gs->T("Deposterize")));
@@ -443,6 +446,20 @@ UI::EventReturn GameSettingsScreen::OnLanguageChange(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GameSettingsScreen::OnPostProcShader(UI::EventParams &e) {
+	I18NCategory *g = GetI18NCategory("Graphics");
+	auto procScreen = new PostProcScreen(g->T("Postprocessing Shader"));
+	procScreen->OnChoice.Handle(this, &GameSettingsScreen::OnPostProcShaderChange);
+	screenManager()->push(procScreen);
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameSettingsScreen::OnPostProcShaderChange(UI::EventParams &e) {
+	if (gpu) {
+		gpu->Resized();
+	}
+	return UI::EVENT_DONE;
+}
 UI::EventReturn GameSettingsScreen::OnDeveloperTools(UI::EventParams &e) {
 	screenManager()->push(new DeveloperToolsScreen());
 	return UI::EVENT_DONE;

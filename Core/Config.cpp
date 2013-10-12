@@ -86,6 +86,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	general->Get("WindowY", &iWindowY, 100);
 	general->Get("WindowWidth", &iWindowWidth, 0);   // 0 will be automatically reset later (need to do the AdjustWindowRect dance).
 	general->Get("WindowHeight", &iWindowHeight, 0);
+	general->Get("PauseOnLostFocus", &bPauseOnLostFocus, false);
 #endif
 
 	IniFile::Section *recent = iniFile.GetOrCreateSection("Recent");
@@ -178,7 +179,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	graphics->Get("DisableStencilTest", &bDisableStencilTest, false);
 	graphics->Get("AlwaysDepthWrite", &bAlwaysDepthWrite, false);
 	graphics->Get("LowQualitySplineBezier", &bLowQualitySplineBezier, false);
-	graphics->Get("FXAA", &bFXAA, false);
+	graphics->Get("PostShader", &sPostShaderName, "Off");
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
@@ -288,6 +289,7 @@ void Config::Save() {
 		general->Set("WindowY", iWindowY);
 		general->Set("WindowWidth", iWindowWidth);
 		general->Set("WindowHeight", iWindowHeight);
+		general->Set("PauseOnLostFocus", bPauseOnLostFocus);
 #endif
 		general->Set("Language", sLanguageIni);
 		general->Set("NumWorkerThreads", iNumWorkerThreads);
@@ -347,7 +349,7 @@ void Config::Save() {
 		graphics->Set("DisableStencilTest", bDisableStencilTest);
 		graphics->Set("AlwaysDepthWrite", bAlwaysDepthWrite);
 		graphics->Set("LowQualitySplineBezier", bLowQualitySplineBezier);
-		graphics->Set("FXAA", bFXAA);
+		graphics->Set("PostShader", sPostShaderName);
 
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);

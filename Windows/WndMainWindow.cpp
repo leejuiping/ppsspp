@@ -237,6 +237,9 @@ namespace MainWindow
 			if (++g_Config.iInternalResolution > RESOLUTION_MAX)
 				g_Config.iInternalResolution = 0;
 		}
+		
+		if (g_Config.iTexScalingLevel == TEXSCALING_AUTO)
+			setTexScalingMultiplier(0);
 
 		ResizeDisplay(true, true);
 	}
@@ -342,12 +345,12 @@ namespace MainWindow
 		SUBMENU_FILE_SAVESTATE_SLOT = 6,
 
 		// Game Settings submenus
-		SUBMENU_RENDERING_RESOLUTION = 8,
-		SUBMENU_WINDOW_SIZE = 9,
-		SUBMENU_RENDERING_MODE = 10,
-		SUBMENU_FRAME_SKIPPING = 11,
-		SUBMENU_TEXTURE_FILTERING = 12,
-		SUBMENU_TEXTURE_SCALING = 13,
+		SUBMENU_RENDERING_RESOLUTION = 9,
+		SUBMENU_WINDOW_SIZE = 10,
+		SUBMENU_RENDERING_MODE = 11,
+		SUBMENU_FRAME_SKIPPING = 12,
+		SUBMENU_TEXTURE_FILTERING = 13,
+		SUBMENU_TEXTURE_SCALING = 14,
 	};
 
 	std::string GetMenuItemText(int menuID) {
@@ -509,6 +512,7 @@ namespace MainWindow
 
 		// Options menu
 		TranslateMenuItem(ID_OPTIONS_TOPMOST);
+		TranslateMenuItem(ID_OPTIONS_PAUSE_FOCUS);
 		TranslateMenuItem(ID_OPTIONS_MORE_SETTINGS);
 		TranslateMenuItem(ID_OPTIONS_CONTROLS);
 		TranslateMenuItem(ID_OPTIONS_STRETCHDISPLAY);
@@ -1010,14 +1014,27 @@ namespace MainWindow
 	LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)	{
 		int wmId, wmEvent;
 		std::string fn;
+		static bool noFocusPause = false;	// TOGGLE_PAUSE state to override pause on lost focus
 
 		switch (message) {
 		case WM_CREATE:
 			break;
 			
 		case WM_ACTIVATE:
-			if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE) {
-				g_activeWindow = WINDOW_MAINWINDOW;
+			{
+				bool pause = true;
+				if (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE) {
+					g_activeWindow = WINDOW_MAINWINDOW;
+					pause = false;
+				}
+				if (!noFocusPause && g_Config.bPauseOnLostFocus && globalUIState == UISTATE_INGAME) {
+					if (pause != Core_IsStepping()) {	// != is xor for bools
+						if (disasmWindow[0])
+							SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
+						else
+							Core_EnableStepping(pause);
+					}
+				}
 			}
 			break;
 
@@ -1119,6 +1136,7 @@ namespace MainWindow
 						else
 							Core_EnableStepping(true);
 					}
+					noFocusPause = !noFocusPause;	// If we pause, override pause on lost focus
 					break;
 
 				case ID_EMULATION_STOP:
@@ -1205,13 +1223,16 @@ namespace MainWindow
 				case ID_OPTIONS_VSYNC:
 					g_Config.bVSync = !g_Config.bVSync;
 					break;
-
+				
+				/* TODO: Add menus for post processing
 				case ID_OPTIONS_FXAA:
 					g_Config.bFXAA = !g_Config.bFXAA;
 					if (gpu)
 						gpu->Resized();
 					break;
+					*/
 
+				case ID_TEXTURESCALING_AUTO: setTexScalingMultiplier(TEXSCALING_AUTO); break;
 				case ID_TEXTURESCALING_OFF: setTexScalingMultiplier(TEXSCALING_OFF); break;
 				case ID_TEXTURESCALING_2X:  setTexScalingMultiplier(TEXSCALING_2X); break;
 				case ID_TEXTURESCALING_3X:  setTexScalingMultiplier(TEXSCALING_3X); break;
@@ -1357,6 +1378,10 @@ namespace MainWindow
 				case ID_OPTIONS_TOPMOST:
 					g_Config.bTopMost = !g_Config.bTopMost;
 					W32Util::MakeTopMost(hWnd, g_Config.bTopMost);
+					break;
+
+				case ID_OPTIONS_PAUSE_FOCUS:
+					g_Config.bPauseOnLostFocus = !g_Config.bPauseOnLostFocus;
 					break;
 
 				case ID_OPTIONS_CONTROLS:
@@ -1595,8 +1620,9 @@ namespace MainWindow
 		CHECKITEM(ID_OPTIONS_SHOWFPS, g_Config.iShowFPSCounter);
 		CHECKITEM(ID_OPTIONS_FRAMESKIP, g_Config.iFrameSkip != 0);
 		CHECKITEM(ID_OPTIONS_VSYNC, g_Config.bVSync);
-		CHECKITEM(ID_OPTIONS_FXAA, g_Config.bFXAA);
+		// CHECKITEM(ID_OPTIONS_FXAA, g_Config.bFXAA);  TODO: Replace with list of loaded post processing shaders
 		CHECKITEM(ID_OPTIONS_TOPMOST, g_Config.bTopMost);
+		CHECKITEM(ID_OPTIONS_PAUSE_FOCUS, g_Config.bPauseOnLostFocus);
 		CHECKITEM(ID_EMULATION_SOUND, g_Config.bEnableSound);
 		CHECKITEM(ID_TEXTURESCALING_DEPOSTERIZE, g_Config.bTexDeposterize);
 		CHECKITEM(ID_EMULATION_CHEATS, g_Config.bEnableCheats);
@@ -1640,20 +1666,21 @@ namespace MainWindow
 		}
 
 		static const int texscalingitems[] = {
+			ID_TEXTURESCALING_AUTO,
 			ID_TEXTURESCALING_OFF,
 			ID_TEXTURESCALING_2X,
 			ID_TEXTURESCALING_3X,
 			ID_TEXTURESCALING_4X,
 			ID_TEXTURESCALING_5X,
 		};
-		if(g_Config.iTexScalingLevel < TEXSCALING_OFF)
-			g_Config.iTexScalingLevel = TEXSCALING_OFF;
+		if(g_Config.iTexScalingLevel < TEXSCALING_AUTO)
+			g_Config.iTexScalingLevel = TEXSCALING_AUTO;
 
 		else if(g_Config.iTexScalingLevel > TEXSCALING_MAX)
 			g_Config.iTexScalingLevel = TEXSCALING_MAX;
 
 		for (int i = 0; i < ARRAY_SIZE(texscalingitems); i++) {
-			CheckMenuItem(menu, texscalingitems[i], MF_BYCOMMAND | ((i == g_Config.iTexScalingLevel - 1) ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, texscalingitems[i], MF_BYCOMMAND | ((i == g_Config.iTexScalingLevel) ? MF_CHECKED : MF_UNCHECKED));
 		}
 
 		static const int texscalingtypeitems[] = {

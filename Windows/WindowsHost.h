@@ -62,9 +62,12 @@ public:
 	virtual void GPUNotifyDraw();
 	virtual void GPUNotifyTextureAttachment(u32 addr);
 	virtual bool GPUAllowTextureCache(u32 addr);
+	virtual void ToggleDebugConsoleVisibility();
 
 	virtual bool CanCreateShortcut() {return false;}  // Turn on when fixed
 	virtual bool CreateDesktopShortcut(std::string argumentPath, std::string title);
+
+	virtual void GoFullscreen(bool);
 
 	bool InputBoxGetString(char *title, const char *defaultValue, char *outValue, size_t outlength);
 	bool InputBoxGetWString(const wchar_t *title, const std::wstring &defaultvalue, std::wstring &outvalue);

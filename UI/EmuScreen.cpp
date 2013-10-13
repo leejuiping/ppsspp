@@ -147,7 +147,8 @@ void EmuScreen::sendMessage(const char *message, const char *value) {
 	if (!strcmp(message, "pause")) {
 		screenManager()->push(new GamePauseScreen(gamePath_));
 	} else if (!strcmp(message, "stop")) {
-		screenManager()->switchScreen(new MainScreen());
+		// We will push MainScreen in update().
+		PSP_Shutdown();
 	} else if (!strcmp(message, "reset")) {
 		PSP_Shutdown();
 		std::string resetError;
@@ -177,6 +178,15 @@ void EmuScreen::sendMessage(const char *message, const char *value) {
 	else if (!strcmp(message, "settings")) {
 		UpdateUIState(UISTATE_MENU);
 		screenManager()->push(new GameSettingsScreen(gamePath_));
+	}
+	else if (!strcmp(message, "gpu resized")) {
+		if (gpu) gpu->Resized();
+	}
+	else if (!strcmp(message, "gpu clear cache")) {
+		if (gpu) gpu->ClearCacheNextFrame();
+	}
+	else if (!strcmp(message, "gpu dump next frame")) {
+		if (gpu) gpu->DumpNextFrame();
 	}
 }
 
@@ -497,6 +507,7 @@ void EmuScreen::render() {
 	} else if (coreState == CORE_POWERDOWN)	{
 		ILOG("SELF-POWERDOWN!");
 		screenManager()->switchScreen(new MainScreen());
+		invalid_ = true;
 	}
 
 	if (invalid_)

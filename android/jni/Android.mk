@@ -197,6 +197,8 @@ LOCAL_SRC_FILES := \
   $(SRC)/GPU/Common/VertexDecoderCommon.cpp.arm \
   $(SRC)/GPU/Common/TextureDecoder.cpp \
   $(SRC)/GPU/Common/PostShader.cpp \
+  $(SRC)/GPU/Debugger/Breakpoints.cpp \
+  $(SRC)/GPU/Debugger/Stepping.cpp \
   $(SRC)/GPU/GLES/Framebuffer.cpp \
   $(SRC)/GPU/GLES/GLES_GPU.cpp.arm \
   $(SRC)/GPU/GLES/TextureCache.cpp.arm \
@@ -245,6 +247,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/Core/Dialog/PSPDialog.cpp \
   $(SRC)/Core/Dialog/PSPGamedataInstallDialog.cpp \
   $(SRC)/Core/Dialog/PSPMsgDialog.cpp \
+  $(SRC)/Core/Dialog/PSPNetconfDialog.cpp \
   $(SRC)/Core/Dialog/PSPOskDialog.cpp \
   $(SRC)/Core/Dialog/PSPPlaceholderDialog.cpp \
   $(SRC)/Core/Dialog/PSPSaveDialog.cpp \

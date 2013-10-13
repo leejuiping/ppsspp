@@ -541,6 +541,7 @@ add_library(native STATIC
 	native/file/vfs.h
 	native/file/zip_read.cpp
 	native/file/zip_read.h
+	native/gfx/gl_common.h
 	native/gfx/gl_debug_log.cpp
 	native/gfx/gl_debug_log.h
 	native/gfx/gl_lost_manager.cpp
@@ -763,6 +764,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Dialog/PSPGamedataInstallDialog.h
 	Core/Dialog/PSPMsgDialog.cpp
 	Core/Dialog/PSPMsgDialog.h
+	Core/Dialog/PSPNetconfDialog.cpp
+	Core/Dialog/PSPNetconfDialog.h
 	Core/Dialog/PSPOskDialog.cpp
 	Core/Dialog/PSPOskDialog.h
 	Core/Dialog/PSPPlaceholderDialog.cpp
@@ -1004,6 +1007,10 @@ add_library(GPU OBJECT
 	GPU/Common/PostShader.cpp
 	GPU/Common/PostShader.h
 	GPU/Common/SplineCommon.h
+	GPU/Debugger/Breakpoints.cpp
+	GPU/Debugger/Breakpoints.h
+	GPU/Debugger/Stepping.cpp
+	GPU/Debugger/Stepping.h
 	GPU/GLES/GLES_GPU.cpp
 	GPU/GLES/GLES_GPU.h
 	GPU/GLES/FragmentShaderGenerator.cpp

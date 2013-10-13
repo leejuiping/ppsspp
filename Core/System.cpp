@@ -67,6 +67,7 @@ static PSPMixer *mixer;
 static std::thread *cpuThread = NULL;
 static recursive_mutex cpuThreadLock;
 static condition_variable cpuThreadCond;
+static condition_variable cpuThreadReplyCond;
 static u64 cpuThreadUntil;
 
 // This can be read and written from ANYWHERE.
@@ -94,19 +95,31 @@ bool IsOnSeparateCPUThread() {
 	}
 }
 
+void CPU_SetState(CPUThreadState to) {
+	lock_guard guard(cpuThreadLock);
+	cpuThreadState = to;
+	cpuThreadCond.notify_one();
+	cpuThreadReplyCond.notify_one();
+}
+
 bool CPU_NextState(CPUThreadState from, CPUThreadState to) {
+	lock_guard guard(cpuThreadLock);
 	if (cpuThreadState == from) {
-		cpuThreadState = to;
-		cpuThreadCond.notify_one();
+		CPU_SetState(to);
 		return true;
 	} else {
 		return false;
 	}
 }
 
-void CPU_SetState(CPUThreadState to) {
-	cpuThreadState = to;
-	cpuThreadCond.notify_one();
+bool CPU_NextStateNot(CPUThreadState from, CPUThreadState to) {
+	lock_guard guard(cpuThreadLock);
+	if (cpuThreadState != from) {
+		CPU_SetState(to);
+		return true;
+	} else {
+		return false;
+	}
 }
 
 bool CPU_IsReady() {
@@ -121,11 +134,11 @@ bool CPU_HasPendingAction() {
 	return cpuThreadState != CPU_THREAD_RUNNING;
 }
 
-void CPU_WaitStatus(bool (*pred)()) {
-	cpuThreadLock.lock();
-	while (!pred())
-		cpuThreadCond.wait(cpuThreadLock);
-	cpuThreadLock.unlock();
+void CPU_WaitStatus(condition_variable &cond, bool (*pred)()) {
+	lock_guard guard(cpuThreadLock);
+	while (!pred()) {
+		cond.wait(cpuThreadLock);
+	}
 }
 
 void CPU_Shutdown();
@@ -219,7 +232,7 @@ void CPU_RunLoop() {
 
 	while (cpuThreadState != CPU_THREAD_SHUTDOWN)
 	{
-		CPU_WaitStatus(&CPU_HasPendingAction);
+		CPU_WaitStatus(cpuThreadCond, &CPU_HasPendingAction);
 		switch (cpuThreadState) {
 		case CPU_THREAD_EXECUTE:
 			mipsr4k.RunLoopUntil(cpuThreadUntil);
@@ -244,6 +257,10 @@ void CPU_RunLoop() {
 		coreState = CORE_POWERDOWN;
 	}
 
+	// Let's make sure the gpu has already cleaned up before we start freeing memory.
+	gpu->FinishEventLoop();
+	gpu->SyncThread(true);
+
 	CPU_Shutdown();
 	CPU_SetState(CPU_THREAD_NOT_RUNNING);
 }
@@ -256,6 +273,8 @@ void Core_UpdateState(CoreState newState) {
 }
 
 void System_Wake() {
+	// Ping the threads so they check coreState.
+	CPU_NextStateNot(CPU_THREAD_NOT_RUNNING, CPU_THREAD_SHUTDOWN);
 	if (gpu) {
 		gpu->FinishEventLoop();
 	}
@@ -271,7 +290,7 @@ bool PSP_Init(const CoreParameter &coreParam, std::string *error_string) {
 		Core_ListenShutdown(System_Wake);
 		CPU_SetState(CPU_THREAD_PENDING);
 		cpuThread = new std::thread(&CPU_RunLoop);
-		CPU_WaitStatus(&CPU_IsReady);
+		CPU_WaitStatus(cpuThreadReplyCond, &CPU_IsReady);
 	} else {
 		CPU_Init();
 	}
@@ -297,8 +316,8 @@ void PSP_Shutdown() {
 		Core_UpdateState(CORE_ERROR);
 	Core_NotifyShutdown();
 	if (cpuThread != NULL) {
-		CPU_SetState(CPU_THREAD_SHUTDOWN);
-		CPU_WaitStatus(&CPU_IsShutdown);
+		CPU_NextStateNot(CPU_THREAD_NOT_RUNNING, CPU_THREAD_SHUTDOWN);
+		CPU_WaitStatus(cpuThreadReplyCond, &CPU_IsShutdown);
 		delete cpuThread;
 		cpuThread = 0;
 	} else {
@@ -361,6 +380,6 @@ void GetSysDirectories(std::string &memstickpath, std::string &flash0path) {
 #else
 	// TODO
 	memstickpath = g_Config.memCardDirectory;
-	flash0path = g_Config.flashDirectory;
+	flash0path = g_Config.flash0Directory;
 #endif
 }

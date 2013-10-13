@@ -435,8 +435,9 @@ void __IoManagerThread() {
 }
 
 void __IoWakeManager() {
+	// Ping the thread so that it knows to check coreState.
+	ioManagerThreadEnabled = false;
 	ioManager.FinishEventLoop();
-	ioManager.SyncThread();
 }
 
 void __IoInit() {
@@ -460,6 +461,7 @@ void __IoInit() {
 	pspFileSystem.Mount("ms0:", memstickSystem);
 	pspFileSystem.Mount("fatms0:", memstickSystem);
 	pspFileSystem.Mount("fatms:", memstickSystem);
+	pspFileSystem.Mount("pfat0:", memstickSystem);
 	pspFileSystem.Mount("flash0:", flash0System);
 	
 	__KernelListenThreadEnd(&TellFsThreadEnded);
@@ -503,6 +505,7 @@ void __IoShutdown() {
 	pspFileSystem.Unmount("ms0:", memstickSystem);
 	pspFileSystem.Unmount("fatms0:", memstickSystem);
 	pspFileSystem.Unmount("fatms:", memstickSystem);
+	pspFileSystem.Unmount("pfat0:", memstickSystem);
 	pspFileSystem.Unmount("flash0:", flash0System);
 
 	delete memstickSystem;

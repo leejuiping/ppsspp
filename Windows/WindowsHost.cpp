@@ -169,8 +169,6 @@ void WindowsHost::SetDebugMode(bool mode)
 	}
 }
 
-extern BOOL g_bFullScreen;
-
 void WindowsHost::PollControllers(InputState &input_state)
 {
 	bool doPad = true;
@@ -368,4 +366,15 @@ bool WindowsHost::CreateDesktopShortcut(std::string argumentPath, std::string ga
 
 	delete [] pathbuf;
 	return false;
+}
+
+void WindowsHost::GoFullscreen(bool viewFullscreen) {
+	if (viewFullscreen)
+		MainWindow::_ViewFullScreen(MainWindow::GetHWND());
+	else
+		MainWindow::_ViewNormal(MainWindow::GetHWND());
+}
+
+void WindowsHost::ToggleDebugConsoleVisibility() {
+	MainWindow::ToggleDebugConsoleVisibility();
 }

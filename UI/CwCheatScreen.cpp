@@ -40,21 +40,19 @@ static bool enableAll = false;
 static std::vector<std::string> cheatList;
 extern void DrawBackground(float alpha);
 static CWCheatEngine *cheatEngine2;
-static bool enableCheat [128];
-
+static std::deque<bool> bEnableCheat;
 std::vector<std::string> CwCheatScreen::CreateCodeList() {
 	cheatEngine2 = new CWCheatEngine();
 	cheatList = cheatEngine2->GetCodesList();
-	int j = 0;
+	bEnableCheat.clear();
 	for (size_t i = 0; i < cheatList.size(); i++) {
 		if (cheatList[i].substr(0, 3) == "_C1") {
 			formattedList.push_back(cheatList[i].substr(4));
-			enableCheat[j++] = true;
-			locations.push_back((int)i);
+			bEnableCheat.push_back(true);
 		}
 		if (cheatList[i].substr(0, 3) == "_C0") {
 			formattedList.push_back(cheatList[i].substr(4));
-			enableCheat[j++] = false;
+			bEnableCheat.push_back(false);
 		}
 	}
 	delete cheatEngine2;
@@ -90,7 +88,7 @@ void CwCheatScreen::CreateViews() {
 	rightColumn->Add(new ItemHeader(k->T("Cheats")));
 	for (size_t i = 0; i < formattedList.size(); i++) {
 		name = formattedList[i].c_str();
-		rightColumn->Add(new CheatCheckBox(&enableCheat[i], k->T(name), "" ))->OnClick.Handle(this, &CwCheatScreen::OnCheckBox);
+		rightColumn->Add(new CheatCheckBox(&bEnableCheat[i], k->T(name), ""))->OnClick.Handle(this, &CwCheatScreen::OnCheckBox);
 	}
 }
 
@@ -128,8 +126,8 @@ UI::EventReturn CwCheatScreen::OnEnableAll(UI::EventParams &params)
 			cheatList[j].replace(0, 3, "_C0");
 		}
 	}
-	for (int y = 0; y < 128; y++) {
-		enableCheat[y] = enableAll;
+	for (size_t y = 0; y < bEnableCheat.size(); y++) {
+		bEnableCheat[y] = enableAll;
 	}
 	for (int i = 0; i < (int)cheatList.size(); i++) {
 		os << cheatList[i];
@@ -155,8 +153,9 @@ UI::EventReturn CwCheatScreen::OnImportCheat(UI::EventParams &params)
 	std::vector<std::string> title;
 	bool finished = false, skip = false;
 	std::vector<std::string> newList;
-#ifdef ANDROID
-	is.open(g_Config.memCardDirectory + "PSP/Cheats/cheat.db");
+#if defined(ANDROID) || defined(__SYMBIAN32__) || defined(BLACKBERRY)
+	std::string cheatDir = g_Config.memCardDirectory + "PSP/Cheats/cheat.db";
+	is.open(cheatDir.c_str());
 #else
 	is.open("cheats/cheat.db");
 #endif

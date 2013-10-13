@@ -42,9 +42,6 @@
 
 #ifdef _WIN32
 namespace MainWindow {
-	enum { 
-		WM_USER_LOG_STATUS_CHANGED = WM_USER + 101,
-	};
 	extern HWND hwndMain;
 }
 #endif
@@ -136,11 +133,11 @@ void GameSettingsScreen::CreateViews() {
 	// graphicsSettings->Add(new CheckBox(&g_Config.bTrueColor, gs->T("True Color")));
 #ifdef _WIN32
 	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")))->OnClick.Handle(this, &GameSettingsScreen::OnFullscreenChange);
 #endif
 	
 	graphicsSettings->Add(new ItemHeader(gs->T("Antialiasing and postprocessing"))); 
-	graphicsSettings->Add(new Choice(gs->T("Postprocessing shader")))->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
+	graphicsSettings->Add(new Choice(gs->T("Postprocessing Shader")))->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
 
 	// In case we're going to add few other antialiasing option like MSAA in the future.
 	// graphicsSettings->Add(new CheckBox(&g_Config.bFXAA, gs->T("FXAA")));
@@ -302,6 +299,11 @@ UI::EventReturn GameSettingsScreen::OnReloadCheats(UI::EventParams &e) {
 UI::EventReturn GameSettingsScreen::OnRenderingMode(UI::EventParams &e) {
 	enableReports_ = Reporting::IsEnabled();
 	enableReportsCheckbox_->SetEnabled(Reporting::IsSupported());
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameSettingsScreen::OnFullscreenChange(UI::EventParams &e) {
+	host->GoFullscreen(g_Config.bFullScreen);
 	return UI::EVENT_DONE;
 }
 
@@ -474,8 +476,6 @@ void DeveloperToolsScreen::CreateViews() {
 	using namespace UI;
 	root_ = new ScrollView(ORIENT_VERTICAL);
 
-	enableLogging_ = g_Config.bEnableLogging;
-
 	I18NCategory *d = GetI18NCategory("Dialog");
 	I18NCategory *de = GetI18NCategory("Developer");
 	I18NCategory *gs = GetI18NCategory("Graphics");
@@ -487,8 +487,13 @@ void DeveloperToolsScreen::CreateViews() {
 	list->Add(new ItemHeader(s->T("General")));
 	list->Add(new Choice(de->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
 	list->Add(new CheckBox(&g_Config.bShowDeveloperMenu, de->T("Show Developer Menu")));
-	list->Add(new Choice(de->T("Run CPU Tests")))->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
-	list->Add(new CheckBox(&enableLogging_, de->T("Enable Logging")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoggingChanged);
+
+	Choice *cpuTests = new Choice(de->T("Run CPU Tests"));
+	list->Add(cpuTests)->OnClick.Handle(this, &DeveloperToolsScreen::OnRunCPUTests);
+	if (!File::Exists(g_Config.memCardDirectory + "pspautotests/tests/"))
+		cpuTests->SetEnabled(false);
+
+	list->Add(new CheckBox(&g_Config.bEnableLogging, de->T("Enable Logging")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoggingChanged);
 	list->Add(new Choice(de->T("Logging Channels")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLogConfig);
 	list->Add(new ItemHeader(de->T("Language")));
 	list->Add(new Choice(de->T("Load language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoadLanguageIni);
@@ -505,10 +510,6 @@ void DeveloperToolsScreen::sendMessage(const char *message, const char *value){
 UI::EventReturn DeveloperToolsScreen::OnBack(UI::EventParams &e) {
 	screenManager()->finishDialog(this, DR_OK);
 
-	g_Config.bEnableLogging = enableLogging_;
-#ifdef _WIN32
-	PostMessage(MainWindow::hwndMain, MainWindow::WM_USER_LOG_STATUS_CHANGED, 0, 0);
-#endif
 	g_Config.Save();
 
 	return UI::EVENT_DONE;
@@ -532,9 +533,7 @@ UI::EventReturn GameSettingsScreen::OnRestoreDefaultSettings(UI::EventParams &e)
 }
 
 UI::EventReturn DeveloperToolsScreen::OnLoggingChanged(UI::EventParams &e) {
-#ifdef _WIN32
-	PostMessage(MainWindow::hwndMain, MainWindow::WM_USER_LOG_STATUS_CHANGED, 0, 0);
-#endif
+	host->ToggleDebugConsoleVisibility();
 	return UI::EVENT_DONE;
 }
 

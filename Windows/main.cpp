@@ -170,6 +170,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	}
 	SetCurrentDirectory(modulePath);
 	// GetCurrentDirectory(MAX_PATH, modulePath);  // for checking in the debugger
+
 #ifndef _DEBUG
 	bool hideLog = true;
 #else
@@ -195,10 +196,10 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 
 	osName = GetWindowsVersion() + " " + GetWindowsSystemArchitecture();
 
-	std::string configFilename;
+	const char *configFilename = NULL;
 	const char *configOption = "--config=";
 
-	std::string controlsConfigFilename;
+	const char *controlsConfigFilename = NULL;
 	const char *controlsOption = "--controlconfig=";
 
 	for (int i = 1; i < __argc; ++i)
@@ -216,15 +217,15 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		}
 	}
 
-	if(configFilename.empty())
-		configFilename = "ppsspp.ini";
-
-	if(controlsConfigFilename.empty())
-		controlsConfigFilename = "controls.ini";
+	std::string memstickpath, flash0path;
+	GetSysDirectories(memstickpath, flash0path);
 
 	// Load config up here, because those changes below would be overwritten
 	// if it's not loaded here first.
-	g_Config.Load(configFilename.c_str(), controlsConfigFilename.c_str());
+	g_Config.AddSearchPath("");
+	g_Config.AddSearchPath(memstickpath + "PSP/SYSTEM/");
+	g_Config.SetDefaultPath(memstickpath + "PSP/SYSTEM/");
+	g_Config.Load(configFilename, controlsConfigFilename);
 
 	// The rest is handled in NativeInit().
 	for (int i = 1; i < __argc; ++i)
@@ -238,6 +239,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			{
 			case 'l':
 				hideLog = false;
+				g_Config.bEnableLogging = true;
 				break;
 			case 's':
 				g_Config.bAutoRun = false;
@@ -252,8 +254,16 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 				g_Config.bFullScreen = false;
 		}
 	}
+#ifdef _DEBUG
+	g_Config.bEnableLogging = true;
+#endif
 
 	LogManager::Init();
+	// Consider at least the following cases before changing this code:
+	//   - By default in Release, the console should be hidden by default even if logging is enabled.
+	//   - By default in Debug, the console should be shown by default.
+	//   - The -l switch is expected to show the log console, REGARDLESS of config settings.
+	//   - It should be possible to log to a file without showing the console.
 	LogManager::GetInstance()->GetConsoleListener()->Open(hideLog, 150, 120, "PPSSPP Debug Console");
 
 

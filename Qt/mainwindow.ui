@@ -168,7 +168,6 @@
      <addaction name="menuAnisotropic_filtering"/>
      <addaction name="action_OptionsBufferedRendering"/>
      <addaction name="action_OptionsLinearFiltering"/>
-     <addaction name="action_Simple_2xAA"/>
      <addaction name="separator"/>
      <addaction name="menuZoom"/>
      <addaction name="action_Stretch_to_display"/>
@@ -588,14 +587,6 @@
   <action name="action_DebugDisplayList">
    <property name="text">
     <string>DisplayList...</string>
-   </property>
-  </action>
-  <action name="action_Simple_2xAA">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Simple 2xAA</string>
    </property>
   </action>
   <action name="action_AFOff">

@@ -39,16 +39,9 @@ KeyMapping g_controllerMap;
 
 static const DefMappingStruct defaultKeyboardKeyMap[] = {
 	{CTRL_SQUARE, NKCODE_A},
-<<<<<<< HEAD
 	{CTRL_TRIANGLE, NKCODE_W},
 	{CTRL_CIRCLE, NKCODE_D},
 	{CTRL_CROSS, NKCODE_S},
-#endif
-=======
-	{CTRL_TRIANGLE, NKCODE_S},
-	{CTRL_CIRCLE, NKCODE_X},
-	{CTRL_CROSS, NKCODE_Z},
->>>>>>> upstream/master
 	{CTRL_LTRIGGER, NKCODE_Q},
 	{CTRL_RTRIGGER, NKCODE_E},
 

@@ -36,6 +36,7 @@
 #include "file/zip_read.h"
 #include "native/ext/stb_image_write/stb_image_writer.h"
 #include "native/ext/jpge/jpge.h"
+#include "native/util/text/utf8.h"
 #include "gfx_es2/gl_state.h"
 #include "gfx_es2/draw_text.h"
 #include "gfx/gl_lost_manager.h"
@@ -368,9 +369,10 @@ void NativeInit(int argc, const char *argv[],
 	INFO_LOG(BOOT, "Logger inited.");
 #else
 	if (g_Config.currentDirectory.empty()) {
-		g_Config.currentDirectory = File::GetExeDirectory();
+		g_Config.currentDirectory = ConvertWStringToUTF8(File::GetExeDirectory());
 	}
-	g_Config.memCardDirectory = "MemStick/";
+	// TODO: Is this even needed, when PPSSPP uses GetSysDirectories in multiple other places?
+	g_Config.memCardDirectory = "memstick/";
 #endif	
 
 	i18nrepo.LoadIni(g_Config.sLanguageIni);
@@ -510,7 +512,7 @@ void NativeShutdownGraphics() {
 void TakeScreenshot() {
 #ifdef _WIN32
 	g_TakeScreenshot = false;
-	mkDir("screenshots");
+	mkDir(g_Config.memCardDirectory + "/PSP/SCREENSHOT");
 
 	// First, find a free filename.
 	int i = 0;
@@ -518,9 +520,9 @@ void TakeScreenshot() {
 	char temp[256];
 	while (i < 10000){
 		if(g_Config.bScreenshotsAsPNG)
-			sprintf(temp, "screenshots/screen%05d.png", i);
+			sprintf(temp, "%s/PSP/SCREENSHOT/screen%05d.png", g_Config.memCardDirectory.c_str(), i);
 		else
-			sprintf(temp, "screenshots/screen%05d.jpg", i);
+			sprintf(temp, "%s/PSP/SCREENSHOT/screen%05d.jpg", g_Config.memCardDirectory.c_str(), i);
 		FileInfo info;
 		if (!getFileInfo(temp, &info))
 			break;

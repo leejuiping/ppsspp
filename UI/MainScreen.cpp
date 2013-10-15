@@ -42,6 +42,11 @@
 #include "GPU/GPUInterface.h"
 #include "i18n/i18n.h"
 
+#ifdef _WIN32
+#include "Windows/W32Util/ShellUtil.h"
+#include "Windows/WndMainWindow.h"
+#endif
+
 #ifdef USING_QT_UI
 #include <QFileDialog>
 #include <QFile>
@@ -49,12 +54,6 @@
 #endif
 
 #include <sstream>
-
-#ifdef _WIN32
-namespace MainWindow {
-	void BrowseAndBoot(std::string defaultPath, bool browseDirectory = false);
-}
-#endif
 
 class GameButton : public UI::Clickable {
 public:
@@ -301,12 +300,6 @@ void PathBrowser::Navigate(const std::string &path) {
 	}
 }
 
-static std::string GetMemCardDirectory() {
-	std::string memCardDirectory, ignore;
-	GetSysDirectories(memCardDirectory, ignore);
-	return memCardDirectory;
-}
-
 class GameBrowser : public UI::LinearLayout {
 public:
 	GameBrowser(std::string path, bool allowBrowsing, bool *gridStyle_, std::string lastText, std::string lastLink, UI::LayoutParams *layoutParams = 0);
@@ -350,7 +343,16 @@ UI::EventReturn GameBrowser::LastClick(UI::EventParams &e) {
 }
 
 UI::EventReturn GameBrowser::HomeClick(UI::EventParams &e) {
-	path_.SetPath(GetMemCardDirectory());
+#ifdef ANDROID
+	path_.SetPath(g_Config.memCardDirectory);
+#elif defined(_WIN32)
+	I18NCategory *m = GetI18NCategory("MainMenu");
+	std::string folder = W32Util::BrowseForFolder(MainWindow::GetHWND(), m->T("Choose folder"));
+	if (!folder.size())
+		return UI::EVENT_DONE;
+	path_.SetPath(folder);
+#endif
+
 	g_Config.currentDirectory = path_.GetPath();
 	Refresh();
 	return UI::EVENT_DONE;
@@ -371,6 +373,8 @@ void GameBrowser::Refresh() {
 		topBar->Add(new TextView(path_.GetFriendlyPath().c_str(), ALIGN_VCENTER, 0.7f, new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT, 1.0f, pathMargins)));
 #ifdef ANDROID
 		topBar->Add(new Choice(m->T("Home")))->OnClick.Handle(this, &GameBrowser::HomeClick);
+#elif defined(_WIN32)
+		topBar->Add(new Choice(m->T("Browse", "Browse...")))->OnClick.Handle(this, &GameBrowser::HomeClick);
 #endif
 		ChoiceStrip *layoutChoice = topBar->Add(new ChoiceStrip(ORIENT_HORIZONTAL));
 		layoutChoice->AddChoice(I_GRID);
@@ -497,7 +501,7 @@ void MainScreen::CreateViews() {
 	GameBrowser *tabAllGames = new GameBrowser(g_Config.currentDirectory, true, &g_Config.bGridView2, 
 		m->T("How to get games"), "http://www.ppsspp.org/getgames.html",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
-	GameBrowser *tabHomebrew = new GameBrowser(GetMemCardDirectory() + "PSP/GAME/", false, &g_Config.bGridView3,
+	GameBrowser *tabHomebrew = new GameBrowser(GetSysDirectory(DIRECTORY_GAME), false, &g_Config.bGridView3,
 		m->T("How to get homebrew & demos"), "http://www.ppsspp.org/gethomebrew.html",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 

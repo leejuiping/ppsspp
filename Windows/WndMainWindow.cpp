@@ -82,7 +82,7 @@ extern InputState input_state;
 
 #define TIMER_CURSORUPDATE 1
 #define TIMER_CURSORMOVEUPDATE 2
-#define CURSORUPDATE_INTERVAL_MS 50
+#define CURSORUPDATE_INTERVAL_MS 1000
 #define CURSORUPDATE_MOVE_TIMESPAN_MS 500
 
 #ifndef HID_USAGE_PAGE_GENERIC
@@ -358,8 +358,10 @@ namespace MainWindow
 		// Then center if necessary.
 		if (g_Config.iWindowX == -1 && g_Config.iWindowY == -1) {
 			// Center the window.
-			g_Config.iWindowX = screenX + (screenWidth - g_Config.iWindowWidth) / 2;
-			g_Config.iWindowY = screenY + (screenHeight - g_Config.iWindowHeight) / 2;
+			const int primaryScreenWidth = GetSystemMetrics(SM_CXSCREEN);
+			const int primaryScreenHeight = GetSystemMetrics(SM_CYSCREEN);
+			g_Config.iWindowX = (primaryScreenWidth - g_Config.iWindowWidth) / 2;
+			g_Config.iWindowY = (primaryScreenHeight - g_Config.iWindowHeight) / 2;
 			rc.left = g_Config.iWindowX;
 			rc.top = g_Config.iWindowY;
 			rc.right = rc.left + g_Config.iWindowWidth;
@@ -817,8 +819,7 @@ namespace MainWindow
 		dev[1].dwFlags = 0;
 		RegisterRawInputDevices(dev, 2, sizeof(RAWINPUTDEVICE));
 
-		SetFocus(hwndDisplay);
-
+		SetFocus(hwndMain);
 		return TRUE;
 	}
 
@@ -852,7 +853,7 @@ namespace MainWindow
 		}
 
 		if (browseDirectory) {
-			std::string dir = W32Util::BrowseForFolder(GetHWND(),"Choose directory");
+			std::string dir = W32Util::BrowseForFolder(GetHWND(), "Choose directory");
 			if (dir == "") {
 				if (!isPaused)
 					Core_EnableStepping(false);
@@ -1554,14 +1555,11 @@ namespace MainWindow
 					TCHAR filename[512];
 					DragQueryFile(hdrop,0,filename,512);
 					TCHAR *type = filename+_tcslen(filename)-3;
-
-					SendMessage(hWnd, WM_COMMAND, ID_EMULATION_STOP, 0);
-					// Ugly, need to wait for the stop message to process in the EmuThread.
-					Sleep(20);
 					
 					Update();
 
 					NativeMessageReceived("boot", ConvertWStringToUTF8(filename).c_str());
+					Core_EnableStepping(false);
 				}
 			}
 			break;

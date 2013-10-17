@@ -921,8 +921,6 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HW/MpegDemux.h
 	Core/HW/MemoryStick.cpp
 	Core/HW/MemoryStick.h
-	Core/HW/OMAConvert.cpp
-	Core/HW/OMAConvert.h
 	Core/HW/SasAudio.cpp
 	Core/HW/SasAudio.h
 	Core/Host.cpp
@@ -1164,7 +1162,9 @@ if(ANDROID)
 endif()
 set(NativeAssets
 	android/assets/ui_atlas.zim
-	assets/ppge_atlas.zim)
+	assets/shaders
+	assets/ppge_atlas.zim
+	assets/langregion.ini)
 set(LinkCommon ${CoreLibName} ${CMAKE_THREAD_LIBS_INIT} ${nativeExtraLibs})
 
 if(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
@@ -1324,6 +1324,8 @@ if(IOS)
 
 	file(GLOB IOSAssets ios/assets/*.png)
 	file(INSTALL ${IOSAssets} DESTINATION assets)
+	file(INSTALL assets/langregion.ini DESTINATION assets)
+	file(INSTALL assets/shaders DESTINATION assets)
 	file(INSTALL flash0 DESTINATION assets)
 	file(INSTALL lang DESTINATION assets)
 	if (IOS_DEBUG)

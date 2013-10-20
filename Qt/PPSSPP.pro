@@ -1,9 +1,12 @@
 TARGET = PPSSPPQt
 
 QT += core gui opengl
-CONFIG += mobility
-MOBILITY += multimedia
-win32: QT += multimedia
+win32|greaterThan(QT_MAJOR_VERSION,4) {
+    QT += multimedia
+} else {
+    CONFIG += mobility
+    MOBILITY += multimedia
+}
 greaterThan(QT_MAJOR_VERSION,4): QT += widgets
 VERSION = 0.9.1
 
@@ -24,7 +27,14 @@ win32 {
 	} else {
 		LIBS += -L$$OUT_PWD/debug
 	}
-	LIBS += -lCore -lCommon -lNative -lwinmm -lws2_32
+	FFMPEG_DIR = ../ffmpeg/Windows/$${QMAKE_TARGET.arch}/lib/
+	LIBS += -lCore -lCommon -lNative -lwinmm -lws2_32 -lShell32 -lAdvapi32
+	contains($$QMAKE_TARGET.arch, x86_64) {
+		LIBS += $$files(../dx9sdk/Lib/x64/*.lib)
+	} else {
+		LIBS += $$files(../dx9sdk/Lib/x86/*.lib)
+	}
+	LIBS += $${FFMPEG_DIR}avformat.lib $${FFMPEG_DIR}avcodec.lib $${FFMPEG_DIR}avutil.lib $${FFMPEG_DIR}swresample.lib $${FFMPEG_DIR}swscale.lib
 }
 linux {
 	LIBS += -L. -lCore -lCommon -lNative -ldl
@@ -35,7 +45,7 @@ linux {
 			DEFINES += QT_HAS_SDL
 			PKGCONFIG += sdl
 		}
-		FFMPEG_DIR=../ffmpeg/linux/x86_64/lib/
+		FFMPEG_DIR = ../ffmpeg/linux/$${QMAKE_TARGET.arch}/lib/
 		LIBS += $${FFMPEG_DIR}libavformat.a $${FFMPEG_DIR}libavcodec.a $${FFMPEG_DIR}libavutil.a $${FFMPEG_DIR}libswresample.a $${FFMPEG_DIR}libswscale.a
 	}
 	# put this at the end avoids problems with some compilers

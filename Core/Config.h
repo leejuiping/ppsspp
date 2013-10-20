@@ -99,17 +99,9 @@ public:
 
 	// Sound
 	bool bEnableSound;
-	bool bEnableAtrac3plus;
 	bool bLowLatencyAudio;
 	int iSFXVolume;
 	int iBGMVolume;
-
-	// Controls
-	bool bShowTouchControls;
-	bool bShowAnalogStick;
-	bool bHapticFeedback;
-	int iTouchButtonOpacity;
-	float fButtonScale;
 
 	// UI
 	bool bShowDebuggerOnLoad;
@@ -123,7 +115,46 @@ public:
 	bool bGridView2;
 	bool bGridView3;
 
+	// Control Positions
+	int iTouchButtonOpacity;
+	float fButtonScale;
+	//space between PSP buttons
+	int iActionButtonSpacing;
+	//the PSP button's center (triangle, circle, square, cross)
+	int iActionButtonCenterX, iActionButtonCenterY;
+	//radius of the D-pad (PSP cross)
+	int iDpadRadius;
+	//the D-pad (PSP cross) position
+	int iDpadX, iDpadY;
+	//the start key position
+	int iStartKeyX, iStartKeyY;
+	//the select key position; 
+	int iSelectKeyX, iSelectKeyY;
+	int iUnthrottleKeyX, iUnthrottleKeyY;
+	int iLKeyX, iLKeyY;
+	int iRKeyX, iRKeyY;
+	//position of the analog stick
+	int iAnalogStickX, iAnalogStickY;
 
+	// Controls Visibility
+	bool bShowTouchControls;
+
+	bool bShowTouchCircle;
+	bool bShowTouchCross;
+	bool bShowTouchTriangle;
+	bool bShowTouchSquare;
+
+	bool bShowTouchStart;
+	bool bShowTouchSelect;
+	bool bShowTouchUnthrottle;
+
+	bool bShowTouchLTrigger;
+	bool bShowTouchRTrigger;
+	
+	bool bShowTouchAnalogStick;
+	bool bShowTouchDpad;
+	
+	bool bHapticFeedback;
 
 	// GLES backend-specific hacks. Not saved to the ini file, do not add checkboxes. Will be made into
 	// proper options when good enough.

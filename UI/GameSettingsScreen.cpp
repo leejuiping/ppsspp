@@ -15,29 +15,29 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "base/colorutil.h"
+#include "base/timeutil.h"
+#include "math/curves.h"
 #include "gfx_es2/draw_buffer.h"
 #include "i18n/i18n.h"
 #include "ui/view.h"
 #include "ui/viewgroup.h"
 #include "ui/ui_context.h"
 #include "UI/EmuScreen.h"
-#include "UI/PluginScreen.h"
 #include "UI/GameSettingsScreen.h"
 #include "UI/GameInfoCache.h"
 #include "UI/MiscScreens.h"
 #include "UI/ControlMappingScreen.h"
 #include "UI/DevScreens.h"
+#include "UI/TouchControlLayoutScreen.h"
+#include "UI/TouchControlVisibilityScreen.h"
 
 #include "Core/Config.h"
 #include "Core/Host.h"
-#include "android/jni/TestRunner.h"
-#include "GPU/GPUInterface.h"
-#include "base/colorutil.h"
-#include "base/timeutil.h"
-#include "math/curves.h"
-#include "Core/HW/atrac3plus.h"
 #include "Core/System.h"
 #include "Core/Reporting.h"
+#include "android/jni/TestRunner.h"
+#include "GPU/GPUInterface.h"
 #include "Common/KeyMap.h"
 
 #ifdef _WIN32
@@ -106,16 +106,23 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new ItemHeader(gs->T("Frame Rate Control")));
 	static const char *frameSkip[] = {"Off", "Auto", "1", "2", "3", "4", "5", "6", "7", "8"};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gs->T("Frame Skipping"), frameSkip, 0, ARRAY_SIZE(frameSkip), gs, screenManager()));
-	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"};
-
 	graphicsSettings->Add(new CheckBox(&cap60FPS_, gs->T("Force max 60 FPS (helps GoW)")));
 	static const char *customSpeed[] = {"Unlimited", "25%", "50%", "75%", "100%", "125%", "150%", "200%", "300%"};
 	graphicsSettings->Add(new PopupMultiChoice(&iAlternateSpeedPercent_, gs->T("Alternative Speed"), customSpeed, 0, ARRAY_SIZE(customSpeed), gs, screenManager()));
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bLowQualitySplineBezier, gs->T("Low quality spline/bezier curves (speed)")));
+	graphicsSettings->Add(new Choice(gs->T("Postprocessing Shader")))->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
+#ifdef _WIN32
+	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")))->OnClick.Handle(this, &GameSettingsScreen::OnFullscreenChange);
+#endif
+	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
+#ifdef BLACKBERRY
+	if (pixel_xres == pixel_yres)
+		graphicsSettings->Add(new CheckBox(&g_Config.bPartialStretch, gs->T("Partial Vertical Stretch")));
+#endif
+	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
+
+	graphicsSettings->Add(new ItemHeader(gs->T("Performance")));
 
 #ifndef USING_GLES2
 	static const char *internalResolutions[] = {"Auto (1:1)", "1x PSP", "2x PSP", "3x PSP", "4x PSP", "5x PSP", "6x PSP", "7x PSP", "8x PSP", "9x PSP", "10x PSP" };
@@ -123,28 +130,16 @@ void GameSettingsScreen::CreateViews() {
 	static const char *internalResolutions[] = {"Auto (1:1)", "1x PSP", "2x PSP", "3x PSP", "4x PSP", "5x PSP" };
 #endif
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iInternalResolution, gs->T("Rendering Resolution"), internalResolutions, 0, ARRAY_SIZE(internalResolutions), gs, screenManager()))->OnClick.Handle(this, &GameSettingsScreen::OnResolutionChange);
-	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
-#ifdef BLACKBERRY
-	if (pixel_xres == pixel_yres)
-		graphicsSettings->Add(new CheckBox(&g_Config.bPartialStretch, gs->T("Partial Vertical Stretch")));
-#endif
-	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bLowQualitySplineBezier, gs->T("LowCurves", "Low quality spline/bezier curves")));
+
 	// This setting is not really useful for anyone atm.
 	// graphicsSettings->Add(new CheckBox(&g_Config.bTrueColor, gs->T("True Color")));
-#ifdef _WIN32
-	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")))->OnClick.Handle(this, &GameSettingsScreen::OnFullscreenChange);
-#endif
-	
-	graphicsSettings->Add(new ItemHeader(gs->T("Antialiasing and postprocessing"))); 
-	graphicsSettings->Add(new Choice(gs->T("Postprocessing Shader")))->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
 
 	// In case we're going to add few other antialiasing option like MSAA in the future.
 	// graphicsSettings->Add(new CheckBox(&g_Config.bFXAA, gs->T("FXAA")));
-	graphicsSettings->Add(new ItemHeader(gs->T("Overlay Information")));
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gs, screenManager()));
-	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")));
-
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture Scaling")));
 #ifndef USING_GLES2
 	static const char *texScaleLevels[] = {"Auto", "Off", "2x", "3x","4x", "5x"};
@@ -168,6 +163,11 @@ void GameSettingsScreen::CreateViews() {
 	if (PSP_IsInited())
 		prescale->SetEnabled(false);
 
+	graphicsSettings->Add(new ItemHeader(gs->T("Overlay Information")));
+	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"};
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gs, screenManager()));
+	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")));
+
 	// Developer tools are not accessible ingame, so it goes here.
 	graphicsSettings->Add(new ItemHeader(gs->T("Debugging")));
 	Choice *dump = graphicsSettings->Add(new Choice(gs->T("Dump next frame to log")));
@@ -189,16 +189,12 @@ void GameSettingsScreen::CreateViews() {
 	audioSettingsScroll->Add(audioSettings);
 	tabHolder->AddTab(ms->T("Audio"), audioSettingsScroll);
 
-	std::string atracString;
-	atracString.assign(Atrac3plus_Decoder::IsInstalled() ? "Redownload Atrac3+ plugin" : "Download Atrac3+ plugin");
 	audioSettings->Add(new ItemHeader(ms->T("Audio")));
-	audioSettings->Add(new Choice(a->T(atracString.c_str())))->OnClick.Handle(this, &GameSettingsScreen::OnDownloadPlugin);
 
 	audioSettings->Add(new PopupSliderChoice(&g_Config.iSFXVolume, 0, 8, a->T("SFX volume"), screenManager()));
 	audioSettings->Add(new PopupSliderChoice(&g_Config.iBGMVolume, 0, 8, a->T("BGM volume"), screenManager()));
 
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
-	audioSettings->Add(new CheckBox(&g_Config.bEnableAtrac3plus, a->T("Enable Atrac3+")));
 	audioSettings->Add(new CheckBox(&g_Config.bLowLatencyAudio, a->T("Low latency audio")));
 
 	// Control
@@ -209,16 +205,19 @@ void GameSettingsScreen::CreateViews() {
 	tabHolder->AddTab(ms->T("Controls"), controlsSettingsScroll);
 	controlsSettings->Add(new ItemHeader(ms->T("Controls")));
 	controlsSettings->Add(new Choice(c->T("Control Mapping")))->OnClick.Handle(this, &GameSettingsScreen::OnControlMapping);
+
 #ifdef USING_GLES2
 	controlsSettings->Add(new CheckBox(&g_Config.bHapticFeedback, c->T("HapticFeedback", "Haptic Feedback (vibration)")));
 	controlsSettings->Add(new CheckBox(&g_Config.bAccelerometerToAnalogHoriz, c->T("Tilt", "Tilt to Analog (horizontal)")));
 	controlsSettings->Add(new PopupSliderChoice(&g_Config.iTiltSensitivity, 10, 200, c->T("Tilt Sensitivity"), screenManager()));
 #endif
 	controlsSettings->Add(new ItemHeader(c->T("OnScreen", "On-Screen Touch Controls")));
-	controlsSettings->Add(new CheckBox(&g_Config.bShowTouchControls, c->T("OnScreen", "On-Screen Touch Controls")));
+	controlsSettings->Add(new CheckBox(&g_Config.bShowTouchControls, c->T("OnScreen", "On-Screen Touch Controls")))->OnClick.Handle(this, &GameSettingsScreen::OnToggleTouchControls);
+	layoutEditorChoice_ = controlsSettings->Add(new Choice(c->T("Custom layout...")));
+	layoutEditorChoice_->OnClick.Handle(this, &GameSettingsScreen::OnTouchControlLayout);
+	layoutEditorChoice_->SetEnabled(g_Config.bShowTouchControls);
 	controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, c->T("Button Opacity"), screenManager()));
 	controlsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fButtonScale, 0.80, 2.0, c->T("Button Scaling"), screenManager()));
-	controlsSettings->Add(new CheckBox(&g_Config.bShowAnalogStick, c->T("Show Left Analog Stick")));
 
 	// System
 	ViewGroup *systemSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -227,18 +226,11 @@ void GameSettingsScreen::CreateViews() {
 	systemSettingsScroll->Add(systemSettings);
 	tabHolder->AddTab(ms->T("System"), systemSettingsScroll);
 
+	systemSettings->Add(new ItemHeader(s->T("UI Language")));
+	systemSettings->Add(new Choice(dev->T("Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
+
 	systemSettings->Add(new ItemHeader(s->T("Emulation")));
 	systemSettings->Add(new CheckBox(&g_Config.bFastMemory, s->T("Fast Memory", "Fast Memory (Unstable)")));
-
-#ifdef IOS
-	if (isJailed) {
-		systemSettings->Add(new TextView(s->T("DynarecisJailed", "Dynarec (JIT) - (Not jailbroken - JIT not available)")));
-	} else {
-		systemSettings->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));
-	}
-#else
-	systemSettings->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));
-#endif
 
 #ifndef __SYMBIAN32__
 	systemSettings->Add(new CheckBox(&g_Config.bSeparateCPUThread, s->T("Multithreaded (experimental)")))->SetEnabled(!PSP_IsInited());
@@ -249,16 +241,13 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new CheckBox(&g_Config.bAtomicAudioLocks, s->T("Atomic Audio locks (experimental)")))->SetEnabled(!PSP_IsInited());
 
 	enableReports_ = Reporting::IsEnabled();
-//#ifndef ANDROID 
+//#ifndef ANDROID
 	systemSettings->Add(new ItemHeader(s->T("Cheats", "Cheats (experimental, see forums)")));
 	systemSettings->Add(new CheckBox(&g_Config.bEnableCheats, s->T("Enable Cheats")));
 //#endif
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	systemSettings->SetSpacing(0);
-	
-	systemSettings->Add(new ItemHeader(s->T("UI Language"))); 
-	systemSettings->Add(new Choice(dev->T("Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
-	
+
 	systemSettings->Add(new ItemHeader(s->T("General")));
 	systemSettings->Add(new Choice(s->T("Developer Tools")))->OnClick.Handle(this, &GameSettingsScreen::OnDeveloperTools);
 	systemSettings->Add(new Choice(s->T("Clear Recent Games List")))->OnClick.Handle(this, &GameSettingsScreen::OnClearRecents);
@@ -285,10 +274,14 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iButtonPreference, s->T("Confirmation Button"), buttonPref, 0, 2, s, screenManager()));
 }
 
+UI::EventReturn GameSettingsScreen::OnToggleTouchControls(UI::EventParams &e) {
+	layoutEditorChoice_->SetEnabled(g_Config.bShowTouchControls);
+	return UI::EVENT_DONE;
+}
+
 UI::EventReturn GameSettingsScreen::OnClearRecents(UI::EventParams &e) {
 	g_Config.recentIsos.clear();
 	OnRecentChanged.Trigger(e);
-
 	return UI::EVENT_DONE;
 }
 
@@ -369,31 +362,20 @@ void GameSettingsScreen::sendMessage(const char *message, const char *value) {
 	}
 }
 
-UI::EventReturn GameSettingsScreen::OnDownloadPlugin(UI::EventParams &e) {
-	screenManager()->push(new PluginScreen());
-	return UI::EVENT_DONE;
-}
-
 UI::EventReturn GameSettingsScreen::OnBack(UI::EventParams &e) {
 	// If we're in-game, return to the game via DR_CANCEL.
-	if(PSP_IsInited()) {
+	if (PSP_IsInited()) {
 		screenManager()->finishDialog(this, DR_CANCEL);
 		host->UpdateScreen();
 	} else {
 		screenManager()->finishDialog(this, DR_OK);
 	}
 
-	if(g_Config.bEnableSound) {
-		if(PSP_IsInited() && !IsAudioInitialised())
+	if (g_Config.bEnableSound) {
+		if (PSP_IsInited() && !IsAudioInitialised())
 			Audio_Init();
 	}
-	// It doesn't matter if audio is inited or not, it'll still output no sound
-	// if the mixer isn't available, so go ahead and init/shutdown at our leisure.
-	if(Atrac3plus_Decoder::IsInstalled()) {
-		if(g_Config.bEnableAtrac3plus)
-			Atrac3plus_Decoder::Init();
-		else Atrac3plus_Decoder::Shutdown();
-	}
+
 	Reporting::Enable(enableReports_, "report.ppsspp.org");
 	g_Config.Save();
 
@@ -425,11 +407,6 @@ UI::EventReturn GameSettingsScreen::OnChangeNickname(UI::EventParams &e) {
 	}
 
 	#endif
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GameSettingsScreen::OnFactoryReset(UI::EventParams &e) {
-	screenManager()->push(new PluginScreen());
 	return UI::EVENT_DONE;
 }
 
@@ -474,6 +451,11 @@ UI::EventReturn GameSettingsScreen::OnControlMapping(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GameSettingsScreen::OnTouchControlLayout(UI::EventParams &e) {
+	screenManager()->push(new TouchControlLayoutScreen());
+	return UI::EVENT_DONE;
+};
+
 void DeveloperToolsScreen::CreateViews() {
 	using namespace UI;
 	root_ = new ScrollView(ORIENT_VERTICAL);
@@ -487,6 +469,17 @@ void DeveloperToolsScreen::CreateViews() {
 	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	list->SetSpacing(0);
 	list->Add(new ItemHeader(s->T("General")));
+
+#ifdef IOS
+	if (isJailed) {
+		list->Add(new TextView(s->T("DynarecisJailed", "Dynarec (JIT) - (Not jailbroken - JIT not available)")));
+	} else {
+		list->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));
+	}
+#else
+	list->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));
+#endif
+
 	list->Add(new Choice(de->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
 	list->Add(new CheckBox(&g_Config.bShowDeveloperMenu, de->T("Show Developer Menu")));
 

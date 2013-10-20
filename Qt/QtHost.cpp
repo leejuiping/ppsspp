@@ -11,8 +11,8 @@
 #include "base/NativeApp.h"
 #include "UI/EmuScreen.h"
 #include "UI/UIShader.h"
+#include "UI/MiscScreens.h"
 #include "UI/GameInfoCache.h"
-#include "UI/PluginScreen.h"
 #include "UI/OnScreenDisplay.h"
 #include "UI/ui_atlas.h"
 #include "ui/ui.h"
@@ -49,6 +49,7 @@ QtHost::QtHost(MainWindow *mainWindow_)
 
 bool QtHost::InitGL(std::string *error_string)
 {
+	return true;
 }
 
 void QtHost::ShutdownGL()
@@ -155,6 +156,27 @@ bool QtHost::IsDebuggingEnabled()
 #endif
 }
 
+bool QtHost::GPUDebuggingActive()
+{
+	auto dialogDisplayList = mainWindow->GetDialogDisplaylist();
+	if (dialogDisplayList && dialogDisplayList->isVisible())
+	{
+		if (GpuStep())
+			SendGPUStart();
+
+		return true;
+	}
+	return false;
+}
+
+void QtHost::GPUNotifyCommand(u32 pc)
+{
+	u32 op = Memory::ReadUnchecked_U32(pc);
+	u32 cmd = op >> 24;
+	if (GpuStep())
+		SendGPUWait(cmd, pc, &gstate);
+}
+
 void QtHost::SendCoreWait(bool isWaiting)
 {
 	mainWindow->CoreEmitWait(isWaiting);
@@ -213,7 +235,7 @@ void QtHost::SendGPUWait(u32 cmd, u32 addr, void *data)
 	EmuThread_LockDraw(true);
 }
 
-void QtHost::SetGPUStep(bool value, int flag, int data)
+void QtHost::SetGPUStep(bool value, int flag, u32 data)
 {
 	m_GPUStep = value;
 	m_GPUFlag = flag;
@@ -243,24 +265,10 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 
 	const char *fileToLog = 0;
 
-	bool hideLog = true;
-#ifdef _DEBUG
-	hideLog = false;
-#endif
-
-	bool gfxLog = false;
 	// Parse command line
-	LogTypes::LOG_LEVELS logLevel = LogTypes::LINFO;
 	for (int i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 			switch (argv[i][1]) {
-			case 'd':
-				// Enable debug logging
-				logLevel = LogTypes::LDEBUG;
-				break;
-			case 'g':
-				gfxLog = true;
-				break;
 			case 'j':
 				g_Config.bJit = true;
 				g_Config.bSaveSettings = false;
@@ -268,9 +276,6 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 			case 'i':
 				g_Config.bJit = false;
 				g_Config.bSaveSettings = false;
-				break;
-			case 'l':
-				hideLog = false;
 				break;
 			case 's':
 				g_Config.bAutoRun = false;
@@ -315,11 +320,9 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 	if (fileToLog != NULL)
 		LogManager::GetInstance()->ChangeFileLog(fileToLog);
 
-	LogManager::GetInstance()->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
-
 	g_gameInfoCache.Init();
 
-#if !defined(USING_GLES2)
+#if defined(Q_OS_LINUX) && !defined(ARM)
 	// Start Desktop UI
 	MainWindow* mainWindow = new MainWindow();
 	mainWindow->show();

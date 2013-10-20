@@ -5,7 +5,7 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := native_audio
-LOCAL_CFLAGS := -O3 -fsigned-char -Wall -Wno-multichar -Wno-psabi -Wno-literal-suffix
+LOCAL_CFLAGS := -O3 -fsigned-char -Wall -Wno-multichar -Wno-psabi -Wno-literal-suffix -D__STDC_CONSTANT_MACROS
 # yes, it's really CPPFLAGS for C++
 LOCAL_CPPFLAGS := -fno-exceptions -std=gnu++11 -fno-rtti
 NATIVE := ../../native
@@ -25,8 +25,6 @@ NATIVE := ../../native
 SRC := ../..
 
 include $(LOCAL_PATH)/Locals.mk
-
-#  $(SRC)/Core/EmuThread.cpp \
 
 # http://software.intel.com/en-us/articles/getting-started-on-optimizing-ndk-project-for-multiple-cpu-architectures
 
@@ -109,10 +107,11 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/UI/GamepadEmu.cpp \
   $(SRC)/UI/GameInfoCache.cpp \
   $(SRC)/UI/OnScreenDisplay.cpp \
-  $(SRC)/UI/PluginScreen.cpp \
   $(SRC)/UI/GameScreen.cpp \
   $(SRC)/UI/ControlMappingScreen.cpp \
   $(SRC)/UI/GameSettingsScreen.cpp \
+  $(SRC)/UI/TouchControlLayoutScreen.cpp \
+  $(SRC)/UI/TouchControlVisibilityScreen.cpp \
   $(SRC)/UI/CwCheatScreen.cpp \
   $(SRC)/ext/disarm.cpp \
   $(SRC)/ext/libkirk/AES.c \
@@ -171,7 +170,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/ELF/PBPReader.cpp \
   $(SRC)/Core/ELF/PrxDecrypter.cpp \
   $(SRC)/Core/ELF/ParamSFO.cpp \
-  $(SRC)/Core/HW/atrac3plus.cpp \
+  $(SRC)/Core/HW/SimpleAT3Dec.cpp \
   $(SRC)/Core/HW/AsyncIOManager.cpp \
   $(SRC)/Core/HW/MemoryStick.cpp \
   $(SRC)/Core/HW/MpegDemux.cpp.arm \

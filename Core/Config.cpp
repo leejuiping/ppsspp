@@ -185,14 +185,25 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 	sound->Get("Enable", &bEnableSound, true);
-	sound->Get("EnableAtrac3plus", &bEnableAtrac3plus, true);
 	sound->Get("VolumeBGM", &iBGMVolume, 7);
 	sound->Get("VolumeSFX", &iSFXVolume, 7);
 	sound->Get("LowLatency", &bLowLatencyAudio, false);
 
 	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 	control->Get("HapticFeedback", &bHapticFeedback, true);
-	control->Get("ShowAnalogStick", &bShowAnalogStick, true);
+	control->Get("ShowAnalogStick", &bShowTouchAnalogStick, true);
+	control->Get("ShowTouchCross", &bShowTouchCross, true);
+	control->Get("ShowTouchCircle", &bShowTouchCircle, true);
+	control->Get("ShowTouchSquare", &bShowTouchSquare, true);
+	control->Get("ShowTouchTriangle", &bShowTouchTriangle, true);
+	control->Get("ShowTouchStart", &bShowTouchStart, true);
+	control->Get("ShowTouchSelect", &bShowTouchSelect, true);
+	control->Get("ShowTouchLTrigger", &bShowTouchLTrigger, true);
+	control->Get("ShowTouchRTrigger", &bShowTouchRTrigger, true);
+	control->Get("ShowAnalogStick", &bShowTouchAnalogStick, true);
+	control->Get("ShowTouchDpad", &bShowTouchDpad, true);
+	control->Get("ShowTouchUnthrottle", &bShowTouchUnthrottle, true);
+
 #if defined(USING_GLES2)
 	std::string name = System_GetProperty(SYSPROP_NAME);
 	if (KeyMap::HasBuiltinController(name)) {
@@ -210,7 +221,28 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 #endif
 	control->Get("TouchButtonOpacity", &iTouchButtonOpacity, 65);
 	control->Get("ButtonScale", &fButtonScale, 1.15);
-
+	//set these to -1 if not initialized. initializing these
+	//requires pixel coordinates which is not known right now.
+	//will be initialized in GamepadEmu::CreatePadLayout
+	control->Get("ActionButtonSpacing", &iActionButtonSpacing, -1);
+	control->Get("ActionButtonCenterX", &iActionButtonCenterX, -1);
+	control->Get("ActionButtonCenterY", &iActionButtonCenterY, -1);
+	control->Get("DPadRadius", &iDpadRadius, -1);
+	control->Get("DPadX", &iDpadX, -1);
+	control->Get("DPadY", &iDpadY, -1);
+	control->Get("StartKeyX", &iStartKeyX, -1);
+	control->Get("StartKeyY", &iStartKeyY, -1);
+	control->Get("SelectKeyX", &iSelectKeyX, -1);
+	control->Get("SelectKeyY", &iSelectKeyY, -1);
+	control->Get("UnthrottleKeyX", &iUnthrottleKeyX, -1);
+	control->Get("UnthrottleKeyY", &iUnthrottleKeyY, -1);
+	control->Get("LKeyX", &iLKeyX, -1);
+	control->Get("LKeyY", &iLKeyY, -1);
+	control->Get("RKeyX", &iRKeyX, -1);
+	control->Get("RKeyY", &iRKeyY, -1);
+	control->Get("AnalogStickX", &iAnalogStickX, -1);
+	control->Get("AnalogStickY", &iAnalogStickY, -1);
+	
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 	pspConfig->Get("NickName", &sNickName, "PPSSPP");
 	pspConfig->Get("Language", &iLanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
@@ -354,15 +386,25 @@ void Config::Save() {
 
 		IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
 		sound->Set("Enable", bEnableSound);
-		sound->Set("EnableAtrac3plus", bEnableAtrac3plus);
 		sound->Set("VolumeBGM", iBGMVolume);
 		sound->Set("VolumeSFX", iSFXVolume);
 		sound->Set("LowLatency", bLowLatencyAudio);
 
 		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
 		control->Set("HapticFeedback", bHapticFeedback);
-		control->Set("ShowAnalogStick", bShowAnalogStick);
 		control->Set("ShowTouchControls", bShowTouchControls);
+		control->Set("ShowTouchCross", bShowTouchCross);
+		control->Set("ShowTouchCircle", bShowTouchCircle);
+		control->Set("ShowTouchSquare", bShowTouchSquare);
+		control->Set("ShowTouchTriangle", bShowTouchTriangle);
+		control->Set("ShowTouchStart", bShowTouchStart);
+		control->Set("ShowTouchSelect", bShowTouchSelect);
+		control->Set("ShowTouchLTrigger", bShowTouchLTrigger);
+		control->Set("ShowTouchRTrigger", bShowTouchRTrigger);
+		control->Set("ShowAnalogStick", bShowTouchAnalogStick);
+		control->Set("ShowTouchUnthrottle", bShowTouchUnthrottle);
+		control->Set("ShowTouchDpad", bShowTouchDpad);
+
 		// control->Set("KeyMapping",iMappingMap);
 #ifdef USING_GLES2
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
@@ -370,6 +412,25 @@ void Config::Save() {
 #endif
 		control->Set("TouchButtonOpacity", iTouchButtonOpacity);
 		control->Set("ButtonScale", fButtonScale);
+		control->Set("ActionButtonSpacing", iActionButtonSpacing);
+		control->Set("ActionButtonCenterX", iActionButtonCenterX);
+		control->Set("ActionButtonCenterY", iActionButtonCenterY);
+		control->Set("DPadRadius", iDpadRadius);
+		control->Set("DPadX", iDpadX);
+		control->Set("DPadY", iDpadY);
+		control->Set("StartKeyX", iStartKeyX);
+		control->Set("StartKeyY", iStartKeyY);
+		control->Set("SelectKeyX", iSelectKeyX);
+		control->Set("SelectKeyY", iSelectKeyY);
+		control->Set("UnthrottleKeyX", iUnthrottleKeyX);
+		control->Set("UnthrottleKeyY", iUnthrottleKeyY);
+		control->Set("LKeyX", iLKeyX);
+		control->Set("LKeyY", iLKeyY);
+		control->Set("RKeyX", iRKeyX);
+		control->Set("RKeyY", iRKeyY);
+		control->Set("AnalogStickX", iAnalogStickX);
+		control->Set("AnalogStickY", iAnalogStickY);
+
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("NickName", sNickName.c_str());

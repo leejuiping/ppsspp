@@ -45,20 +45,21 @@ private:
 	UI::TextView *tvTitle_;
 	UI::TextView *tvGameSize_;
 	UI::CheckBox *enableReportsCheckbox_;
+	UI::Choice *layoutEditorChoice_;
 
 	// Event handlers
-	UI::EventReturn OnDownloadPlugin(UI::EventParams &e);
 	UI::EventReturn OnControlMapping(UI::EventParams &e);
+	UI::EventReturn OnTouchControlLayout(UI::EventParams &e);
 	UI::EventReturn OnDumpNextFrameToLog(UI::EventParams &e);
 	UI::EventReturn OnBack(UI::EventParams &e);
 	UI::EventReturn OnReloadCheats(UI::EventParams &e);
+	UI::EventReturn OnToggleTouchControls(UI::EventParams &e);
 
 	// Global settings handlers
 	UI::EventReturn OnLanguage(UI::EventParams &e);
 	UI::EventReturn OnLanguageChange(UI::EventParams &e);
 	UI::EventReturn OnPostProcShader(UI::EventParams &e);
 	UI::EventReturn OnPostProcShaderChange(UI::EventParams &e);
-	UI::EventReturn OnFactoryReset(UI::EventParams &e);
 	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
 	UI::EventReturn OnChangeNickname(UI::EventParams &e);
 	UI::EventReturn OnClearRecents(UI::EventParams &e);

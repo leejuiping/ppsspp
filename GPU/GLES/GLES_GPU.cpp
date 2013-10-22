@@ -1517,7 +1517,7 @@ void GLES_GPU::DoBlockTransfer() {
 		return;
 	}
 	
-	// Do the copy!
+	// Do the copy! (Hm, if we detect a drawn video frame (see below) then we could maybe skip this?)
 	for (int y = 0; y < height; y++) {
 		const u8 *src = Memory::GetPointer(srcBasePtr + ((y + srcY) * srcStride + srcX) * bpp);
 		u8 *dst = Memory::GetPointer(dstBasePtr + ((y + dstY) * dstStride + dstX) * bpp);
@@ -1576,8 +1576,11 @@ void GLES_GPU::Resized() {
 	framebufferManager_.Resized();
 }
 
-std::vector<FramebufferInfo> GLES_GPU::GetFramebufferList()
-{
+void GLES_GPU::ClearShaderCache() {
+	shaderManager_->ClearCache(true);
+}
+
+std::vector<FramebufferInfo> GLES_GPU::GetFramebufferList() {
 	return framebufferManager_.GetFramebufferList();
 }
 

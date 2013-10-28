@@ -20,25 +20,15 @@
 #include "base/functional.h"
 #include "ui/view.h"
 #include "MiscScreens.h"
-#include <vector>
 
-class DragDropButton;
-
-class TouchControlLayoutScreen : public UIDialogScreenWithBackground {
+class TiltAnalogSettingsScreen : public UIDialogScreenWithBackground {
 public:
-	TouchControlLayoutScreen();
+	TiltAnalogSettingsScreen() : currentTiltX_(0), currentTiltY_(0) {}
 
 	virtual void CreateViews();
-	virtual void touch(const TouchInput &touch);
-	virtual void dialogFinished(const Screen *dialog, DialogResult result);
-	virtual void onFinish(DialogResult reason);
-
-protected:
-	virtual UI::EventReturn OnReset(UI::EventParams &e);
-	virtual UI::EventReturn OnVisibility(UI::EventParams &e);
-
+	virtual void update(InputState &input);
 private:
-	DragDropButton *pickedControl_;
-	std::vector<DragDropButton *> controls_;
-	DragDropButton *getPickedControl(const int x, const int y);
+	UI::EventReturn OnCalibrate(UI::EventParams &e);
+	float currentTiltX_, currentTiltY_;
 };
+

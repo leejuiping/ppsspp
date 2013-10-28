@@ -31,6 +31,7 @@
 #include "UI/DevScreens.h"
 #include "UI/TouchControlLayoutScreen.h"
 #include "UI/TouchControlVisibilityScreen.h"
+#include "UI/TiltAnalogSettingsScreen.h"
 
 #include "Core/Config.h"
 #include "Core/Host.h"
@@ -57,7 +58,7 @@ void GameSettingsScreen::CreateViews() {
 	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, true);
 
 	cap60FPS_ = g_Config.iForceMaxEmulatedFPS == 60;
-	
+
 	iAlternateSpeedPercent_ = 3;
 	for (int i = 0; i < 8; i++) {
 		if (g_Config.iFpsLimit <= alternateSpeedTable[i]) {
@@ -168,7 +169,11 @@ void GameSettingsScreen::CreateViews() {
 		prescale->SetEnabled(false);
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Overlay Information")));
-	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"};
+	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"
+#ifdef BLACKBERRY
+	                                   , "Statistics"
+#endif
+	                                  };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gs, screenManager()));
 	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")));
 
@@ -213,7 +218,9 @@ void GameSettingsScreen::CreateViews() {
 #ifdef USING_GLES2
 	controlsSettings->Add(new CheckBox(&g_Config.bHapticFeedback, c->T("HapticFeedback", "Haptic Feedback (vibration)")));
 	controlsSettings->Add(new CheckBox(&g_Config.bAccelerometerToAnalogHoriz, c->T("Tilt", "Tilt to Analog (horizontal)")));
-	controlsSettings->Add(new PopupSliderChoice(&g_Config.iTiltSensitivity, 10, 200, c->T("Tilt Sensitivity"), screenManager()));
+	Choice *tiltAnalog = controlsSettings->Add(new Choice(c->T("Customize tilt")));
+	tiltAnalog->OnClick.Handle(this, &GameSettingsScreen::OnTiltAnalogSettings);
+	tiltAnalog->SetEnabled(g_Config.bAccelerometerToAnalogHoriz);
 #endif
 	controlsSettings->Add(new ItemHeader(c->T("OnScreen", "On-Screen Touch Controls")));
 	controlsSettings->Add(new CheckBox(&g_Config.bShowTouchControls, c->T("OnScreen", "On-Screen Touch Controls")))->OnClick.Handle(this, &GameSettingsScreen::OnToggleTouchControls);
@@ -387,18 +394,6 @@ void GameSettingsScreen::onFinish(DialogResult result) {
 	KeyMap::UpdateConfirmCancelKeys();
 }
 
-UI::EventReturn GameSettingsScreen::OnBack(UI::EventParams &e) {
-	// If we're in-game, return to the game via DR_CANCEL.
-	if (PSP_IsInited()) {
-		screenManager()->finishDialog(this, DR_CANCEL);
-		host->UpdateScreen();
-	} else {
-		screenManager()->finishDialog(this, DR_OK);
-	}
-
-	return UI::EVENT_DONE;
-}
-
 /*
 void GlobalSettingsScreen::CreateViews() {
 	using namespace UI;
@@ -469,6 +464,11 @@ UI::EventReturn GameSettingsScreen::OnTouchControlLayout(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 };
 
+UI::EventReturn GameSettingsScreen::OnTiltAnalogSettings(UI::EventParams &e){
+	screenManager()->push(new TiltAnalogSettingsScreen());
+	return UI::EVENT_DONE;
+};
+
 void DeveloperToolsScreen::CreateViews() {
 	using namespace UI;
 	root_ = new ScrollView(ORIENT_VERTICAL);
@@ -512,6 +512,7 @@ void DeveloperToolsScreen::CreateViews() {
 	list->Add(new ItemHeader(de->T("Language")));
 	list->Add(new Choice(de->T("Load language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnLoadLanguageIni);
 	list->Add(new Choice(de->T("Save language ini")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSaveLanguageIni);
+	list->Add(new ItemHeader(""));
 	list->Add(new Choice(d->T("Back")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 }
 

@@ -53,7 +53,6 @@ private:
 	UI::EventReturn OnTouchControlLayout(UI::EventParams &e);
 	UI::EventReturn OnDumpNextFrameToLog(UI::EventParams &e);
 	UI::EventReturn OnReloadCheats(UI::EventParams &e);
-	UI::EventReturn OnToggleTouchControls(UI::EventParams &e);
 	UI::EventReturn OnTiltAnalogSettings(UI::EventParams &e);
 
 	// Global settings handlers
@@ -64,11 +63,11 @@ private:
 	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
 	UI::EventReturn OnChangeNickname(UI::EventParams &e);
 	UI::EventReturn OnClearRecents(UI::EventParams &e);
-	UI::EventReturn OnRenderingMode(UI::EventParams &e);
 	UI::EventReturn OnFullscreenChange(UI::EventParams &e);
 	UI::EventReturn OnResolutionChange(UI::EventParams &e);
 	UI::EventReturn OnShaderChange(UI::EventParams &e);
 	UI::EventReturn OnRestoreDefaultSettings(UI::EventParams &e);
+	UI::EventReturn OnRenderingMode(UI::EventParams &e);
 
 	// Temporaries to convert bools to int settings
 	bool cap60FPS_;

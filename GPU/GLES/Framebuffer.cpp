@@ -63,18 +63,32 @@ static const char tex_fs[] =
 	"uniform sampler2D sampler0;\n"
 	"varying vec2 v_texcoord0;\n"
 	"void main() {\n"
-	"	gl_FragColor.rgb = texture2D(sampler0, v_texcoord0).rgb;\n"
-	"	gl_FragColor.a = 1.0;\n"
+	"  gl_FragColor.rgb = texture2D(sampler0, v_texcoord0).rgb;\n"
+	"  gl_FragColor.a = 1.0;\n"
 	"}\n";
 
 static const char basic_vs[] =
 	"attribute vec4 a_position;\n"
 	"attribute vec2 a_texcoord0;\n"
-	"uniform mat4 u_viewproj;\n"
 	"varying vec2 v_texcoord0;\n"
 	"void main() {\n"
 	"  v_texcoord0 = a_texcoord0;\n"
-	"  gl_Position = u_viewproj * a_position;\n"
+	"  gl_Position = a_position;\n"
+	"}\n";
+
+static const char color_fs[] =
+#ifdef USING_GLES2
+	"precision mediump float;\n"
+#endif
+	"uniform vec4 u_color;\n"
+	"void main() {\n"
+	"  gl_FragColor.rgba = u_color;\n"
+	"}\n";
+
+static const char color_vs[] =
+	"attribute vec4 a_position;\n"
+	"void main() {\n"
+	"  gl_Position = a_position;\n"
 	"}\n";
 
 // Aggressively delete unused FBO:s to save gpu memory.
@@ -174,6 +188,14 @@ void FramebufferManager::CompileDraw2DProgram() {
 		} else {
 			glsl_bind(draw2dprogram_);
 			glUniform1i(draw2dprogram_->sampler0, 0);
+		}
+
+		plainColorProgram_ = glsl_create_source(color_vs, color_fs, &errorString);
+		if (!plainColorProgram_) {
+			ERROR_LOG_REPORT(G3D, "Failed to compile plainColorProgram! This shouldn't happen.\n%s", errorString.c_str());
+		} else {
+			glsl_bind(plainColorProgram_);
+			plainColorLoc_ = glsl_uniform_loc(plainColorProgram_, "u_color");
 		}
 
 		SetNumExtraFBOs(0);
@@ -398,6 +420,42 @@ void FramebufferManager::DrawPixels(const u8 *framebuf, GEBufferFormat pixelForm
 	}
 }
 
+void FramebufferManager::DrawPlainColor(u32 color) {
+	// Cannot take advantage of scissor + clear here - this has to be a regular draw so that
+	// stencil can be used and abused, as that's what we're gonna use this for.
+	static const float pos[12] = {
+		-1,-1,-1,
+		1,-1,-1,
+		1,1,-1,
+		-1,1,-1
+	};
+	static const GLubyte indices[4] = {0,1,3,2};
+
+	GLSLProgram *program = 0;
+	if (!draw2dprogram_) {
+		CompileDraw2DProgram();
+	}
+	program = plainColorProgram_;
+
+	const float col[4] = {
+		((color & 0xFF)) / 255.0f,
+		((color & 0xFF00) >> 8) / 255.0f,
+		((color & 0xFF0000) >> 16) / 255.0f,
+		((color & 0xFF000000) >> 24) / 255.0f,
+	};
+
+	glsl_bind(program);
+	glUniform4fv(plainColorLoc_, 1, col);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glEnableVertexAttribArray(program->a_position);
+	glVertexAttribPointer(program->a_position, 3, GL_FLOAT, GL_FALSE, 12, pos);
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, indices);
+	glDisableVertexAttribArray(program->a_position);
+
+	glsl_unbind();
+}
+
 void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip, float uscale, float vscale, GLSLProgram *program) {
 	if (texture) {
 		// We know the texture, we can do a DrawTexture shortcut on nvidia.
@@ -421,10 +479,20 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 	float v1 = flip ? 1.0f : 1.0f - vscale;
 	float v2 = flip ? 1.0f - vscale : 1.0f;
 
-	const float pos[12] = {x,y,0, x+w,y,0, x+w,y+h,0, x,y+h,0};
-	const float texCoords[8] = {0,v1, u2,v1, u2,v2, 0,v2};
-	const GLubyte indices[4] = {0,1,3,2};
+	float pos[12] = {
+		x,y,0,
+		x+w,y,0,
+		x+w,y+h,0,
+		x,y+h,0
+	};
 
+	for (int i = 0; i < 4; i++) {
+		pos[i * 3] = pos[i * 3] / (destW * 0.5) - 1.0f;
+		pos[i * 3 + 1] = -(pos[i * 3 + 1] / (destH * 0.5) - 1.0f);
+	}
+
+	const float texCoords[8] = {0,v1, u2,v1, u2,v2, 0,v2};
+	static const GLubyte indices[4] = {0,1,3,2};
 	if (!program) {
 		if (!draw2dprogram_) {
 			CompileDraw2DProgram();
@@ -434,9 +502,6 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 	}
 
 	glsl_bind(program);
-	Matrix4x4 ortho;
-	ortho.setOrtho(0, destW, destH, 0, -1, 1);
-	glUniformMatrix4fv(program->u_viewproj, 1, GL_FALSE, ortho.getReadPtr());
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	glEnableVertexAttribArray(program->a_position);
@@ -543,6 +608,31 @@ void FramebufferManager::SetRenderFrameBuffer() {
 			currentRenderVfb_->reallyDirtyAfterDisplay = true;
 		return;
 	}
+
+	if (g_Config.iRenderingMode != 0 && g_Config.bWipeFramebufferAlpha && currentRenderVfb_) {
+		// Hack is enabled, and there was a previous framebuffer.
+		// Before we switch, let's do a series of trickery to copy one bit of stencil to
+		// destination alpha. Or actually, this is just a bunch of hackery attempts on Wipeout.
+		// Ignore for now.
+		/*
+		glstate.depthTest.disable();
+		glstate.colorMask.set(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+		glstate.stencilTest.enable();
+		glstate.stencilOp.set(GL_KEEP, GL_KEEP, GL_KEEP);  // don't modify stencil§
+		glstate.stencilFunc.set(GL_GEQUAL, 0xFE, 0xFF);
+		DrawPlainColor(0x00000000);
+		//glstate.stencilFunc.set(GL_LESS, 0x80, 0xFF);
+		//DrawPlainColor(0xFF000000);
+		glstate.stencilTest.disable();
+		glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		*/
+
+		glstate.depthTest.disable();
+		glstate.colorMask.set(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+		DrawPlainColor(0x00000000);
+		shaderManager_->DirtyLastShader();  // dirty lastShader_
+	}
+
 	gstate_c.framebufChanged = false;
 
 	// Get parameters
@@ -835,7 +925,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 			// These are in the output display coordinates
 			DrawActiveTexture(colorTexture, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, true, 480.0f / (float)vfb->width, 272.0f / (float)vfb->height);
 		} else if (usePostShader_ && extraFBOs_.size() == 1 && !postShaderAtOutputResolution_) {
-			// An additional pass, FXAA to the extra FBO.
+			// An additional pass, post-processing shader to the extra FBO.
 			fbo_bind_as_render_target(extraFBOs_[0]);
 			int fbo_w, fbo_h;
 			fbo_get_dimensions(extraFBOs_[0], &fbo_w, &fbo_h);
@@ -844,7 +934,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 
 			fbo_unbind();
 
-			// Use the extra FBO, with applied FXAA, as a texture.
+			// Use the extra FBO, with applied post-processing shader, as a texture.
 			// fbo_bind_color_as_texture(extraFBOs_[0], 0);
 			if (extraFBOs_.size() == 0) {
 				ERROR_LOG(G3D, "WTF?");

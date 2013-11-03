@@ -473,6 +473,10 @@ void CtrlDisAsmView::assembleOpcode(u32 address, std::string defaultText)
 		if (MIPSComp::jit)
 			MIPSComp::jit->ClearCacheAt(address - 4, 8);
 		scanFunctions();
+
+		if (address == curAddress)
+			gotoAddr(curAddress+4);
+
 		redraw();
 	} else {
 		std::wstring error = ConvertUTF8ToWString(MIPSAsm::GetAssembleError());
@@ -994,9 +998,7 @@ void CtrlDisAsmView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 		switch(TrackPopupMenuEx(GetSubMenu(g_hPopupMenus,1),TPM_RIGHTBUTTON|TPM_RETURNCMD,pt.x,pt.y,wnd,0))
 		{
 		case ID_DISASM_GOTOINMEMORYVIEW:
-			for (int i=0; i<numCPUs; i++)
-				if (memoryWindow[i])
-					memoryWindow[i]->Goto(curAddress);
+			SendMessage(GetParent(wnd),WM_DEB_GOTOHEXEDIT,curAddress,0);
 			break;
 		case ID_DISASM_ADDHLE:
 			break;

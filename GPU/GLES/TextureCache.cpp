@@ -44,6 +44,10 @@
 // Try to be prime to other decimation intervals.
 #define TEXCACHE_DECIMATION_INTERVAL 13
 
+#ifndef GL_UNPACK_ROW_LENGTH
+#define GL_UNPACK_ROW_LENGTH 0x0CF2
+#endif
+
 extern int g_iNumVideos;
 
 TextureCache::TextureCache() : clearCacheNextFrame_(false), lowMemoryMode_(false), clutBuf_(NULL) {
@@ -53,14 +57,15 @@ TextureCache::TextureCache() : clearCacheNextFrame_(false), lowMemoryMode_(false
 	tmpTexBuf32.resize(1024 * 512);  // 2MB
 	tmpTexBuf16.resize(1024 * 512);  // 1MB
 	tmpTexBufRearrange.resize(1024 * 512);   // 2MB
-	clutBufConverted_ = new u32[4096];  // 16KB
-	clutBufRaw_ = new u32[4096];  // 16KB
+	clutBufConverted_ = (u32 *)AllocateAlignedMemory(4096 * sizeof(u32), 16);  // 16KB
+	clutBufRaw_ = (u32 *)AllocateAlignedMemory(4096 * sizeof(u32), 16);  // 16KB
 	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisotropyLevel);
+	SetupQuickTexHash();
 }
 
 TextureCache::~TextureCache() {
-	delete [] clutBufConverted_;
-	delete [] clutBufRaw_;
+	FreeAlignedMemory(clutBufConverted_);
+	FreeAlignedMemory(clutBufRaw_);
 }
 
 void TextureCache::Clear(bool delete_them) {
@@ -527,11 +532,31 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 static void ConvertColors(void *dstBuf, const void *srcBuf, GLuint dstFmt, int numPixels) {
 	const u32 *src = (const u32 *)srcBuf;
 	u32 *dst = (u32 *)dstBuf;
-	// TODO: All these can be further sped up with SSE or NEON.
+	// TODO: NEON.
 	switch (dstFmt) {
 	case GL_UNSIGNED_SHORT_4_4_4_4:
 		{
-			for (int i = 0; i < (numPixels + 1) / 2; i++) {
+#ifdef _M_SSE
+			const __m128i maskB = _mm_set1_epi16(0x00F0);
+			const __m128i maskG = _mm_set1_epi16(0x0F00);
+
+			__m128i *srcp = (__m128i *)src;
+			__m128i *dstp = (__m128i *)dst;
+			const int sseChunks = numPixels / 8;
+			for (int i = 0; i < sseChunks; ++i) {
+				__m128i c = _mm_load_si128(&srcp[i]);
+				__m128i v = _mm_srli_epi16(c, 12);
+				v = _mm_or_si128(v, _mm_and_si128(_mm_srli_epi16(c, 4), maskB));
+				v = _mm_or_si128(v, _mm_and_si128(_mm_slli_epi16(c, 4), maskG));
+				v = _mm_or_si128(v, _mm_slli_epi16(c, 12));
+				_mm_store_si128(&dstp[i], v);
+			}
+			// The remainder is done in chunks of 2, SSE was chunks of 8.
+			int i = sseChunks * 8 / 2;
+#else
+			int i = 0;
+#endif
+			for (; i < (numPixels + 1) / 2; i++) {
 				u32 c = src[i];
 				dst[i] = ((c >> 12) & 0x000F000F) |
 				       ((c >> 4)  & 0x00F000F0) |
@@ -540,9 +565,30 @@ static void ConvertColors(void *dstBuf, const void *srcBuf, GLuint dstFmt, int n
 			}
 		}
 		break;
+	// Final Fantasy 2 uses this heavily in animated textures.
 	case GL_UNSIGNED_SHORT_5_5_5_1:
 		{
-			for (int i = 0; i < (numPixels + 1) / 2; i++) {
+#ifdef _M_SSE
+			const __m128i maskB = _mm_set1_epi16(0x003E);
+			const __m128i maskG = _mm_set1_epi16(0x07C0);
+
+			__m128i *srcp = (__m128i *)src;
+			__m128i *dstp = (__m128i *)dst;
+			const int sseChunks = numPixels / 8;
+			for (int i = 0; i < sseChunks; ++i) {
+				__m128i c = _mm_load_si128(&srcp[i]);
+				__m128i v = _mm_srli_epi16(c, 15);
+				v = _mm_or_si128(v, _mm_and_si128(_mm_srli_epi16(c, 9), maskB));
+				v = _mm_or_si128(v, _mm_and_si128(_mm_slli_epi16(c, 1), maskG));
+				v = _mm_or_si128(v, _mm_slli_epi16(c, 11));
+				_mm_store_si128(&dstp[i], v);
+			}
+			// The remainder is done in chunks of 2, SSE was chunks of 8.
+			int i = sseChunks * 8 / 2;
+#else
+			int i = 0;
+#endif
+			for (; i < (numPixels + 1) / 2; i++) {
 				u32 c = src[i];
 				dst[i] = ((c >> 15) & 0x00010001) |
 				       ((c >> 9)  & 0x003E003E) |
@@ -553,7 +599,25 @@ static void ConvertColors(void *dstBuf, const void *srcBuf, GLuint dstFmt, int n
 		break;
 	case GL_UNSIGNED_SHORT_5_6_5:
 		{
-			for (int i = 0; i < (numPixels + 1) / 2; i++) {
+#ifdef _M_SSE
+			const __m128i maskG = _mm_set1_epi16(0x07E0);
+
+			__m128i *srcp = (__m128i *)src;
+			__m128i *dstp = (__m128i *)dst;
+			const int sseChunks = numPixels / 8;
+			for (int i = 0; i < sseChunks; ++i) {
+				__m128i c = _mm_load_si128(&srcp[i]);
+				__m128i v = _mm_srli_epi16(c, 11);
+				v = _mm_or_si128(v, _mm_and_si128(c, maskG));
+				v = _mm_or_si128(v, _mm_slli_epi16(c, 11));
+				_mm_store_si128(&dstp[i], v);
+			}
+			// The remainder is done in chunks of 2, SSE was chunks of 8.
+			int i = sseChunks * 8 / 2;
+#else
+			int i = 0;
+#endif
+			for (; i < (numPixels + 1) / 2; i++) {
 				u32 c = src[i];
 				dst[i] = ((c >> 11) & 0x001F001F) |
 				       ((c >> 0)  & 0x07E007E0) |
@@ -619,33 +683,8 @@ static inline u32 QuickClutHash(const u8 *clut, u32 bytes) {
 static inline u32 QuickTexHash(u32 addr, int bufw, int w, int h, GETextureFormat format) {
 	const u32 sizeInRAM = (textureBitsPerPixel[format] * bufw * h) / 8;
 	const u32 *checkp = (const u32 *) Memory::GetPointer(addr);
-	u32 check = 0;
 
-#ifdef _M_SSE
-	// Make sure both the size and start are aligned, OR will get either.
-	if ((((u32)(intptr_t)checkp | sizeInRAM) & 0x1f) == 0) {
-		__m128i cursor = _mm_set1_epi32(0);
-		const __m128i *p = (const __m128i *)checkp;
-		for (u32 i = 0; i < sizeInRAM / 16; i += 2) {
-			cursor = _mm_add_epi32(cursor, _mm_load_si128(&p[i]));
-			cursor = _mm_xor_si128(cursor, _mm_load_si128(&p[i + 1]));
-		}
-		// Add the four parts into the low i32.
-		cursor = _mm_add_epi32(cursor, _mm_srli_si128(cursor, 8));
-		cursor = _mm_add_epi32(cursor, _mm_srli_si128(cursor, 4));
-		check = _mm_cvtsi128_si32(cursor);
-	} else {
-#else
-	// TODO: ARM NEON implementation (using CPUDetect to be sure it has NEON.)
-	{
-#endif
-		for (u32 i = 0; i < sizeInRAM / 8; ++i) {
-			check += *checkp++;
-			check ^= *checkp++;
-		}
-	}
-
-	return check;
+	return DoQuickTexHash(checkp, sizeInRAM);
 }
 
 inline bool TextureCache::TexCacheEntry::Matches(u16 dim2, u8 format2, int maxLevel2) {
@@ -1141,12 +1180,14 @@ GLenum TextureCache::GetDestFormat(GETextureFormat format, GEPaletteFormat clutF
 	}
 }
 
-void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat clutformat, int level, u32 &texByteAlign, GLenum dstFmt) {
+void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat clutformat, int level, u32 &texByteAlign, GLenum dstFmt, int *bufwout) {
 	void *finalBuf = NULL;
 
 	u32 texaddr = gstate.getTextureAddress(level);
 
 	int bufw = GetTextureBufw(level, texaddr, format);
+	if (bufwout)
+		*bufwout = bufw;
 	int w = gstate.getTextureWidth(level);
 	int h = gstate.getTextureHeight(level);
 	const u8 *texptr = Memory::GetPointer(texaddr);
@@ -1246,7 +1287,7 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 	case GE_TFMT_8888:
 		if (!gstate.isTextureSwizzled()) {
 			// Special case: if we don't need to deal with packing, we don't need to copy.
-			if (w == bufw) {
+			if ((g_Config.iTexScalingLevel == 1 && gl_extensions.EXT_unpack_subimage) || w == bufw) {
 				finalBuf = Memory::GetPointer(texaddr);
 			} else {
 				int len = bufw * h;
@@ -1260,7 +1301,6 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 			tmpTexBuf32.resize(std::max(bufw, w) * h);
 			finalBuf = UnswizzleFromMem(texaddr, bufw, 4, level);
 		}
-		ConvertColors(finalBuf, finalBuf, dstFmt, bufw * h);
 		break;
 
 	case GE_TFMT_DXT1:
@@ -1332,7 +1372,7 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 		ERROR_LOG_REPORT(G3D, "NO finalbuf! Will crash!");
 	}
 
-	if (w != bufw) {
+	if ((g_Config.iTexScalingLevel != 1 || !gl_extensions.EXT_unpack_subimage) && w != bufw) {
 		int pixelSize;
 		switch (dstFmt) {
 		case GL_UNSIGNED_SHORT_4_4_4_4:
@@ -1428,7 +1468,8 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 	// TODO: Look into using BGRA for 32-bit textures when the GL_EXT_texture_format_BGRA8888 extension is available, as it's faster than RGBA on some chips.
 
 	GEPaletteFormat clutformat = gstate.getClutPaletteFormat();
-	void *finalBuf = DecodeTextureLevel(GETextureFormat(entry.format), clutformat, level, texByteAlign, dstFmt);
+	int bufw;
+	void *finalBuf = DecodeTextureLevel(GETextureFormat(entry.format), clutformat, level, texByteAlign, dstFmt, &bufw);
 	if (finalBuf == NULL) {
 		return;
 	}
@@ -1439,11 +1480,13 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 	gpuStats.numTexturesDecoded++;
 
 	// Can restore these and remove the fixup at the end of DecodeTextureLevel on desktop GL and GLES 3.
-	// glPixelStorei(GL_UNPACK_ROW_LENGTH, bufw);
-	// glPixelStorei(GL_PACK_ROW_LENGTH, bufw);
+	bool useUnpack = false;
+	if ((g_Config.iTexScalingLevel == 1 && gl_extensions.EXT_unpack_subimage) && w != bufw) {
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, bufw);
+		useUnpack = true;
+	}
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, texByteAlign);
-	glPixelStorei(GL_PACK_ALIGNMENT, texByteAlign);
 
 	int scaleFactor;
 	//Auto-texture scale upto 5x rendering resolution
@@ -1482,6 +1525,10 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 			// Try again.
 			glTexImage2D(GL_TEXTURE_2D, level, components, w, h, 0, components, dstFmt, pixelData);
 		}
+	}
+
+	if (useUnpack) {
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 	}
 }
 

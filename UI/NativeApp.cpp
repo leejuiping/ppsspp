@@ -85,6 +85,12 @@ static UI::Theme ui_theme;
 #include "ios/iOSCoreAudio.h"
 #endif
 
+// https://github.com/richq/android-ndk-profiler
+#ifdef ANDROID_NDK_PROFILER
+#include <stdlib.h>
+#include "android/android-ndk-profiler/prof.h"
+#endif
+
 Texture *uiTexture;
 
 ScreenManager *screenManager;
@@ -97,7 +103,7 @@ bool isJailed;
 
 // Really need to clean this mess of globals up... but instead I add more :P
 bool g_TakeScreenshot;
-
+static bool isOuya;
 recursive_mutex pendingMutex;
 static bool isMessagePending;
 static std::string pendingMessage;
@@ -239,6 +245,12 @@ const std::string NativeProgramPath() {
 
 void NativeInit(int argc, const char *argv[],
 								const char *savegame_directory, const char *external_directory, const char *installID) {
+#ifdef ANDROID_NDK_PROFILER
+	setenv("CPUPROFILE_FREQUENCY", "500", 1);
+	setenv("CPUPROFILE", "/sdcard/gmon.out", 1);
+	monstartup("ppsspp_jni.so");
+#endif
+
 	bool skipLogo = false;
 	EnableFZ();
 	setlocale( LC_ALL, "C" );
@@ -418,8 +430,11 @@ void NativeInit(int argc, const char *argv[],
 	if (skipLogo) {
 		screenManager->switchScreen(new EmuScreen(boot_filename));
 	} else {
-		screenManager->switchScreen(new LogoScreen(boot_filename));
+		screenManager->switchScreen(new LogoScreen());
 	}
+
+	std::string sysName = System_GetProperty(SYSPROP_NAME);
+	isOuya = KeyMap::IsOuya(sysName);
 }
 
 void NativeInitGraphics() {
@@ -631,14 +646,19 @@ void NativeTouch(const TouchInput &touch) {
 }
 
 void NativeKey(const KeyInput &key) {
+	// ILOG("Key code: %i flags: %i", key.keyCode, key.flags);
 	g_buttonTracker.Process(key);
 	if (screenManager)
 		screenManager->key(key);
 }
 
 void NativeAxis(const AxisInput &key) {
+	// ILOG("Axis id: %i value: %f", (int)key.axisId, key.value);
 	if (key.axisId >= JOYSTICK_AXIS_ACCELEROMETER_X && key.axisId <= JOYSTICK_AXIS_ACCELEROMETER_Z)	{
 		// Disable accelerometer as an axis for now.
+		return;
+	}
+	if (isOuya && key.axisId >= JOYSTICK_AXIS_OUYA_UNKNOWN1 && key.axisId <= JOYSTICK_AXIS_OUYA_UNKNOWN4) {
 		return;
 	}
 	if (screenManager)
@@ -668,6 +688,9 @@ void NativeShutdown() {
 	g_Config.Save();
 #ifndef _WIN32
 	LogManager::Shutdown();
+#endif
+#ifdef ANDROID_NDK_PROFILER
+	moncleanup();
 #endif
 	// This means that the activity has been completely destroyed. PPSSPP does not
 	// boot up correctly with "dirty" global variables currently, so we hack around that

@@ -75,6 +75,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	general->Get("EnableCheats", &bEnableCheats, false);
 	general->Get("ScreenshotsAsPNG", &bScreenshotsAsPNG, false);
 	general->Get("StateSlot", &iCurrentStateSlot, 0);
+	general->Get("RewindFlipFrequency", &iRewindFlipFrequency, 0);
 	general->Get("GridView1", &bGridView1, true);
 	general->Get("GridView2", &bGridView2, true);
 	general->Get("GridView3", &bGridView3, true);
@@ -286,6 +287,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	debugConfig->Get("DisplayStatusBar", &bDisplayStatusBar, true);
 	debugConfig->Get("ShowBottomTabTitles",&bShowBottomTabTitles,true);
 	debugConfig->Get("ShowDeveloperMenu", &bShowDeveloperMenu, false);
+	debugConfig->Get("SkipDeadbeefFilling", &bSkipDeadbeefFilling, false);
 
 	IniFile::Section *speedhacks = iniFile.GetOrCreateSection("SpeedHacks");
 	speedhacks->Get("PrescaleUV", &bPrescaleUV, false);
@@ -340,6 +342,7 @@ void Config::Save() {
 		general->Set("EnableCheats", bEnableCheats);
 		general->Set("ScreenshotsAsPNG", bScreenshotsAsPNG);
 		general->Set("StateSlot", iCurrentStateSlot);
+		general->Set("RewindFlipFrequency", iRewindFlipFrequency);
 		general->Set("GridView1", bGridView1);
 		general->Set("GridView2", bGridView2);
 		general->Set("GridView3", bGridView3);
@@ -482,6 +485,7 @@ void Config::Save() {
 		debugConfig->Set("DisplayStatusBar", bDisplayStatusBar);
 		debugConfig->Set("ShowBottomTabTitles",bShowBottomTabTitles);
 		debugConfig->Set("ShowDeveloperMenu", bShowDeveloperMenu);
+		debugConfig->Set("SkipDeadbeefFilling", bSkipDeadbeefFilling);
 
 		IniFile::Section *speedhacks = iniFile.GetOrCreateSection("SpeedHacks");
 		speedhacks->Set("PrescaleUV", bPrescaleUV);

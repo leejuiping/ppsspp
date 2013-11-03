@@ -1279,6 +1279,8 @@ bool __KernelLoadExec(const char *filename, u32 paramPtr, std::string *error_str
 
 	if (param_argp) delete[] param_argp;
 	if (param_key) delete[] param_key;
+
+	hleSkipDeadbeef();
 	return true;
 }
 
@@ -1601,6 +1603,7 @@ u32 sceKernelStopUnloadSelfModuleWithStatus(u32 exitCode, u32 argSize, u32 argp,
 void __KernelReturnFromModuleFunc()
 {
 	// Return from the thread as normal.
+	hleSkipDeadbeef();
 	__KernelReturnFromThread();
 
 	SceUID leftModuleID = __KernelGetCurThreadModuleId();

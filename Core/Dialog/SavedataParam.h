@@ -296,6 +296,7 @@ public:
 	std::string GetSaveDir(SceUtilitySavedataParam* param, int saveId = -1);
 	std::string GetSaveDir(SceUtilitySavedataParam* param, const std::string &saveDirName);
 	bool Delete(SceUtilitySavedataParam* param, int saveId = -1);
+	int DeleteData(SceUtilitySavedataParam* param);
 	bool Save(SceUtilitySavedataParam* param, const std::string &saveDirName, bool secureMode = true);
 	bool Load(SceUtilitySavedataParam* param, const std::string &saveDirName, int saveId = -1, bool secureMode = true);
 	int GetSizes(SceUtilitySavedataParam* param);
@@ -338,6 +339,12 @@ private:
 	void SetFileInfo(int idx, PSPFileInfo &info, std::string saveName);
 	void SetFileInfo(SaveFileInfo &saveInfo, PSPFileInfo &info, std::string saveName);
 	void ClearFileInfo(SaveFileInfo &saveInfo, std::string saveName);
+
+	bool LoadSaveData(SceUtilitySavedataParam *param, const std::string &saveDirName, const std::string dirPath, bool secureMode);
+	void LoadDecryptedSave(SceUtilitySavedataParam *param, u8 *data, u8 *saveData, int &saveSize, bool &saveDone);
+	void LoadNotCryptedSave(SceUtilitySavedataParam *param, u8 *data, u8 *saveData, int &saveSize);
+	void LoadSFO(SceUtilitySavedataParam *param, const std::string dirPath);
+	void LoadFile(const std::string dirPath, const std::string filename, PspUtilitySavedataFileData *fileData);
 
 	int DecryptSave(unsigned int mode, unsigned char *data, int *dataLen, int *alignedLen, unsigned char *cryptkey);
 	int EncryptData(unsigned int mode, unsigned char *data, int *dataLen, int *alignedLen, unsigned char *hash, unsigned char *cryptkey);

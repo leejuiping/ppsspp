@@ -30,7 +30,6 @@ public:
 	virtual void update(InputState &input);
 	virtual void onFinish(DialogResult result);
 
-	UI::Event OnLanguageChanged;
 	UI::Event OnRecentChanged;
 
 protected:
@@ -75,6 +74,7 @@ private:
 	bool cap60FPS_;
 	int iAlternateSpeedPercent_;
 	bool enableReports_;
+	bool showDebugStats_;
 };
 
 /*

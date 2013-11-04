@@ -650,17 +650,8 @@ UI::EventReturn MainScreen::OnGameSelectedInstant(UI::EventParams &e) {
 UI::EventReturn MainScreen::OnGameSettings(UI::EventParams &e) {
 	// screenManager()->push(new SettingsScreen());
 	auto gameSettings = new GameSettingsScreen("", "");
-	gameSettings->OnLanguageChanged.Handle(this, &MainScreen::OnLanguageChange);
 	gameSettings->OnRecentChanged.Handle(this, &MainScreen::OnRecentChange);
 	screenManager()->push(gameSettings);
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn MainScreen::OnLanguageChange(UI::EventParams &e) {
-	RecreateViews();
-	if (host) {
-		host->UpdateUI();
-	}
 	return UI::EVENT_DONE;
 }
 

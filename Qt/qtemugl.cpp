@@ -4,6 +4,7 @@
 
 #include "base/display.h"
 #include "base/timeutil.h"
+#include "Core/Config.h"
 
 QtEmuGL::QtEmuGL(QWidget *parent) :
 	QGLWidget(parent)
@@ -24,16 +25,25 @@ void QtEmuGL::initializeGL()
 }
 void QtEmuGL::paintGL()
 {
+	static double startTime = 0;
 	NativeUpdate(*input_state);
 	NativeRender();
 	EndInputState(input_state);
 
-	time_update();
+	if (globalUIState != UISTATE_INGAME && globalUIState != UISTATE_EXIT) {
+		time_update();
+		double diffTime = time_now_d() - startTime;
+		startTime = time_now_d();
+		int sleepTime = (int) (1000000.0 / 60.0) - (int) (diffTime * 1000000.0);
+		if (sleepTime > 0)
+			usleep(sleepTime);
+	}
 }
 
 void QtEmuGL::mouseDoubleClickEvent(QMouseEvent *)
 {
-	emit doubleClick();
+	if (!g_Config.bShowTouchControls || globalUIState != UISTATE_INGAME)
+		emit doubleClick();
 }
 
 void QtEmuGL::mousePressEvent(QMouseEvent *e)

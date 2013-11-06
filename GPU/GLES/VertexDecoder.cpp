@@ -67,7 +67,9 @@ DecVtxFormat GetTransformedVtxFormat(const DecVtxFormat &fmt) {
 }
 #endif
 
-VertexDecoder::VertexDecoder() : coloff(0), nrmoff(0), posoff(0), jitted_(0) {}
+VertexDecoder::VertexDecoder() : coloff(0), nrmoff(0), posoff(0), jitted_(0) {
+	memset(stats_, 0, sizeof(stats_));
+}
 
 void VertexDecoder::Step_WeightsU8() const
 {
@@ -630,7 +632,7 @@ void VertexDecoder::SetVertexType(u32 fmt, VertexDecoderJitCache *jitCache) {
 		coloff = size;
 		size += colsize[col];
 		if (colalign[col] > biggest)
-			biggest = colalign[col]; 
+			biggest = colalign[col];
 
 		steps_[numSteps_++] = morphcount == 1 ? colstep[col] : colstep_morph[col];
 
@@ -724,10 +726,6 @@ void VertexDecoder::DecodeVerts(u8 *decodedptr, const void *verts, int indexLowe
 	if (jitted_) {
 		// We've compiled the steps into optimized machine code, so just jump!
 		jitted_(ptr_, decoded_, count);
-
-		// Do we need to update the pointers?
-		ptr_ += size * count;
-		decoded_ += stride * count;
 	} else {
 		// Interpret the decode steps
 		for (; count; count--) {
@@ -774,6 +772,11 @@ VertexDecoderJitCache::VertexDecoderJitCache() {
 		MOV(32, R(EAX), R(EBX));
 		RET();
 	}
+#else
+#ifdef ARM
+	BKPT(0);
+	BKPT(0);
+#endif
 #endif
 }
 
@@ -795,7 +798,6 @@ static const ARMReg scratchReg = R6;
 static const ARMReg srcReg = R0;
 static const ARMReg dstReg = R1;
 static const ARMReg counterReg = R2;
-
 
 static const JitLookup jitLookup[] = {
 	{&VertexDecoder::Step_WeightsU8, &VertexDecoderJitCache::Jit_WeightsU8},
@@ -827,8 +829,6 @@ static const JitLookup jitLookup[] = {
 	{&VertexDecoder::Step_PosFloat, &VertexDecoderJitCache::Jit_PosFloat},
 };
 
-
-
 JittedVertexDecoder VertexDecoderJitCache::Compile(const VertexDecoder &dec) {
 	// return 0;
 
@@ -839,14 +839,19 @@ JittedVertexDecoder VertexDecoderJitCache::Compile(const VertexDecoder &dec) {
 
 	SetCC(CC_AL);
 
-	// TODO: Overkill
-	PUSH(8, R4, R5, R6, R7, R8, R9, R10, _LR);
+	PUSH(6, R4, R5, R6, R7, R8, _LR);
+
+	// Preserving our FP scratch register appears to improve stability.
+	VMOV(R7, S0);
 
 	JumpTarget loopStart = GetCodePtr();
 	for (int i = 0; i < dec.numSteps_; i++) {
 		if (!CompileStep(dec, i)) {
 			// Reset the code ptr and return zero to indicate that we failed.
 			SetCodePtr(const_cast<u8 *>(start));
+			char temp[1024] = {0};
+			dec.ToString(temp);
+			INFO_LOG(HLE, "Could not compile vertex decoder: %s", temp);
 			return 0;
 		}
 	}
@@ -856,9 +861,17 @@ JittedVertexDecoder VertexDecoderJitCache::Compile(const VertexDecoder &dec) {
 	SUBS(counterReg, counterReg, 1);
 	B_CC(CC_NEQ, loopStart);
 
-	POP(8, R4, R5, R6, R7, R8, R9, R10, _PC);
-	
+	VMOV(S0, R7); // restore our fp scratch
+
+	EOR(R0, R0, R0);
+	POP(6, R4, R5, R6, R7, R8, _PC);
+
+	FlushIcache();
+
 	// DisassembleArm(start, GetCodePtr() - start);
+	// char temp[1024] = {0};
+	// dec.ToString(temp);
+	// INFO_LOG(HLE, "%s", temp);
 
 	return (JittedVertexDecoder)start;
 }
@@ -912,14 +925,19 @@ void VertexDecoderJitCache::Jit_WeightsFloat() {
 		j++;
 	}
 }
-// Fill last two bytes with zeroes to align to 4 bytes. MOVZX does it for us, handy.
+
+// Fill last two bytes with zeroes to align to 4 bytes. LDRH does it for us, handy.
 void VertexDecoderJitCache::Jit_TcU8() {
-	LDRH(tempReg1, srcReg, dec_->tcoff);
+	LDRB(tempReg1, srcReg, dec_->tcoff);
+	LDRB(tempReg2, srcReg, dec_->tcoff + 1);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 8));
 	STR(tempReg1, dstReg, dec_->decFmt.uvoff);
 }
 
 void VertexDecoderJitCache::Jit_TcU16() {
-	LDR(tempReg1, srcReg, dec_->tcoff);
+	LDRH(tempReg1, srcReg, dec_->tcoff);
+	LDRH(tempReg2, srcReg, dec_->tcoff + 2);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 16));
 	STR(tempReg1, dstReg, dec_->decFmt.uvoff);
 }
 
@@ -931,7 +949,9 @@ void VertexDecoderJitCache::Jit_TcFloat() {
 }
 
 void VertexDecoderJitCache::Jit_TcU16Through() {
-	LDR(tempReg1, srcReg, dec_->tcoff);
+	LDRH(tempReg1, srcReg, dec_->tcoff);
+	LDRH(tempReg2, srcReg, dec_->tcoff + 2);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 16));
 	STR(tempReg1, dstReg, dec_->decFmt.uvoff);
 }
 
@@ -948,8 +968,7 @@ void VertexDecoderJitCache::Jit_Color8888() {
 }
 
 void VertexDecoderJitCache::Jit_Color4444() {
-	// Ignoring the top 16 bits.
-	LDR(tempReg1, srcReg, dec_->coloff);
+	LDRH(tempReg1, srcReg, dec_->coloff);
 
 	// Spread out the components.
 	ANDI2R(tempReg2, tempReg1, 0x000F, scratchReg);
@@ -967,8 +986,7 @@ void VertexDecoderJitCache::Jit_Color4444() {
 }
 
 void VertexDecoderJitCache::Jit_Color565() {
-	// Ignoring the top 16 bits.
-	LDR(tempReg1, srcReg, dec_->coloff);
+	LDRH(tempReg1, srcReg, dec_->coloff);
 
 	// Spread out R and B first.  This puts them in 0x001F001F.
 	ANDI2R(tempReg2, tempReg1, 0x001F, scratchReg);
@@ -978,7 +996,7 @@ void VertexDecoderJitCache::Jit_Color565() {
 	// Expand 5 -> 8.
 	LSL(tempReg3, tempReg2, 3);
 	ORR(tempReg2, tempReg3, Operand2(tempReg2, ST_LSR, 2));
-	ANDI2R(tempReg2, tempReg2, 0x00FF00FF, scratchReg);
+	ANDI2R(tempReg2, tempReg2, 0xFFFF00FF, scratchReg);
 
 	// Now finally G.  We start by shoving it into a wall.
 	LSR(tempReg1, tempReg1, 5);
@@ -995,8 +1013,7 @@ void VertexDecoderJitCache::Jit_Color565() {
 }
 
 void VertexDecoderJitCache::Jit_Color5551() {
-	// Ignoring the top 16 bits.
-	LDR(tempReg1, srcReg, dec_->coloff);
+	LDRH(tempReg1, srcReg, dec_->coloff);
 
 	ANDI2R(tempReg2, tempReg1, 0x001F, scratchReg);
 	ANDI2R(tempReg3, tempReg1, 0x07E0, scratchReg);
@@ -1007,7 +1024,8 @@ void VertexDecoderJitCache::Jit_Color5551() {
 	// Expand 5 -> 8.
 	LSR(tempReg3, tempReg2, 2);
 	// Clean up the bits that were shifted right.
-	ANDI2R(tempReg3, tempReg1, 0x07070707, scratchReg);
+	BIC(tempReg3, tempReg1, AssumeMakeOperand2(0x000000F8));
+	BIC(tempReg3, tempReg3, AssumeMakeOperand2(0x0000F800));
 	ORR(tempReg2, tempReg3, Operand2(tempReg2, ST_LSL, 3));
 
 	// Now we just need alpha.
@@ -1019,23 +1037,33 @@ void VertexDecoderJitCache::Jit_Color5551() {
 	STR(tempReg2, dstReg, dec_->decFmt.c0off);
 }
 
-// Copy 3 bytes and then a zero. Might as well copy four.
 void VertexDecoderJitCache::Jit_NormalS8() {
-	LDR(tempReg1, srcReg, dec_->nrmoff);
-	ANDI2R(tempReg1, tempReg1, 0x00FFFFFF, scratchReg);
+	LDRB(tempReg1, srcReg, dec_->nrmoff);
+	LDRB(tempReg2, srcReg, dec_->nrmoff + 1);
+	LDRB(tempReg3, srcReg, dec_->nrmoff + 2);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 8));
+	ORR(tempReg1, tempReg1, Operand2(tempReg3, ST_LSL, 16));
 	STR(tempReg1, dstReg, dec_->decFmt.nrmoff);
+
+	// Copy 3 bytes and then a zero. Might as well copy four.
+	// LDR(tempReg1, srcReg, dec_->nrmoff);
+	// ANDI2R(tempReg1, tempReg1, 0x00FFFFFF, scratchReg);
+	// STR(tempReg1, dstReg, dec_->decFmt.nrmoff);
 }
 
 // Copy 6 bytes and then 2 zeroes.
 void VertexDecoderJitCache::Jit_NormalS16() {
-	LDR(tempReg1, srcReg, dec_->nrmoff);
-	LDRH(tempReg2, srcReg, dec_->nrmoff + 4);
+	LDRH(tempReg1, srcReg, dec_->nrmoff);
+	LDRH(tempReg2, srcReg, dec_->nrmoff + 2);
+	LDRH(tempReg3, srcReg, dec_->nrmoff + 4);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 16));
 	STR(tempReg1, dstReg, dec_->decFmt.nrmoff);
-	STR(tempReg2, dstReg, dec_->decFmt.nrmoff + 4);
+	STR(tempReg3, dstReg, dec_->decFmt.nrmoff + 4);
 }
 
 void VertexDecoderJitCache::Jit_NormalFloat() {
 	// Might not be aligned to 4, so we can't use LDMIA.
+	// Actually - not true: This will always be aligned. TODO
 	LDR(tempReg1, srcReg, dec_->nrmoff);
 	LDR(tempReg2, srcReg, dec_->nrmoff + 4);
 	LDR(tempReg3, srcReg, dec_->nrmoff + 8);
@@ -1047,9 +1075,12 @@ void VertexDecoderJitCache::Jit_NormalFloat() {
 // Through expands into floats, always. Might want to look at changing this.
 void VertexDecoderJitCache::Jit_PosS8Through() {
 	// TODO: SIMD
+	LDRSB(tempReg1, srcReg, dec_->posoff);
+	LDRSB(tempReg2, srcReg, dec_->posoff + 1);
+	LDRSB(tempReg3, srcReg, dec_->posoff + 2);
+	static const ARMReg tr[3] = { tempReg1, tempReg2, tempReg3 };
 	for (int i = 0; i < 3; i++) {
-		LDRSB(tempReg1, srcReg, dec_->posoff + i);
-		VMOV(S0, tempReg1);
+		VMOV(S0, tr[i]);
 		VCVT(S0, S0, TO_FLOAT | IS_SIGNED);
 		VSTR(S0, dstReg, dec_->decFmt.posoff + i * 4);
 	}
@@ -1057,10 +1088,13 @@ void VertexDecoderJitCache::Jit_PosS8Through() {
 
 // Through expands into floats, always. Might want to look at changing this.
 void VertexDecoderJitCache::Jit_PosS16Through() {
+	LDRSH(tempReg1, srcReg, dec_->posoff);
+	LDRSH(tempReg2, srcReg, dec_->posoff + 2);
+	LDRSH(tempReg3, srcReg, dec_->posoff + 4);
+	static const ARMReg tr[3] = { tempReg1, tempReg2, tempReg3 };
 	// TODO: SIMD
 	for (int i = 0; i < 3; i++) {
-		LDRSH(tempReg1, srcReg, dec_->posoff + i * 2);
-		VMOV(S0, tempReg1);
+		VMOV(S0, tr[i]);
 		VCVT(S0, S0, TO_FLOAT | IS_SIGNED);
 		VSTR(S0, dstReg, dec_->decFmt.posoff + i * 4);
 	}
@@ -1068,17 +1102,22 @@ void VertexDecoderJitCache::Jit_PosS16Through() {
 
 // Copy 3 bytes and then a zero. Might as well copy four.
 void VertexDecoderJitCache::Jit_PosS8() {
-	LDR(tempReg1, srcReg, dec_->posoff);
-	ANDI2R(tempReg1, tempReg1, 0x00FFFFFF, scratchReg);
+	LDRB(tempReg1, srcReg, dec_->posoff);
+	LDRB(tempReg2, srcReg, dec_->posoff + 1);
+	LDRB(tempReg3, srcReg, dec_->posoff + 2);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 8));
+	ORR(tempReg1, tempReg1, Operand2(tempReg3, ST_LSL, 16));
 	STR(tempReg1, dstReg, dec_->decFmt.posoff);
 }
 
 // Copy 6 bytes and then 2 zeroes.
 void VertexDecoderJitCache::Jit_PosS16() {
-	LDR(tempReg1, srcReg, dec_->posoff);
-	LDRH(tempReg2, srcReg, dec_->posoff + 4);
+	LDRH(tempReg1, srcReg, dec_->posoff);
+	LDRH(tempReg2, srcReg, dec_->posoff + 2);
+	LDRH(tempReg3, srcReg, dec_->posoff + 4);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 16));
 	STR(tempReg1, dstReg, dec_->decFmt.posoff);
-	STR(tempReg2, dstReg, dec_->decFmt.posoff + 4);
+	STR(tempReg3, dstReg, dec_->decFmt.posoff + 4);
 }
 
 // Just copy 12 bytes.

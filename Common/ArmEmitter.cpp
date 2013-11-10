@@ -156,8 +156,20 @@ void ARMXEmitter::ADDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 		else
 			SUB(rd, rs, op2);
 	} else {
-		MOVI2R(scratch, val);
-		ADD(rd, rs, scratch);
+		// Try 16-bit additions and subtractions - easy to test for.
+		// Should also try other rotations...
+		if ((val & 0xFFFF0000) == 0) {
+			// Decompose into two additions.
+			ADD(rd, rs, Operand2((u8)(val >> 8), 12));   // rotation right by 12*2 == rotation left by 8
+			ADD(rd, rd, Operand2((u8)(val), 0));
+		} else if (((-(u32)(s32)val) & 0xFFFF0000) == 0) {
+			val = -(u32)(s32)val;
+			SUB(rd, rs, Operand2((u8)(val >> 8), 12));
+			SUB(rd, rd, Operand2((u8)(val), 0));
+		} else {
+			MOVI2R(scratch, val);
+			ADD(rd, rs, scratch);
+		}
 	}
 }
 
@@ -165,15 +177,47 @@ void ARMXEmitter::ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 {
 	Operand2 op2;
 	bool inverse;
-	if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
+	if (val == 0) {
+		// Avoid the ALU, may improve pipeline.
+		MOV(rd, 0);
+	} else if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
 		if (!inverse) {
 			AND(rd, rs, op2);
 		} else {
 			BIC(rd, rs, op2);
 		}
 	} else {
-		MOVI2R(scratch, val);
-		AND(rd, rs, scratch);
+		int ops = 0;
+		for (int i = 0; i < 32; i += 2) {
+			u8 bits = (val >> i) & 0xFF;
+			// If either low bit is not set, we need to use a BIC for them.
+			if ((bits & 3) != 3) {
+				++ops;
+				i += 8 - 2;
+			}
+		}
+
+		// The worst case is 4 (e.g. 0x55555555.)
+		if (ops <= 3) {
+			bool first = true;
+			for (int i = 0; i < 32; i += 2) {
+				u8 bits = (val >> i) & 0xFF;
+				if ((bits & 3) != 3) {
+					u8 rotation = i == 0 ? 0 : 16 - i / 2;
+					if (first) {
+						BIC(rd, rs, Operand2(~bits, rotation));
+						first = false;
+					} else {
+						BIC(rd, rd, Operand2(~bits, rotation));
+					}
+					// Well, we took care of these other bits while we were at it.
+					i += 8 - 2;
+				}
+			}
+		} else {
+			MOVI2R(scratch, val);
+			AND(rd, rs, scratch);
+		}
 	}
 }
 
@@ -907,6 +951,15 @@ void ARMXEmitter::LDM(ARMReg dest, bool Add, bool Before, bool WriteBack, const 
 {
 	u16 RegList = 0;
 	VA_TO_REGLIST(RegList, Regnum);
+	WriteRegStoreOp(0x80 | (Before << 4) | (Add << 3) | 1, dest, WriteBack, RegList);
+}
+
+void ARMXEmitter::STMBitmask(ARMReg dest, bool Add, bool Before, bool WriteBack, const u16 RegList)
+{
+	WriteRegStoreOp(0x80 | (Before << 4) | (Add << 3) | 0, dest, WriteBack, RegList);
+}
+void ARMXEmitter::LDMBitmask(ARMReg dest, bool Add, bool Before, bool WriteBack, const u16 RegList)
+{
 	WriteRegStoreOp(0x80 | (Before << 4) | (Add << 3) | 1, dest, WriteBack, RegList);
 }
 

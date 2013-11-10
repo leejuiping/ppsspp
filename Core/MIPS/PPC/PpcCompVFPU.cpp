@@ -1114,10 +1114,7 @@ namespace MIPSComp
 
 		fpr.ReleaseSpillLocksAndDiscardTemps();
 	}
-	void Jit::Comp_Vsge(MIPSOpcode op) {
-		DISABLE;
-	}
-	void Jit::Comp_Vslt(MIPSOpcode op) {
+	void Jit::Comp_Vsgn(MIPSOpcode op) {
 		DISABLE;
 	}
 }

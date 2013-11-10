@@ -213,7 +213,7 @@ void Jit::Comp_SV(MIPSOpcode op) {
 	{
 	case 50: //lv.s  // VI(vt) = Memory::Read_U32(addr);
 		{
-			gpr.BindToRegister(rs, true, false);
+			gpr.MapReg(rs, true, false);
 			fpr.MapRegV(vt, MAP_NOINIT);
 
 			JitSafeMem safe(this, rs, imm);
@@ -237,7 +237,7 @@ void Jit::Comp_SV(MIPSOpcode op) {
 
 	case 58: //sv.s   // Memory::Write_U32(VI(vt), addr);
 		{
-			gpr.BindToRegister(rs, true, true);
+			gpr.MapReg(rs, true, true);
 
 			// Even if we don't use real SIMD there's still 8 or 16 scalar float registers.
 			fpr.MapRegV(vt, 0);
@@ -283,7 +283,7 @@ void Jit::Comp_SVQ(MIPSOpcode op)
 			}
 			DISABLE;
 
-			gpr.BindToRegister(rs, true, true);
+			gpr.MapReg(rs, true, true);
 			gpr.FlushLockX(ECX);
 			u8 vregs[4];
 			GetVectorRegs(vregs, V_Quad, vt);
@@ -345,7 +345,7 @@ void Jit::Comp_SVQ(MIPSOpcode op)
 
 	case 54: //lv.q
 		{
-			gpr.BindToRegister(rs, true, true);
+			gpr.MapReg(rs, true, true);
 	
 			u8 vregs[4];
 			GetVectorRegs(vregs, V_Quad, vt);
@@ -378,7 +378,7 @@ void Jit::Comp_SVQ(MIPSOpcode op)
 
 	case 62: //sv.q
 		{
-			gpr.BindToRegister(rs, true, true);
+			gpr.MapReg(rs, true, true);
 
 			u8 vregs[4];
 			GetVectorRegs(vregs, V_Quad, vt);
@@ -534,7 +534,6 @@ void Jit::Comp_VHdp(MIPSOpcode op) {
 	VectorSize sz = GetVecSize(op);
 	int n = GetNumVectorElements(sz);
 
-	// TODO: Force read one of them into regs? probably not.
 	u8 sregs[4], tregs[4], dregs[1];
 	GetVectorRegsPrefixS(sregs, sz, _VS);
 	GetVectorRegsPrefixT(tregs, sz, _VT);
@@ -1015,14 +1014,6 @@ void Jit::Comp_Vcmp(MIPSOpcode op) {
 	gpr.UnlockAllX();
 }
 
-void Jit::Comp_Vsge(MIPSOpcode op) {
-	DISABLE;
-}
-
-void Jit::Comp_Vslt(MIPSOpcode op) {
-	DISABLE;
-}
-
 // There are no immediates for floating point, so we need to load these
 // from RAM. Might as well have a table ready.
 extern const float mulTableVi2f[32] = {
@@ -1368,6 +1359,60 @@ void Jit::Comp_Vcst(MIPSOpcode op) {
 	fpr.ReleaseSpillLocks();
 }
 
+void Jit::Comp_Vsgn(MIPSOpcode op) {
+	CONDITIONAL_DISABLE;
+
+	if (js.HasUnknownPrefix())
+		DISABLE;
+
+	VectorSize sz = GetVecSize(op);
+	int n = GetNumVectorElements(sz);
+
+	u8 sregs[4], dregs[4];
+	GetVectorRegsPrefixS(sregs, sz, _VS);
+	GetVectorRegsPrefixD(dregs, sz, _VD);
+
+	X64Reg tempxregs[4];
+	for (int i = 0; i < n; ++i)
+	{
+		if (!IsOverlapSafeAllowS(dregs[i], i, n, sregs))
+		{
+			int reg = fpr.GetTempV();
+			fpr.MapRegV(reg, MAP_NOINIT | MAP_DIRTY);
+			fpr.SpillLockV(reg);
+			tempxregs[i] = fpr.VX(reg);
+		}
+		else
+		{
+			fpr.MapRegV(dregs[i], (dregs[i] == sregs[i] ? 0 : MAP_NOINIT) | MAP_DIRTY);
+			fpr.SpillLockV(dregs[i]);
+			tempxregs[i] = fpr.VX(dregs[i]);
+		}
+	}
+
+	for (int i = 0; i < n; ++i)
+	{
+		XORPS(XMM0, R(XMM0));
+		CMPEQSS(XMM0, fpr.V(sregs[i]));  // XMM0 = s[i] == 0.0f
+		MOVSS(XMM1, fpr.V(sregs[i]));
+		// Preserve sign bit, replace rest with ones
+		ANDPS(XMM1, M((void *)&signBitLower));
+		ORPS(XMM1, M((void *)&oneOneOneOne));
+		// If really was equal to zero, zap. Note that ANDN negates the destination.
+		ANDNPS(XMM0, R(XMM1));
+		MOVAPS(tempxregs[i], R(XMM0));
+	}
+
+	for (int i = 0; i < n; ++i) {
+		if (!fpr.V(dregs[i]).IsSimpleReg(tempxregs[i]))
+			MOVSS(fpr.V(dregs[i]), tempxregs[i]);
+	}
+
+	ApplyPrefixD(dregs, sz);
+
+	fpr.ReleaseSpillLocks();
+}
+
 void Jit::Comp_VV2Op(MIPSOpcode op) {
 	CONDITIONAL_DISABLE;
 
@@ -1503,13 +1548,13 @@ void Jit::Comp_Mftv(MIPSOpcode op) {
 		// rt = 0, imm = 255 appears to be used as a CPU interlock by some games.
 		if (rt != MIPS_REG_ZERO) {
 			if (imm < 128) {  //R(rt) = VI(imm);
-				fpr.StoreFromRegisterV(imm);
-				gpr.BindToRegister(rt, false, true);
-				MOV(32, gpr.R(rt), fpr.V(imm));
-			} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc
+				fpr.MapRegV(imm, 0);  // TODO: Seems the V register becomes dirty here? It shouldn't.
+				gpr.MapReg(rt, false, true);
+				MOVD_xmm(gpr.R(rt), fpr.VX(imm));
+			} else if (imm < 128 + VFPU_CTRL_MAX) { //mfvc
 				// In case we have a saved prefix.
 				FlushPrefixV();
-				gpr.BindToRegister(rt, false, true);
+				gpr.MapReg(rt, false, true);
 				MOV(32, gpr.R(rt), M(&currentMIPS->vfpuCtrl[imm - 128]));
 			} else {
 				//ERROR - maybe need to make this value too an "interlock" value?
@@ -1519,13 +1564,12 @@ void Jit::Comp_Mftv(MIPSOpcode op) {
 		break;
 
 	case 7: //mtv
-		if (imm < 128) {
-			fpr.StoreFromRegisterV(imm);
-			gpr.BindToRegister(rt, true, false);
-			MOV(32, fpr.V(imm), gpr.R(rt));
-			// VI(imm) = R(rt);
+		if (imm < 128) { // VI(imm) = R(rt);
+			fpr.MapRegV(imm, MAP_DIRTY | MAP_NOINIT);  // TODO: Seems the V register becomes dirty here? It shouldn't.
+			gpr.MapReg(rt, true, false);
+			MOVD_xmm(fpr.VX(imm), gpr.R(rt));
 		} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc //currentMIPS->vfpuCtrl[imm - 128] = R(rt);
-			gpr.BindToRegister(rt, true, false);
+			gpr.MapReg(rt, true, false);
 			MOV(32, M(&currentMIPS->vfpuCtrl[imm - 128]), gpr.R(rt));
 
 			// TODO: Optimization if rt is Imm?
@@ -2017,5 +2061,6 @@ void Jit::Comp_VRot(MIPSOpcode op) {
 
 	fpr.ReleaseSpillLocks();
 }
+
 
 }

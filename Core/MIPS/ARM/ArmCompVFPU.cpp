@@ -87,15 +87,15 @@ namespace MIPSComp
 		switch (regnum) {
 		case 0:  // S
 			js.prefixS = data;
-			js.prefixSFlag = ArmJitState::PREFIX_KNOWN_DIRTY;
+			js.prefixSFlag = JitState::PREFIX_KNOWN_DIRTY;
 			break;
 		case 1:  // T
 			js.prefixT = data;
-			js.prefixTFlag = ArmJitState::PREFIX_KNOWN_DIRTY;
+			js.prefixTFlag = JitState::PREFIX_KNOWN_DIRTY;
 			break;
 		case 2:  // D
 			js.prefixD = data;
-			js.prefixDFlag = ArmJitState::PREFIX_KNOWN_DIRTY;
+			js.prefixDFlag = JitState::PREFIX_KNOWN_DIRTY;
 			break;
 		default:
 			ERROR_LOG(CPU, "VPFX - bad regnum %i : data=%08x", regnum, data);
@@ -104,7 +104,8 @@ namespace MIPSComp
 	}
 
 	void Jit::ApplyPrefixST(u8 *vregs, u32 prefix, VectorSize sz) {
-		if (prefix == 0xE4) return;
+		if (prefix == 0xE4)
+			return;
 
 		int n = GetNumVectorElements(sz);
 		u8 origV[4];
@@ -113,8 +114,7 @@ namespace MIPSComp
 		for (int i = 0; i < n; i++)
 			origV[i] = vregs[i];
 
-		for (int i = 0; i < n; i++)
-		{
+		for (int i = 0; i < n; i++) {
 			int regnum = (prefix >> (i*2)) & 3;
 			int abs    = (prefix >> (8+i)) & 1;
 			int negate = (prefix >> (16+i)) & 1;
@@ -156,7 +156,7 @@ namespace MIPSComp
 	}
 
 	void Jit::GetVectorRegsPrefixD(u8 *regs, VectorSize sz, int vectorReg) {
-		_assert_(js.prefixDFlag & ArmJitState::PREFIX_KNOWN);
+		_assert_(js.prefixDFlag & JitState::PREFIX_KNOWN);
 
 		GetVectorRegs(regs, sz, vectorReg);
 		if (js.prefixD == 0)
@@ -171,8 +171,9 @@ namespace MIPSComp
 	}
 
 	void Jit::ApplyPrefixD(const u8 *vregs, VectorSize sz) {
-		_assert_(js.prefixDFlag & ArmJitState::PREFIX_KNOWN);
-		if (!js.prefixD) return;
+		_assert_(js.prefixDFlag & JitState::PREFIX_KNOWN);
+		if (!js.prefixD)
+			return;
 
 		int n = GetNumVectorElements(sz);
 		for (int i = 0; i < n; i++) 	{
@@ -518,7 +519,8 @@ namespace MIPSComp
 		CONDITIONAL_DISABLE;
 
 		if (js.HasUnknownPrefix() || disablePrefixes) {
-			DISABLE;
+			// Don't think matrix init ops care about prefixes.
+			// DISABLE;
 		}
 
 		MatrixSize sz = GetMtxSize(op);
@@ -637,17 +639,6 @@ namespace MIPSComp
 		VMOV(fpr.V(dregs[0]), S0);
 		ApplyPrefixD(dregs, V_Single);
 		fpr.ReleaseSpillLocksAndDiscardTemps();
-	}
-
-	void Jit::Comp_Vhoriz(MIPSOpcode op) {
-		DISABLE;
-
-		switch ((op >> 16) & 31) {
-		case 6:  // vfad
-			break;
-		case 7:  // vavg
-			break;
-		}
 	}
 
 	void Jit::Comp_VecDo3(MIPSOpcode op) {
@@ -1021,15 +1012,14 @@ namespace MIPSComp
 			// rt = 0, imm = 255 appears to be used as a CPU interlock by some games.
 			if (rt != 0) {
 				if (imm < 128) {  //R(rt) = VI(imm);
-					fpr.FlushV(imm);
+					fpr.MapRegV(imm, 0);
 					gpr.MapReg(rt, MAP_NOINIT | MAP_DIRTY);
-					LDR(gpr.R(rt), CTXREG, fpr.GetMipsRegOffsetV(imm));
+					VMOV(gpr.R(rt), fpr.V(imm));
 				} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc
-					DISABLE;
 					// In case we have a saved prefix.
-					//FlushPrefixV();
-					//gpr.BindToRegister(rt, false, true);
-					//MOV(32, gpr.R(rt), M(&currentMIPS->vfpuCtrl[imm - 128]));
+					FlushPrefixV();
+					gpr.MapReg(rt, MAP_NOINIT | MAP_DIRTY);
+					LDR(gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
 				} else {
 					//ERROR - maybe need to make this value too an "interlock" value?
 					ERROR_LOG(CPU, "mfv - invalid register %i", imm);
@@ -1039,9 +1029,9 @@ namespace MIPSComp
 
 		case 7: // mtv
 			if (imm < 128) {
-				gpr.FlushR(rt);
+				gpr.MapReg(rt);
 				fpr.MapRegV(imm, MAP_DIRTY | MAP_NOINIT);
-				VLDR(fpr.V(imm), CTXREG, gpr.GetMipsRegOffset(rt));
+				VMOV(fpr.V(imm), gpr.R(rt));
 			} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc //currentMIPS->vfpuCtrl[imm - 128] = R(rt);
 				gpr.MapReg(rt);
 				STR(gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
@@ -1051,11 +1041,11 @@ namespace MIPSComp
 				// TODO: Optimization if rt is Imm?
 				// Set these BEFORE disable!
 				if (imm - 128 == VFPU_CTRL_SPREFIX) {
-					js.prefixSFlag = ArmJitState::PREFIX_UNKNOWN;
+					js.prefixSFlag = JitState::PREFIX_UNKNOWN;
 				} else if (imm - 128 == VFPU_CTRL_TPREFIX) {
-					js.prefixTFlag = ArmJitState::PREFIX_UNKNOWN;
+					js.prefixTFlag = JitState::PREFIX_UNKNOWN;
 				} else if (imm - 128 == VFPU_CTRL_DPREFIX) {
-					js.prefixDFlag = ArmJitState::PREFIX_UNKNOWN;
+					js.prefixDFlag = JitState::PREFIX_UNKNOWN;
 				}
 			} else {
 				//ERROR
@@ -1082,11 +1072,11 @@ namespace MIPSComp
 			fpr.ReleaseSpillLocksAndDiscardTemps();
 
 			if (imm - 128 == VFPU_CTRL_SPREFIX) {
-				js.prefixSFlag = ArmJitState::PREFIX_UNKNOWN;
+				js.prefixSFlag = JitState::PREFIX_UNKNOWN;
 			} else if (imm - 128 == VFPU_CTRL_TPREFIX) {
-				js.prefixTFlag = ArmJitState::PREFIX_UNKNOWN;
+				js.prefixTFlag = JitState::PREFIX_UNKNOWN;
 			} else if (imm - 128 == VFPU_CTRL_DPREFIX) {
-				js.prefixDFlag = ArmJitState::PREFIX_UNKNOWN;
+				js.prefixDFlag = JitState::PREFIX_UNKNOWN;
 			}
 		}
 	}
@@ -1366,10 +1356,8 @@ namespace MIPSComp
 
 		// Some, we just fall back to the interpreter.
 		switch (cond) {
-		case VC_EN: // c = my_isnan(s[i]); break;
 		case VC_EI: // c = my_isinf(s[i]); break;
 		case VC_ES: // c = my_isnan(s[i]) || my_isinf(s[i]); break;   // Tekken Dark Resurrection
-		case VC_NN: // c = !my_isnan(s[i]); break;
 		case VC_NI: // c = !my_isinf(s[i]); break;
 		case VC_NS: // c = !my_isnan(s[i]) && !my_isinf(s[i]); break;
 			DISABLE;
@@ -1394,6 +1382,20 @@ namespace MIPSComp
 
 			case VC_TR: // c = 1
 				ORR(R0, R0, 1 << n);
+				break;
+
+			case VC_EN: // c = my_isnan(s[i]); break;  // Tekken 6
+				// Should we involve T? Where I found this used, it compared a register with itself so should be fine.
+				fpr.MapInInV(sregs[i], tregs[i]);
+				VCMP(fpr.V(sregs[i]), fpr.V(tregs[i]));
+				flag = CC_VS;  // overflow = unordered : http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0204j/Chdhcfbc.html
+				break;
+
+			case VC_NN: // c = !my_isnan(s[i]); break;
+				// Should we involve T? Where I found this used, it compared a register with itself so should be fine.
+				fpr.MapInInV(sregs[i], tregs[i]);
+				VCMP(fpr.V(sregs[i]), fpr.V(tregs[i]));
+				flag = CC_VC;  // !overflow = !unordered : http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0204j/Chdhcfbc.html
 				break;
 
 			case VC_EQ: // c = s[i] == t[i]
@@ -1677,6 +1679,68 @@ namespace MIPSComp
 				break;
 			}
 		}
+		fpr.ReleaseSpillLocksAndDiscardTemps();
+	}
+
+	void Jit::Comp_Vhoriz(MIPSOpcode op) {
+		DISABLE;
+
+		switch ((op >> 16) & 31) {
+		case 6:  // vfad
+			break;
+		case 7:  // vavg
+			break;
+		}
+	}
+
+	void Jit::Comp_Vsgn(MIPSOpcode op) {
+		CONDITIONAL_DISABLE;
+		if (js.HasUnknownPrefix() || disablePrefixes) {
+			DISABLE;
+		}
+
+		VectorSize sz = GetVecSize(op);
+		int n = GetNumVectorElements(sz);
+
+		u8 sregs[4], dregs[4];
+		GetVectorRegsPrefixS(sregs, sz, _VS);
+		GetVectorRegsPrefixD(dregs, sz, _VD);
+
+		MIPSReg tempregs[4];
+		for (int i = 0; i < n; ++i) {
+			if (!IsOverlapSafe(dregs[i], i, n, sregs)) {
+				tempregs[i] = fpr.GetTempV();
+			} else {
+				tempregs[i] = dregs[i];
+			}
+		}
+
+		for (int i = 0; i < n; ++i) {
+			fpr.MapDirtyInV(tempregs[i], sregs[i]);
+			// Let's do it integer registers for now. NEON later.
+			// There's gotta be a shorter way, can't find one though that takes
+			// care of NaNs like the interpreter (ignores them and just operates on the bits).
+			MOVI2F(S0, 0.0f, R0);
+			VCMP(fpr.V(sregs[i]), S0);
+			VMRS_APSR(); // Move FP flags from FPSCR to APSR (regular flags).
+			VMOV(R0, fpr.V(sregs[i]));
+			AND(R0, R0, AssumeMakeOperand2(0x80000000));
+			ORR(R0, R0, AssumeMakeOperand2(0x3F800000));
+			SetCC(CC_EQ);
+			MOV(R1, AssumeMakeOperand2(0x0));
+			SetCC(CC_AL);
+			VMOV(fpr.V(tempregs[i]), R0);
+		}
+
+		for (int i = 0; i < n; ++i) {
+			if (dregs[i] != tempregs[i]) {
+				fpr.MapDirtyInV(dregs[i], tempregs[i]);
+				VMOV(fpr.V(dregs[i]), fpr.V(tempregs[i]));
+			}
+		}
+
+		ApplyPrefixD(dregs, sz);
+
 		fpr.ReleaseSpillLocksAndDiscardTemps();
 	}
 }

@@ -66,7 +66,7 @@
 
 namespace MIPSComp
 {
-	void Jit::SetR0ToEffectiveAddress(int rs, s16 offset) {
+	void Jit::SetR0ToEffectiveAddress(MIPSGPReg rs, s16 offset) {
 		Operand2 op2;
 		if (offset) {
 			bool negated;
@@ -91,7 +91,7 @@ namespace MIPSComp
 		}
 	}
 
-	void Jit::SetCCAndR0ForSafeAddress(int rs, s16 offset, ARMReg tempReg) {
+	void Jit::SetCCAndR0ForSafeAddress(MIPSGPReg rs, s16 offset, ARMReg tempReg, bool reverse) {
 		SetR0ToEffectiveAddress(rs, offset);
 
 		// There are three valid ranges.  Each one gets a bit.
@@ -123,7 +123,150 @@ namespace MIPSComp
 		// If we left any bit set, the address is OK.
 		SetCC(CC_AL);
 		CMP(tempReg, 0);
-		SetCC(CC_GT);
+		SetCC(reverse ? CC_EQ : CC_GT);
+	}
+
+	void Jit::Comp_ITypeMemLR(MIPSOpcode op, bool load) {
+		CONDITIONAL_DISABLE;
+		int offset = (signed short)(op & 0xFFFF);
+		MIPSGPReg rt = _RT;
+		MIPSGPReg rs = _RS;
+		int o = op >> 26;
+
+		if (!js.inDelaySlot) {
+			// Optimisation: Combine to single unaligned load/store
+			bool isLeft = (o == 34 || o == 42);
+			MIPSOpcode nextOp = Memory::Read_Instruction(js.compilerPC + 4);
+			// Find a matching shift in opposite direction with opposite offset.
+			if (nextOp == (isLeft ? (op.encoding + (4<<26) - 3)
+				                  : (op.encoding - (4<<26) + 3)))
+			{
+				EatInstruction(nextOp);
+				nextOp = MIPSOpcode(((load ? 35 : 43) << 26) | ((isLeft ? nextOp : op) & 0x03FFFFFF)); //lw, sw
+				Comp_ITypeMem(nextOp);
+				return;
+			}
+		}
+
+		u32 iaddr = gpr.IsImm(rs) ? offset + gpr.GetImm(rs) : 0xFFFFFFFF;
+		bool doCheck = false;
+		FixupBranch skip;
+
+		if (gpr.IsImm(rs) && Memory::IsValidAddress(iaddr)) {
+			u32 addr = iaddr & 0x3FFFFFFF;
+			// Must be OK even if rs == rt since we have the value from imm already.
+			gpr.MapReg(rt, load ? MAP_NOINIT | MAP_DIRTY : 0);
+			MOVI2R(R0, addr & ~3);
+
+			u8 shift = (addr & 3) * 8;
+
+			switch (o) {
+			case 34: // lwl
+				LDR(R0, R11, R0);
+				ANDI2R(gpr.R(rt), gpr.R(rt), 0x00ffffff >> shift, R1);
+				ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSL, 24 - shift));
+				break;
+
+			case 38: // lwr
+				LDR(R0, R11, R0);
+				ANDI2R(gpr.R(rt), gpr.R(rt), 0xffffff00 << (24 - shift), R1);
+				ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSR, shift));
+				break;
+
+			case 42: // swl
+				LDR(R1, R11, R0);
+				// Don't worry, can't use temporary.
+				ANDI2R(R1, R1, 0xffffff00 << shift, R0);
+				ORR(R1, R1, Operand2(gpr.R(rt), ST_LSR, 24 - shift));
+				STR(R1, R11, R0);
+				break;
+
+			case 46: // swr
+				LDR(R1, R11, R0);
+				// Don't worry, can't use temporary.
+				ANDI2R(R1, R1, 0x00ffffff >> (24 - shift), R0);
+				ORR(R1, R1, Operand2(gpr.R(rt), ST_LSL, shift));
+				STR(R1, R11, R0);
+				break;
+			}
+			return;
+		}
+
+		_dbg_assert_msg_(JIT, !gpr.IsImm(rs), "Invalid immediate address?  CPU bug?");
+		load ? gpr.MapDirtyIn(rt, rs, false) : gpr.MapInIn(rt, rs);
+
+		if (!g_Config.bFastMemory && rs != MIPS_REG_SP) {
+			SetCCAndR0ForSafeAddress(rs, offset, R1, true);
+			doCheck = true;
+		} else {
+			SetR0ToEffectiveAddress(rs, offset);
+		}
+		if (doCheck) {
+			skip = B();
+		}
+		SetCC(CC_AL);
+
+		// Need temp regs.  TODO: Get from the regcache?
+		if (load) {
+			PUSH(1, R10);
+		} else {
+			PUSH(2, R9, R10);
+		}
+
+		// Here's our shift amount.
+		AND(R1, R0, 3);
+		LSL(R1, R1, 3);
+
+		// Now align the address for the actual read.
+		BIC(R0, R0, 3);
+
+		switch (o) {
+		case 34: // lwl
+			MOVI2R(R10, 0x00ffffff);
+			LDR(R0, R11, R0);
+			AND(gpr.R(rt), gpr.R(rt), Operand2(R10, ST_LSR, R1));
+			RSB(R1, R1, 24);
+			ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSL, R1));
+			break;
+
+		case 38: // lwr
+			MOVI2R(R10, 0xffffff00);
+			LDR(R0, R11, R0);
+			LSR(R0, R0, R1);
+			RSB(R1, R1, 24);
+			AND(gpr.R(rt), gpr.R(rt), Operand2(R10, ST_LSL, R1));
+			ORR(gpr.R(rt), gpr.R(rt), R0);
+			break;
+
+		case 42: // swl
+			MOVI2R(R10, 0xffffff00);
+			LDR(R9, R11, R0);
+			AND(R9, R9, Operand2(R10, ST_LSL, R1));
+			RSB(R1, R1, 24);
+			ORR(R9, R9, Operand2(gpr.R(rt), ST_LSR, R1));
+			STR(R9, R11, R0);
+			break;
+
+		case 46: // swr
+			MOVI2R(R10, 0x00ffffff);
+			LDR(R9, R11, R0);
+			RSB(R1, R1, 24);
+			AND(R9, R9, Operand2(R10, ST_LSR, R1));
+			RSB(R1, R1, 24);
+			ORR(R9, R9, Operand2(gpr.R(rt), ST_LSL, R1));
+			STR(R9, R11, R0);
+			break;
+		}
+
+		if (load) {
+			POP(1, R10);
+		} else {
+			POP(2, R9, R10);
+		}
+
+		if (doCheck) {
+			SetJumpTarget(skip);
+		}
 	}
 
 	void Jit::Comp_ITypeMem(MIPSOpcode op)
@@ -142,8 +285,7 @@ namespace MIPSComp
 		u32 iaddr = gpr.IsImm(rs) ? offset + gpr.GetImm(rs) : 0xFFFFFFFF;
 		bool doCheck = false;
 
-		switch (o)
-		{
+		switch (o) {
 		case 32: //lb
 		case 33: //lh
 		case 35: //lw
@@ -153,7 +295,36 @@ namespace MIPSComp
 		case 40: //sb
 		case 41: //sh
 		case 43: //sw
+			// Map base register as pointer and go from there - if the displacement isn't too big.
+			// This is faster if there are multiple loads from the same pointer. Need to hook up the MIPS analyzer..
+			if (jo.cachePointers && g_Config.bFastMemory) {
+				// ARM has smaller load/store immediate displacements than MIPS, 12 bits - and some memory ops only have 8 bits.
+				int offsetRange = 0x3ff;
+				if (o == 41 || o == 33 || o == 37 || o == 32)
+					offsetRange = 0xff;  // 8 bit offset only
+				if (!gpr.IsImm(rs) && rs != rt && (offset <= offsetRange) && offset >= -offsetRange) {
+					gpr.SpillLock(rs, rt);
+					gpr.MapRegAsPointer(rs);
+					gpr.MapReg(rt, load ? (MAP_NOINIT | MAP_DIRTY) : 0);
+					switch (o) {
+					case 35: LDR  (gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					case 37: LDRH (gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					case 33: LDRSH(gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					case 36: LDRB (gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					case 32: LDRSB(gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+						// Store
+					case 43: STR  (gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					case 41: STRH (gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					case 40: STRB (gpr.R(rt), gpr.RPtr(rs), Operand2(offset, TYPE_IMM)); break;
+					}
+					gpr.ReleaseSpillLocks();
+					break;
+				}
+			}
+
 			if (gpr.IsImm(rs) && Memory::IsValidAddress(iaddr)) {
+				// TODO: Avoid mapping a register for the "zero" register, use R0 instead.
+
 				// We can compute the full address at compile time. Kickass.
 				u32 addr = iaddr & 0x3FFFFFFF;
 				// Must be OK even if rs == rt since we have the value from imm already.
@@ -170,6 +341,7 @@ namespace MIPSComp
 					SetR0ToEffectiveAddress(rs, offset);
 				}
 			}
+
 			switch (o)
 			{
 			// Load
@@ -196,67 +368,7 @@ namespace MIPSComp
 			load = true;
 		case 42: //swl
 		case 46: //swr
-			if (!js.inDelaySlot) {
-				// Optimisation: Combine to single unaligned load/store
-				bool isLeft = (o == 34 || o == 42);
-				MIPSOpcode nextOp = Memory::Read_Instruction(js.compilerPC + 4);
-				// Find a matching shift in opposite direction with opposite offset.
-				if (nextOp == (isLeft ? (op.encoding + (4<<26) - 3)
-				                      : (op.encoding - (4<<26) + 3)))
-				{
-					EatInstruction(nextOp);
-					nextOp = MIPSOpcode(((load ? 35 : 43) << 26) | ((isLeft ? nextOp : op) & 0x03FFFFFF)); //lw, sw
-					Comp_ITypeMem(nextOp);
-					return;
-				}
-			}
-
-			DISABLE; // Disabled until crashes are resolved.
-			if (g_Config.bFastMemory) {
-				int shift;
-				if (gpr.IsImm(rs)) {
-					u32 addr = (offset + gpr.GetImm(rs)) & 0x3FFFFFFF;
-					shift = (addr & 3) << 3;
-					addr &= 0xfffffffc;
-					load ? gpr.MapReg(rt, MAP_DIRTY) : gpr.MapReg(rt, 0);
-					MOVI2R(R0, addr);
-				} else {
-					load ? gpr.MapDirtyIn(rt, rs, false) : gpr.MapInIn(rt, rs);
-					shift = (offset & 3) << 3; // Should be addr. Difficult as we don't know it yet.
-					offset &= 0xfffffffc;
-					SetR0ToEffectiveAddress(rs, offset);
-				}
-				switch (o)
-				{
-				// Load
-				case 34:
-					AND(gpr.R(rt), gpr.R(rt), 0x00ffffff >> shift);
-					LDR(R0, R11, R0);
-					ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSL, 24 - shift));
-					break;
-				case 38:
-					AND(gpr.R(rt), gpr.R(rt), 0xffffff00 << (24 - shift));
-					LDR(R0, R11, R0);
-					ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSR, shift));
-					break;
-				// Store
-				case 42:
-					LDR(R1, R11, R0);
-					AND(R1, R1, 0xffffff00 << shift);
-					ORR(R1, R1, Operand2(gpr.R(rt), ST_LSR, 24 - shift));
-					STR(R1, R11, R0);
-					break;
-				case 46:
-					LDR(R1, R11, R0);
-					AND(R1, R1, 0x00ffffff >> (24 - shift));
-					ORR(R1, R1, Operand2(gpr.R(rt), ST_LSL, shift));
-					STR(R1, R11, R0);
-					break;
-				}
-			} else {
-				Comp_Generic(op);
-				return;
-			}
+			Comp_ITypeMemLR(op, load);
 			break;
 		default:
 			Comp_Generic(op);

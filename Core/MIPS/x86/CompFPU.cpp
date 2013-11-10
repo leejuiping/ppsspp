@@ -53,21 +53,21 @@ void Jit::CompFPTriArith(MIPSOpcode op, void (XEmitter::*arith)(X64Reg reg, OpAr
 
 	if (fs == fd)
 	{
-		fpr.BindToRegister(fd, true, true);
+		fpr.MapReg(fd, true, true);
 		(this->*arith)(fpr.RX(fd), fpr.R(ft));
 	}
 	else if (ft == fd && !orderMatters)
 	{
-		fpr.BindToRegister(fd, true, true);
+		fpr.MapReg(fd, true, true);
 		(this->*arith)(fpr.RX(fd), fpr.R(fs));
 	}
 	else if (ft != fd && fs != fd && ft != fs) {
-		fpr.BindToRegister(fd, false, true);
+		fpr.MapReg(fd, false, true);
 		MOVSS(fpr.RX(fd), fpr.R(fs));
 		(this->*arith)(fpr.RX(fd), fpr.R(ft));
 	}
 	else {
-		fpr.BindToRegister(fd, true, true);
+		fpr.MapReg(fd, true, true);
 		MOVSS(XMM0, fpr.R(fs));
 		(this->*arith)(XMM0, fpr.R(ft));
 		MOVSS(fpr.RX(fd), R(XMM0));
@@ -105,7 +105,7 @@ void Jit::Comp_FPULS(MIPSOpcode op)
 		{
 			gpr.Lock(rs);
 			fpr.SpillLock(ft);
-			fpr.BindToRegister(ft, false, true);
+			fpr.MapReg(ft, false, true);
 
 			JitSafeMem safe(this, rs, offset);
 			OpArg src;
@@ -126,7 +126,7 @@ void Jit::Comp_FPULS(MIPSOpcode op)
 		{
 			gpr.Lock(rs);
 			fpr.SpillLock(ft);
-			fpr.BindToRegister(ft, true, false);
+			fpr.MapReg(ft, true, false);
 
 			JitSafeMem safe(this, rs, offset);
 			OpArg dest;
@@ -238,7 +238,7 @@ void Jit::Comp_FPU2op(MIPSOpcode op) {
 	{
 	case 5:	//F(fd)	= fabsf(F(fs)); break; //abs
 		fpr.SpillLock(fd, fs);
-		fpr.BindToRegister(fd, fd == fs, true);
+		fpr.MapReg(fd, fd == fs, true);
 		MOVSS(fpr.RX(fd), fpr.R(fs));
 		PAND(fpr.RX(fd), M((void *)ssNoSignMask));
 		fpr.ReleaseSpillLocks();
@@ -247,7 +247,7 @@ void Jit::Comp_FPU2op(MIPSOpcode op) {
 	case 6:	//F(fd)	= F(fs);				break; //mov
 		if (fd != fs) {
 			fpr.SpillLock(fd, fs);
-			fpr.BindToRegister(fd, fd == fs, true);
+			fpr.MapReg(fd, fd == fs, true);
 			MOVSS(fpr.RX(fd), fpr.R(fs));
 			fpr.ReleaseSpillLocks();
 		}
@@ -255,7 +255,7 @@ void Jit::Comp_FPU2op(MIPSOpcode op) {
 
 	case 7:	//F(fd)	= -F(fs);			 break; //neg
 		fpr.SpillLock(fd, fs);
-		fpr.BindToRegister(fd, fd == fs, true);
+		fpr.MapReg(fd, fd == fs, true);
 		MOVSS(fpr.RX(fd), fpr.R(fs));
 		PXOR(fpr.RX(fd), M((void *)ssSignBits2));
 		fpr.ReleaseSpillLocks();
@@ -264,7 +264,7 @@ void Jit::Comp_FPU2op(MIPSOpcode op) {
 
 	case 4:	//F(fd)	= sqrtf(F(fs)); break; //sqrt
 		fpr.SpillLock(fd, fs); // this probably works, just badly tested
-		fpr.BindToRegister(fd, fd == fs, true);
+		fpr.MapReg(fd, fd == fs, true);
 		SQRTSS(fpr.RX(fd), fpr.R(fs));
 		fpr.ReleaseSpillLocks();
 		return;
@@ -294,6 +294,7 @@ void Jit::Comp_FPU2op(MIPSOpcode op) {
 		break;
 
 	case 32: //F(fd)	= (float)FsI(fs);			break; //cvt.s.w
+		// Store to memory so we can read it as an integer value.
 		fpr.StoreFromRegister(fs);
 		CVTSI2SS(XMM0, fpr.R(fs));
 		MOVSS(fpr.R(fd), XMM0);
@@ -319,28 +320,21 @@ void Jit::Comp_mxc1(MIPSOpcode op)
 	switch((op >> 21) & 0x1f) 
 	{
 	case 0: // R(rt) = FI(fs); break; //mfc1
-		if (rt != MIPS_REG_ZERO)
-		{
-			// Cross move! slightly tricky
-			fpr.StoreFromRegister(fs);
-			gpr.Lock(rt);
-			gpr.BindToRegister(rt, false, true);
-			MOV(32, gpr.R(rt), fpr.R(fs));
-			gpr.UnlockAll();
+		if (rt != MIPS_REG_ZERO) {
+			fpr.MapReg(fs, true, false);  // TODO: Seems the V register becomes dirty here? It shouldn't.
+			gpr.MapReg(rt, false, true);
+			MOVD_xmm(gpr.R(rt), fpr.RX(fs));
 		}
-		return;
+		break;
 
 	case 2: // R(rt) = currentMIPS->ReadFCR(fs); break; //cfc1
 		Comp_Generic(op);
 		return;
 
 	case 4: //FI(fs) = R(rt);	break; //mtc1
-		// Cross move! slightly tricky
-		gpr.StoreFromRegister(rt);
-		fpr.SpillLock(fs);
-		fpr.BindToRegister(fs, false, true);
-		MOVSS(fpr.RX(fs), gpr.R(rt));
-		fpr.ReleaseSpillLocks();
+		gpr.MapReg(rt, true, false);
+		fpr.MapReg(fs, false, true);
+		MOVD_xmm(fpr.RX(fs), gpr.R(rt));
 		return;
 
 	case 6: //currentMIPS->WriteFCR(fs, R(rt)); break; //ctc1

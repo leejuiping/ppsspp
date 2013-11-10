@@ -16,7 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "Core/Reporting.h"
-
+#include "Core/Config.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/HLETables.h"
 #include "Core/Host.h"
@@ -186,7 +186,7 @@ void Jit::BranchRSRTComp(MIPSOpcode op, Gen::CCFlags cc, bool likely)
 	}
 	else
 	{
-		gpr.BindToRegister(rs, true, false);
+		gpr.MapReg(rs, true, false);
 		CMP(32, gpr.R(rs), rt == MIPS_REG_ZERO ? Imm32(0) : gpr.R(rt));
 	}
 
@@ -271,7 +271,7 @@ void Jit::BranchRSZeroComp(MIPSOpcode op, Gen::CCFlags cc, bool andLink, bool li
 		CompileDelaySlot(DELAYSLOT_NICE);
 		if (andLink)
 		{
-			gpr.BindToRegister(MIPS_REG_RA, false, true);
+			gpr.MapReg(MIPS_REG_RA, false, true);
 			MOV(32, gpr.R(MIPS_REG_RA), Imm32(js.compilerPC + 8));
 		}
 		// Account for the increment in the loop.
@@ -284,7 +284,7 @@ void Jit::BranchRSZeroComp(MIPSOpcode op, Gen::CCFlags cc, bool andLink, bool li
 	if (!likely && delaySlotIsNice)
 		CompileDelaySlot(DELAYSLOT_NICE);
 
-	gpr.BindToRegister(rs, true, false);
+	gpr.MapReg(rs, true, false);
 	CMP(32, gpr.R(rs), Imm32(0));
 
 	Gen::FixupBranch ptr;
@@ -550,7 +550,7 @@ void Jit::Comp_Jump(MIPSOpcode op)
 		break;
 
 	case 3: //jal
-		gpr.BindToRegister(MIPS_REG_RA, false, true);
+		gpr.MapReg(MIPS_REG_RA, false, true);
 		MOV(32, gpr.R(MIPS_REG_RA), Imm32(js.compilerPC + 8));	// Save return address
 		CompileDelaySlot(DELAYSLOT_NICE);
 		FlushAll();
@@ -584,7 +584,7 @@ void Jit::Comp_JumpReg(MIPSOpcode op)
 	if (IsSyscall(delaySlotOp))
 	{
 		// If this is a syscall, write the pc (for thread switching and other good reasons.)
-		gpr.BindToRegister(rs, true, false);
+		gpr.MapReg(rs, true, false);
 		MOV(32, M(&currentMIPS->pc), gpr.R(rs));
 		CompileDelaySlot(DELAYSLOT_FLUSH);
 
@@ -596,12 +596,24 @@ void Jit::Comp_JumpReg(MIPSOpcode op)
 	{
 		CompileDelaySlot(DELAYSLOT_NICE);
 		MOV(32, R(EAX), gpr.R(rs));
+
+		if (rs == MIPS_REG_RA && g_Config.bDiscardRegsOnJRRA) {
+			// According to the MIPS ABI, there are some regs we don't need to preserve.
+			// Let's discard them so we don't need to write them back.
+			// NOTE: Not all games follow the MIPS ABI! Tekken 6, for example, will crash
+			// with this enabled.
+			for (int i = MIPS_REG_A0; i <= MIPS_REG_T7; i++)
+				gpr.DiscardRegContentsIfCached((MIPSGPReg)i);
+			gpr.DiscardRegContentsIfCached(MIPS_REG_T8);
+			gpr.DiscardRegContentsIfCached(MIPS_REG_T9);
+		}
+
 		FlushAll();
 	}
 	else
 	{
 		// Latch destination now - save it in memory.
-		gpr.BindToRegister(rs, true, false);
+		gpr.MapReg(rs, true, false);
 		MOV(32, M(&savedPC), gpr.R(rs));
 		CompileDelaySlot(DELAYSLOT_NICE);
 		MOV(32, R(EAX), M(&savedPC));

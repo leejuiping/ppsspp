@@ -19,6 +19,7 @@
 
 #include "../../../Globals.h"
 
+#include "Core/MIPS/JitCommon/JitState.h"
 #include "Core/MIPS/JitCommon/JitBlockCache.h"
 #include "Core/MIPS/ARM/ArmRegCache.h"
 #include "Core/MIPS/ARM/ArmRegCacheFPU.h"
@@ -33,119 +34,13 @@ namespace MIPSComp
 
 struct ArmJitOptions
 {
-	ArmJitOptions()
-	{
-		enableBlocklink = true;
-		downcountInRegister = true;
-	}
+	ArmJitOptions();
 
 	bool enableBlocklink;
 	bool downcountInRegister;
-};
-
-struct ArmJitState
-{
-	enum PrefixState
-	{
-		PREFIX_UNKNOWN = 0x00,
-		PREFIX_KNOWN = 0x01,
-		PREFIX_DIRTY = 0x10,
-		PREFIX_KNOWN_DIRTY = 0x11,
-	};
-
-	u32 compilerPC;
-	u32 blockStart;
-	int nextExit;
-	bool cancel;
-	bool inDelaySlot;
-	int downcountAmount;
-	bool compiling;	// TODO: get rid of this in favor of using analysis results to determine end of block
-	JitBlock *curBlock;
-
-	// VFPU prefix magic
-	bool startDefaultPrefix;
-	u32 prefixS;
-	u32 prefixT;
-	u32 prefixD;
-	PrefixState prefixSFlag;
-	PrefixState prefixTFlag;
-	PrefixState prefixDFlag;
-
-	ArmJitState()
-		: prefixSFlag(PREFIX_UNKNOWN),
-		prefixTFlag(PREFIX_UNKNOWN),
-		prefixDFlag(PREFIX_UNKNOWN) {}
-
-	void PrefixStart() {
-		if (startDefaultPrefix) {
-			EatPrefix();
-		} else {
-			PrefixUnknown();
-		}
-	}
-	void PrefixUnknown() {
-		prefixSFlag = PREFIX_UNKNOWN;
-		prefixTFlag = PREFIX_UNKNOWN;
-		prefixDFlag = PREFIX_UNKNOWN;
-	}
-	bool MayHavePrefix() const {
-		if (HasUnknownPrefix()) {
-			return true;
-		} else if (prefixS != 0xE4 || prefixT != 0xE4 || prefixD != 0) {
-			return true;
-		} else if (VfpuWriteMask() != 0) {
-			return true;
-		}
-
-		return false;
-	}
-	bool HasUnknownPrefix() const {
-		if (!(prefixSFlag & PREFIX_KNOWN) || !(prefixTFlag & PREFIX_KNOWN) || !(prefixDFlag & PREFIX_KNOWN)) {
-			return true;
-		}
-		return false;
-	}
-	bool HasNoPrefix() const {
-		return (prefixDFlag & PREFIX_KNOWN) && (prefixSFlag & PREFIX_KNOWN) && (prefixTFlag & PREFIX_KNOWN) && (prefixS == 0xE4 && prefixT == 0xE4 && prefixD == 0);
-	}
-
-	void EatPrefix() {
-		if ((prefixSFlag & PREFIX_KNOWN) == 0 || prefixS != 0xE4) {
-			prefixSFlag = PREFIX_KNOWN_DIRTY;
-			prefixS = 0xE4;
-		}
-		if ((prefixTFlag & PREFIX_KNOWN) == 0 || prefixT != 0xE4) {
-			prefixTFlag = PREFIX_KNOWN_DIRTY;
-			prefixT = 0xE4;
-		}
-		if ((prefixDFlag & PREFIX_KNOWN) == 0 || prefixD != 0x0 || VfpuWriteMask() != 0) {
-			prefixDFlag = PREFIX_KNOWN_DIRTY;
-			prefixD = 0x0;
-		}
-	}
-
-	u8 VfpuWriteMask() const {
-		_assert_(prefixDFlag & PREFIX_KNOWN);
-		return (prefixD >> 8) & 0xF;
-	}
-
-	bool VfpuWriteMask(int i) const {
-		_assert_(prefixDFlag & PREFIX_KNOWN);
-		return (prefixD >> (8 + i)) & 1;
-	}
-};
-
-
-enum CompileDelaySlotFlags
-{
-	// Easy, nothing extra.
-	DELAYSLOT_NICE = 0,
-	// Flush registers after delay slot.
-	DELAYSLOT_FLUSH = 1,
-	// Preserve flags.
-	DELAYSLOT_SAFE = 2,
-	// Flush registers after and preserve flags.
-	DELAYSLOT_SAFE_FLUSH = DELAYSLOT_FLUSH | DELAYSLOT_SAFE,
+	bool useBackJump;
+	bool useForwardJump;
+	bool cachePointers;
 };
 
 class Jit : public ArmGen::ARMXCodeBlock
@@ -231,8 +126,7 @@ public:
 	void Comp_Viim(MIPSOpcode op);
 	void Comp_Vfim(MIPSOpcode op);
 	void Comp_VCrossQuat(MIPSOpcode op);
-	void Comp_Vsge(MIPSOpcode op);
-	void Comp_Vslt(MIPSOpcode op);
+	void Comp_Vsgn(MIPSOpcode op);
 
 	JitBlockCache *GetBlockCache() { return &blocks; }
 
@@ -264,8 +158,8 @@ private:
 	void BranchRSRTComp(MIPSOpcode op, ArmGen::CCFlags cc, bool likely);
 
 	// Utilities to reduce duplicated code
-	void CompImmLogic(int rs, int rt, u32 uimm, void (ARMXEmitter::*arith)(ARMReg dst, ARMReg src, Operand2 op2), u32 (*eval)(u32 a, u32 b));
-	void CompType3(int rd, int rs, int rt, void (ARMXEmitter::*arithOp2)(ARMReg dst, ARMReg rm, Operand2 rn), u32 (*eval)(u32 a, u32 b), bool isSub = false);
+	void CompImmLogic(MIPSGPReg rs, MIPSGPReg rt, u32 uimm, void (ARMXEmitter::*arith)(ARMReg dst, ARMReg src, Operand2 op2), u32 (*eval)(u32 a, u32 b));
+	void CompType3(MIPSGPReg rd, MIPSGPReg rs, MIPSGPReg rt, void (ARMXEmitter::*arithOp2)(ARMReg dst, ARMReg rm, Operand2 rn), u32 (*eval)(u32 a, u32 b), bool symmetric = false, bool useMOV = false);
 
 	void CompShiftImm(MIPSOpcode op, ArmGen::ShiftType shiftType);
 	void CompShiftVar(MIPSOpcode op, ArmGen::ShiftType shiftType);
@@ -273,24 +167,25 @@ private:
 	void ApplyPrefixST(u8 *vregs, u32 prefix, VectorSize sz);
 	void ApplyPrefixD(const u8 *vregs, VectorSize sz);
 	void GetVectorRegsPrefixS(u8 *regs, VectorSize sz, int vectorReg) {
-		_assert_(js.prefixSFlag & ArmJitState::PREFIX_KNOWN);
+		_assert_(js.prefixSFlag & JitState::PREFIX_KNOWN);
 		GetVectorRegs(regs, sz, vectorReg);
 		ApplyPrefixST(regs, js.prefixS, sz);
 	}
 	void GetVectorRegsPrefixT(u8 *regs, VectorSize sz, int vectorReg) {
-		_assert_(js.prefixTFlag & ArmJitState::PREFIX_KNOWN);
+		_assert_(js.prefixTFlag & JitState::PREFIX_KNOWN);
 		GetVectorRegs(regs, sz, vectorReg);
 		ApplyPrefixST(regs, js.prefixT, sz);
 	}
 	void GetVectorRegsPrefixD(u8 *regs, VectorSize sz, int vectorReg);
 
 	// Utils
-	void SetR0ToEffectiveAddress(int rs, s16 offset);
-	void SetCCAndR0ForSafeAddress(int rs, s16 offset, ARMReg tempReg);
+	void SetR0ToEffectiveAddress(MIPSGPReg rs, s16 offset);
+	void SetCCAndR0ForSafeAddress(MIPSGPReg rs, s16 offset, ARMReg tempReg, bool reverse = false);
+	void Comp_ITypeMemLR(MIPSOpcode op, bool load);
 
 	JitBlockCache blocks;
 	ArmJitOptions jo;
-	ArmJitState js;
+	JitState js;
 
 	ArmRegCache gpr;
 	ArmRegCacheFPU fpr;

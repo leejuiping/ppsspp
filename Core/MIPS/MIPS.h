@@ -39,6 +39,11 @@ enum MIPSGPReg
 	MIPS_REG_A4=8,	// Seems to be N32 register calling convention - there are 8 args instead of 4.
 	MIPS_REG_A5=9,
 
+	MIPS_REG_T4=12,
+	MIPS_REG_T5=13,
+	MIPS_REG_T6=14,
+	MIPS_REG_T7=15,
+
 	MIPS_REG_S0=16,
 	MIPS_REG_S1=17,
 	MIPS_REG_S2=18,
@@ -47,6 +52,8 @@ enum MIPSGPReg
 	MIPS_REG_S5=21,
 	MIPS_REG_S6=22,
 	MIPS_REG_S7=23,
+	MIPS_REG_T8=24,
+	MIPS_REG_T9=25,
 	MIPS_REG_K0=26,
 	MIPS_REG_K1=27,
 	MIPS_REG_GP=28,
@@ -57,6 +64,10 @@ enum MIPSGPReg
 	// ID for mipscall "callback" is stored here - from JPCSP
 	MIPS_REG_CALL_ID=MIPS_REG_S0,
 	MIPS_REG_INVALID=-1,
+
+	// Not real regs, just for convenience/jit mapping.
+	MIPS_REG_HI = 32,
+	MIPS_REG_LO = 33,
 };
 
 enum

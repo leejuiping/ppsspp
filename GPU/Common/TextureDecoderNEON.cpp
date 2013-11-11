@@ -66,7 +66,7 @@ u32 QuickTexHashNEON(const void *checkp, u32 size) {
 			"movt r0, 0x4b73\n"
 			"movw r1, 0x9bd9\n"
 			"movt r1, 0xc00b\n"
-			"vmov d2, r0, r1\n"
+			"vmov d3, r0, r1\n"
 
 			// Initialize update.
 			"movw r0, 0x2455\n"

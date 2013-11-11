@@ -64,6 +64,12 @@ ArmJitOptions::ArmJitOptions()
 	useBackJump = false;
 	useForwardJump = false;
 	cachePointers = true;
+	// WARNING: These options don't work properly with cache clearing or jit compare.
+	// Need to find a smart way to handle before enabling.
+	immBranches = false;
+	continueBranches = false;
+	continueJumps = false;
+	continueMaxInstructions = 300;
 }
 
 Jit::Jit(MIPSState *mips) : blocks(mips, this), gpr(mips, &jo), fpr(mips), mips_(mips)
@@ -109,19 +115,19 @@ void Jit::FlushAll()
 void Jit::FlushPrefixV()
 {
 	if ((js.prefixSFlag & JitState::PREFIX_DIRTY) != 0) {
-		MOVI2R(R0, js.prefixS);
+		gpr.SetRegImm(R0, js.prefixS);
 		STR(R0, CTXREG, offsetof(MIPSState, vfpuCtrl[VFPU_CTRL_SPREFIX]));
 		js.prefixSFlag = (JitState::PrefixState) (js.prefixSFlag & ~JitState::PREFIX_DIRTY);
 	}
 
 	if ((js.prefixTFlag & JitState::PREFIX_DIRTY) != 0) {
-		MOVI2R(R0, js.prefixT);
+		gpr.SetRegImm(R0, js.prefixT);
 		STR(R0, CTXREG, offsetof(MIPSState, vfpuCtrl[VFPU_CTRL_TPREFIX]));
 		js.prefixTFlag = (JitState::PrefixState) (js.prefixTFlag & ~JitState::PREFIX_DIRTY);
 	}
 
 	if ((js.prefixDFlag & JitState::PREFIX_DIRTY) != 0) {
-		MOVI2R(R0, js.prefixD);
+		gpr.SetRegImm(R0, js.prefixD);
 		STR(R0, CTXREG, offsetof(MIPSState, vfpuCtrl[VFPU_CTRL_DPREFIX]));
 		js.prefixDFlag = (JitState::PrefixState) (js.prefixDFlag & ~JitState::PREFIX_DIRTY);
 	}
@@ -154,6 +160,7 @@ void Jit::EatInstruction(MIPSOpcode op) {
 		ERROR_LOG_REPORT_ONCE(ateInDelaySlot, JIT, "Ate an instruction inside a delay slot.")
 	}
 
+	js.numInstructions++;
 	js.compilerPC += 4;
 	js.downcountAmount += MIPSGetInstructionCycleEstimate(op);
 }
@@ -230,7 +237,7 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 		// Not intrusive so keeping it around here to experiment with, may help on ARMv6 due to
 		// large/slow construction of 32-bit immediates?
 		JumpTarget backJump = GetCodePtr();
-		MOVI2R(R0, js.blockStart);
+		gpr.SetRegImm(R0, js.blockStart);
 		B((const void *)outerLoopPCInR0);
 		b->checkedEntry = GetCodePtr();
 		SetCC(CC_LT);
@@ -244,7 +251,7 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 	} else {
 		b->checkedEntry = GetCodePtr();
 		SetCC(CC_LT);
-		MOVI2R(R0, js.blockStart);
+		gpr.SetRegImm(R0, js.blockStart);
 		B((const void *)outerLoopPCInR0);
 		SetCC(CC_AL);
 	}
@@ -256,10 +263,9 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 	gpr.Start(analysis);
 	fpr.Start(analysis);
 
-	int numInstructions = 0;
-	int cycles = 0;
 	int partialFlushOffset = 0;
 
+	js.numInstructions = 0;
 	while (js.compiling)
 	{
 		gpr.SetCompilerPC(js.compilerPC);  // Let it know for log messages
@@ -270,7 +276,7 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 		MIPSCompileOp(inst);
 	
 		js.compilerPC += 4;
-		numInstructions++;
+		js.numInstructions++;
 		if (!cpu_info.bArmV7 && (GetCodePtr() - b->checkedEntry - partialFlushOffset) > 3200)
 		{
 			// We need to prematurely flush as we are out of range
@@ -279,11 +285,19 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 			SetJumpTarget(skip);
 			partialFlushOffset = GetCodePtr() - b->checkedEntry;
 		}
+
+		// Safety check, in case we get a bunch of really large jit ops without a lot of branching.
+		if (GetSpaceLeft() < 0x800)
+		{
+			FlushAll();
+			WriteExit(js.compilerPC, js.nextExit++);
+			js.compiling = false;
+		}
 	}
 
 	if (jo.useForwardJump) {
 		SetJumpTarget(bail);
-		MOVI2R(R0, js.blockStart);
+		gpr.SetRegImm(R0, js.blockStart);
 		B((const void *)outerLoopPCInR0);
 	}
 
@@ -312,7 +326,7 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 	// Don't forget to zap the newly written instructions in the instruction cache!
 	FlushIcache();
 
-	b->originalSize = numInstructions;
+	b->originalSize = js.numInstructions;
 	return b->normalEntry;
 }
 
@@ -329,9 +343,9 @@ void Jit::Comp_Generic(MIPSOpcode op)
 	if (func)
 	{
 		SaveDowncount();
-		MOVI2R(R0, js.compilerPC);
+		gpr.SetRegImm(R0, js.compilerPC);
 		MovToPC(R0);
-		MOVI2R(R0, op.encoding);
+		gpr.SetRegImm(R0, op.encoding);
 		QuickCallFunction(R1, (void *)func);
 		RestoreDowncount();
 	}
@@ -373,7 +387,7 @@ void Jit::WriteDownCount(int offset)
 		} else {
 			// Should be fine to use R2 here, flushed the regcache anyway.
 			// If js.downcountAmount can be expressed as an Imm8, we don't need this anyway.
-			MOVI2R(R2, theDowncount);
+			gpr.SetRegImm(R2, theDowncount);
 			SUBS(R7, R7, R2);
 		}
 	} else {
@@ -386,7 +400,7 @@ void Jit::WriteDownCount(int offset)
 		} else {
 			// Should be fine to use R2 here, flushed the regcache anyway.
 			// If js.downcountAmount can be expressed as an Imm8, we don't need this anyway.
-			MOVI2R(R2, theDowncount);
+			gpr.SetRegImm(R2, theDowncount);
 			SUBS(R1, R1, R2);
 			STR(R1, CTXREG, offsetof(MIPSState, downcount));
 		}
@@ -412,7 +426,7 @@ void Jit::WriteExit(u32 destination, int exit_num)
 		B(blocks.GetBlock(block)->checkedEntry);
 		b->linkStatus[exit_num] = true;
 	} else {
-		MOVI2R(R0, destination);
+		gpr.SetRegImm(R0, destination);
 		B((const void *)dispatcherPCInR0);	
 	}
 }

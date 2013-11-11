@@ -65,39 +65,72 @@ void Jit::BranchRSRTComp(MIPSOpcode op, ArmGen::CCFlags cc, bool likely)
 	MIPSGPReg rs = _RS;
 	u32 targetAddr = js.compilerPC + offset + 4;
 
+	if (jo.immBranches && gpr.IsImm(rs) && gpr.IsImm(rt) && js.numInstructions < jo.continueMaxInstructions) {
+		// The cc flags are opposites: when NOT to take the branch.
+		bool skipBranch;
+		s32 rsImm = (s32)gpr.GetImm(rs);
+		s32 rtImm = (s32)gpr.GetImm(rt);
+
+		switch (cc) {
+		case CC_EQ: skipBranch = rsImm == rtImm; break;
+		case CC_NEQ: skipBranch = rsImm != rtImm; break;
+		default: skipBranch = false; _dbg_assert_msg_(JIT, false, "Bad cc flag in BranchRSRTComp().");
+		}
+
+		if (skipBranch) {
+			// Skip the delay slot if likely, otherwise it'll be the next instruction.
+			if (likely)
+				js.compilerPC += 4;
+			return;
+		}
+
+		// Branch taken.  Always compile the delay slot, and then go to dest.
+		CompileDelaySlot(DELAYSLOT_NICE);
+		// Account for the increment in the loop.
+		js.compilerPC = targetAddr - 4;
+		// In case the delay slot was a break or something.
+		js.compiling = true;
+		return;
+	}
+
 	MIPSOpcode delaySlotOp = Memory::Read_Instruction(js.compilerPC+4);
 	bool delaySlotIsNice = IsDelaySlotNiceReg(op, delaySlotOp, rt, rs);
 	CONDITIONAL_NICE_DELAYSLOT;
 	if (!likely && delaySlotIsNice)
 		CompileDelaySlot(DELAYSLOT_NICE);
 
-	if (gpr.IsImm(rt) && gpr.GetImm(rt) == 0)
-	{
+	// We might be able to flip the condition (EQ/NEQ are easy.)
+	const bool canFlip = cc == CC_EQ || cc == CC_NEQ;
+
+	Operand2 op2;
+	bool negated;
+	if (gpr.IsImm(rt) && TryMakeOperand2_AllowNegation(gpr.GetImm(rt), op2, &negated)) {
 		gpr.MapReg(rs);
-		CMP(gpr.R(rs), Operand2(0, TYPE_IMM));
-	}
-	else if (gpr.IsImm(rs) && gpr.GetImm(rs) == 0 && (cc == CC_EQ || cc == CC_NEQ))  // only these are easily 'flippable'
-	{
-		gpr.MapReg(rt);
-		CMP(gpr.R(rt), Operand2(0, TYPE_IMM));
-	}
-	else
-	{
-		gpr.MapInIn(rs, rt);
-		CMP(gpr.R(rs), gpr.R(rt));
+		if (!negated)
+			CMP(gpr.R(rs), op2);
+		else
+			CMN(gpr.R(rs), op2);
+	} else {
+		if (gpr.IsImm(rs) && TryMakeOperand2_AllowNegation(gpr.GetImm(rs), op2, &negated) && canFlip) {
+			gpr.MapReg(rt);
+			if (!negated)
+				CMP(gpr.R(rt), op2);
+			else
+				CMN(gpr.R(rt), op2);
+		} else {
+			gpr.MapInIn(rs, rt);
+			CMP(gpr.R(rs), gpr.R(rt));
+		}
 	}
 
 	ArmGen::FixupBranch ptr;
-	if (!likely)
-	{
+	if (!likely) {
 		if (!delaySlotIsNice)
 			CompileDelaySlot(DELAYSLOT_SAFE_FLUSH);
 		else
 			FlushAll();
 		ptr = B_CC(cc);
-	}
-	else
-	{
+	} else {
 		FlushAll();
 		ptr = B_CC(cc);
 		CompileDelaySlot(DELAYSLOT_FLUSH);
@@ -123,6 +156,38 @@ void Jit::BranchRSZeroComp(MIPSOpcode op, ArmGen::CCFlags cc, bool andLink, bool
 	int offset = _IMM16 << 2;
 	MIPSGPReg rs = _RS;
 	u32 targetAddr = js.compilerPC + offset + 4;
+
+	if (jo.immBranches && gpr.IsImm(rs) && js.numInstructions < jo.continueMaxInstructions) {
+		// The cc flags are opposites: when NOT to take the branch.
+		bool skipBranch;
+		s32 imm = (s32)gpr.GetImm(rs);
+
+		switch (cc) {
+		case CC_GT: skipBranch = imm > 0; break;
+		case CC_GE: skipBranch = imm >= 0; break;
+		case CC_LT: skipBranch = imm < 0; break;
+		case CC_LE: skipBranch = imm <= 0; break;
+		default: skipBranch = false; _dbg_assert_msg_(JIT, false, "Bad cc flag in BranchRSZeroComp().");
+		}
+
+		if (skipBranch) {
+			// Skip the delay slot if likely, otherwise it'll be the next instruction.
+			if (likely)
+				js.compilerPC += 4;
+			return;
+		}
+
+		// Branch taken.  Always compile the delay slot, and then go to dest.
+		CompileDelaySlot(DELAYSLOT_NICE);
+		if (andLink)
+			gpr.SetImm(MIPS_REG_RA, js.compilerPC + 8);
+
+		// Account for the increment in the loop.
+		js.compilerPC = targetAddr - 4;
+		// In case the delay slot was a break or something.
+		js.compiling = true;
+		return;
+	}
 
 	MIPSOpcode delaySlotOp = Memory::Read_Instruction(js.compilerPC + 4);
 	bool delaySlotIsNice = IsDelaySlotNiceReg(op, delaySlotOp, rs);
@@ -152,7 +217,7 @@ void Jit::BranchRSZeroComp(MIPSOpcode op, ArmGen::CCFlags cc, bool andLink, bool
 	// Take the branch
 	if (andLink)
 	{
-		MOVI2R(R0, js.compilerPC + 8);
+		gpr.SetRegImm(R0, js.compilerPC + 8);
 		STR(R0, CTXREG, MIPS_REG_RA * 4);
 	}
 
@@ -341,18 +406,42 @@ void Jit::Comp_Jump(MIPSOpcode op)
 	u32 off = _IMM26 << 2;
 	u32 targetAddr = (js.compilerPC & 0xF0000000) | off;
 
+	// Might be a stubbed address or something?
+	if (!Memory::IsValidAddress(targetAddr))
+	{
+		if (js.nextExit == 0)
+			ERROR_LOG_REPORT(JIT, "Jump to invalid address: %08x", targetAddr)
+		else
+			js.compiling = false;
+		// TODO: Mark this block dirty or something?  May be indication it will be changed by imports.
+		return;
+	}
+
 	switch (op >> 26) 
 	{
 	case 2: //j
 		CompileDelaySlot(DELAYSLOT_NICE);
+		if (jo.continueJumps && js.numInstructions < jo.continueMaxInstructions) {
+			// Account for the increment in the loop.
+			js.compilerPC = targetAddr - 4;
+			// In case the delay slot was a break or something.
+			js.compiling = true;
+			return;
+		}
 		FlushAll();
 		WriteExit(targetAddr, js.nextExit++);
 		break;
 
 	case 3: //jal
-		gpr.MapReg(MIPS_REG_RA, MAP_NOINIT | MAP_DIRTY);
-		MOVI2R(gpr.R(MIPS_REG_RA), js.compilerPC + 8);
+		gpr.SetImm(MIPS_REG_RA, js.compilerPC + 8);
 		CompileDelaySlot(DELAYSLOT_NICE);
+		if (jo.continueJumps && js.numInstructions < jo.continueMaxInstructions) {
+			// Account for the increment in the loop.
+			js.compilerPC = targetAddr - 4;
+			// In case the delay slot was a break or something.
+			js.compiling = true;
+			return;
+		}
 		FlushAll();
 		WriteExit(targetAddr, js.nextExit++);
 		break;
@@ -379,30 +468,45 @@ void Jit::Comp_JumpReg(MIPSOpcode op)
 
 	ARMReg destReg = R8;
 	if (IsSyscall(delaySlotOp)) {
+		_dbg_assert_msg_(JIT, (op & 0x3f) == 8, "jalr followed by syscall not supported.");
+
 		gpr.MapReg(rs);
-		MOV(R8, gpr.R(rs)); 
-		MovToPC(R8);  // For syscall to be able to return.
+		MovToPC(gpr.R(rs));  // For syscall to be able to return.
 		CompileDelaySlot(DELAYSLOT_FLUSH);
 		return;  // Syscall wrote exit code.
 	} else if (delaySlotIsNice) {
 		CompileDelaySlot(DELAYSLOT_NICE);
-		gpr.MapReg(rs);
-		destReg = gpr.R(rs);  // Safe because FlushAll doesn't change any regs
+
 		if (rs == MIPS_REG_RA && g_Config.bDiscardRegsOnJRRA) {
 			// According to the MIPS ABI, there are some regs we don't need to preserve.
 			// Let's discard them so we don't need to write them back.
 			// NOTE: Not all games follow the MIPS ABI! Tekken 6, for example, will crash
 			// with this enabled.
+			gpr.DiscardR(MIPS_REG_COMPILER_SCRATCH);
 			for (int i = MIPS_REG_A0; i <= MIPS_REG_T7; i++)
 				gpr.DiscardR((MIPSGPReg)i);
 			gpr.DiscardR(MIPS_REG_T8);
 			gpr.DiscardR(MIPS_REG_T9);
 		}
+
+		if (jo.continueJumps && gpr.IsImm(rs) && js.numInstructions < jo.continueMaxInstructions) {
+			// Account for the increment in the loop.
+			js.compilerPC = gpr.GetImm(rs) - 4;
+			if ((op & 0x3f) == 9) {
+				gpr.SetImm(rd, js.compilerPC + 8);
+			}
+			// In case the delay slot was a break or something.
+			js.compiling = true;
+			return;
+		}
+
+		gpr.MapReg(rs);
+		destReg = gpr.R(rs);  // Safe because FlushAll doesn't change any regs
 		FlushAll();
 	} else {
-		// Delay slot
+		// Delay slot - this case is very rare, might be able to free up R8.
 		gpr.MapReg(rs);
-		MOV(R8, gpr.R(rs));  // Save the destination address through the delay slot. Could use isNice to avoid when the jit is fully implemented
+		MOV(R8, gpr.R(rs));
 		CompileDelaySlot(DELAYSLOT_NICE);
 		FlushAll();
 	}
@@ -412,7 +516,7 @@ void Jit::Comp_JumpReg(MIPSOpcode op)
 	case 8: //jr
 		break;
 	case 9: //jalr
-		MOVI2R(R0, js.compilerPC + 8);
+		gpr.SetRegImm(R0, js.compilerPC + 8);
 		STR(R0, CTXREG, (int)rd * 4);
 		break;
 	default:
@@ -427,24 +531,25 @@ void Jit::Comp_JumpReg(MIPSOpcode op)
 	
 void Jit::Comp_Syscall(MIPSOpcode op)
 {
-	FlushAll();
-
 	// If we're in a delay slot, this is off by one.
 	const int offset = js.inDelaySlot ? -1 : 0;
 	WriteDownCount(offset);
 	js.downcountAmount = -offset;
+
+	// TODO: Maybe discard v0, v1, and some temps?  Definitely at?
+	FlushAll();
 
 	SaveDowncount();
 	// Skip the CallSyscall where possible.
 	void *quickFunc = GetQuickSyscallFunc(op);
 	if (quickFunc)
 	{
-		MOVI2R(R0, (u32)(intptr_t)GetSyscallInfo(op));
+		gpr.SetRegImm(R0, (u32)(intptr_t)GetSyscallInfo(op));
 		QuickCallFunction(R1, quickFunc);
 	}
 	else
 	{
-		MOVI2R(R0, op.encoding);
+		gpr.SetRegImm(R0, op.encoding);
 		QuickCallFunction(R1, (void *)&CallSyscall);
 	}
 	RestoreDowncount();

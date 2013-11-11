@@ -1042,9 +1042,15 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 		}
 
 	case GE_CMD_TEXSIZE0:
-		gstate_c.curTextureWidth = gstate.getTextureWidth(0);
-		gstate_c.curTextureHeight = gstate.getTextureHeight(0);
-		shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		// Render to texture may have overridden the width/height.
+		// Don't reset it unless the size is different / the texture has changed.
+		if (diff || gstate_c.textureChanged) {
+			gstate_c.curTextureWidth = gstate.getTextureWidth(0);
+			gstate_c.curTextureHeight = gstate.getTextureHeight(0);
+			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+			// We will need to reset the texture now.
+			gstate_c.textureChanged = true;
+		}
 		//fall thru - ignoring the mipmap sizes for now
 
 	case GE_CMD_TEXSIZE1:

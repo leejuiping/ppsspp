@@ -31,7 +31,7 @@ using namespace ArmGen;
 // R11 = base pointer
 
 enum {
-	TOTAL_MAPPABLE_MIPSREGS = 34,
+	TOTAL_MAPPABLE_MIPSREGS = 35,
 };
 
 typedef int MIPSReg;
@@ -124,6 +124,7 @@ private:
 	const ARMReg *GetMIPSAllocationOrder(int &count);
 	void MapRegTo(ARMReg reg, MIPSGPReg mipsReg, int mapFlags);
 	int FlushGetSequential(MIPSGPReg startMipsReg, bool allowFlushImm);
+	ARMReg FindBestToSpill(bool unusedOnly);
 		
 	MIPSState *mips_;
 	MIPSComp::ArmJitOptions *options_;

@@ -68,6 +68,7 @@ enum MIPSGPReg
 	// Not real regs, just for convenience/jit mapping.
 	MIPS_REG_HI = 32,
 	MIPS_REG_LO = 33,
+	MIPS_REG_FPCOND = 34,
 };
 
 enum
@@ -156,8 +157,8 @@ public:
 
 	bool inDelaySlot;
 	int llBit;  // ll/sc
-
-
+	u32 temp;  // can be used to save temporaries during calculations when we need more than R0 and R1
+	
 	GMRng rng;	// VFPU hardware random number generator. Probably not the right type.
 
 	// Debug stuff

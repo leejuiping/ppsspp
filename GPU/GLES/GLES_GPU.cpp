@@ -849,7 +849,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 			currentList->bboxResult = true;
 			break;
 		}
-		if ((data % 8 == 0) && data < 64) {  // Sanity check
+		if (((data & 7) == 0) && data <= 64) {  // Sanity check
 			void *control_points = Memory::GetPointer(gstate_c.vertexAddr);
 			if (gstate.vertType & GE_VTYPE_IDX_MASK) {
 				ERROR_LOG_REPORT_ONCE(boundingbox, G3D, "Indexed bounding box data not supported.");
@@ -994,13 +994,16 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 		}
 		break;
 
-	case GE_CMD_CLUTADDR:
-	case GE_CMD_CLUTADDRUPPER:
 	case GE_CMD_CLUTFORMAT:
 		if (diff) {
 			gstate_c.textureChanged = true;
 		}
 		// This could be used to "dirty" textures with clut.
+		break;
+
+	case GE_CMD_CLUTADDR:
+	case GE_CMD_CLUTADDRUPPER:
+		// Hm, LOADCLUT actually changes the CLUT so no need to dirty here.
 		break;
 
 	case GE_CMD_LOADCLUT:

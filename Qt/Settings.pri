@@ -19,7 +19,9 @@ win32-msvc* {
 } else {
 	DEFINES += __STDC_CONSTANT_MACROS
 	QMAKE_CXXFLAGS += -Wno-unused-function -Wno-unused-variable -Wno-multichar -Wno-uninitialized -Wno-ignored-qualifiers -Wno-missing-field-initializers -Wno-unused-parameter
-	QMAKE_CXXFLAGS += -std=c++0x -ffast-math -fno-strict-aliasing
+	QMAKE_CXXFLAGS += -ffast-math -fno-strict-aliasing
+	contains(MEEGO_EDITION,harmattan): QMAKE_CXXFLAGS += -std=gnu++0x
+	else: QMAKE_CXXFLAGS += -std=c++0x
 	QMAKE_CFLAGS_RELEASE -= -O2
 	QMAKE_CFLAGS_RELEASE += -O3
 	QMAKE_CXXFLAGS_RELEASE -= -O2
@@ -63,10 +65,8 @@ qnx {
 }
 symbian {
 	# Does not seem to be a way to change to armv6 compile so just override in variants.xml (see README)
-	MMP_RULES -= "ARMFPU softvfp+vfpv2"
-	MMP_RULES += "ARMFPU vfpv2"
-#"BOOST_COMPILER_CONFIG=<boost/mpl/aux_/config/gcc.hpp>"
+	DEFINES += "BOOST_COMPILER_CONFIG=\"$$EPOCROOT/epoc32/include/stdapis/boost/mpl/aux_/config/gcc.hpp\""
 	QMAKE_CXXFLAGS += -marm -Wno-parentheses -Wno-comment
-	INCLUDEPATH += $$EPOCROOT/epoc32/include/stdapis $$EPOCROOT/epoc32/include/stdapis/glib-2.0
+	INCLUDEPATH += $$EPOCROOT/epoc32/include/stdapis
 	INCLUDEPATH += ../ffmpeg/symbian/armv6/include
 }

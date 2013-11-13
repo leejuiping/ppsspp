@@ -259,8 +259,6 @@ add_library(Common STATIC
 	Common/KeyMap.h
 	Common/LogManager.cpp
 	Common/LogManager.h
-	Common/MathUtil.cpp
-	Common/MathUtil.h
 	Common/MemArena.cpp
 	Common/MemArena.h
 	Common/MemoryUtil.cpp
@@ -1004,6 +1002,7 @@ add_library(GPU OBJECT
 	GPU/GLES/TextureScaler.h
 	GPU/GLES/TransformPipeline.cpp
 	GPU/GLES/TransformPipeline.h
+	GPU/GLES/SoftwareTransform.cpp
 	GPU/GLES/VertexDecoder.cpp
 	GPU/GLES/VertexDecoder.h
 	GPU/GLES/VertexShaderGenerator.cpp

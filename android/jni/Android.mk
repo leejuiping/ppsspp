@@ -122,7 +122,6 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/ThreadPools.cpp \
   $(SRC)/Common/Timer.cpp \
   $(SRC)/Common/Misc.cpp \
-  $(SRC)/Common/MathUtil.cpp \
   $(SRC)/GPU/Math3D.cpp \
   $(SRC)/GPU/GPUCommon.cpp \
   $(SRC)/GPU/GPUState.cpp \
@@ -137,6 +136,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/GPU/GLES/GLES_GPU.cpp.arm \
   $(SRC)/GPU/GLES/TextureCache.cpp.arm \
   $(SRC)/GPU/GLES/TransformPipeline.cpp.arm \
+  $(SRC)/GPU/GLES/SoftwareTransform.cpp.arm \
   $(SRC)/GPU/GLES/StateMapping.cpp.arm \
   $(SRC)/GPU/GLES/VertexDecoder.cpp.arm \
   $(SRC)/GPU/GLES/ShaderManager.cpp.arm \

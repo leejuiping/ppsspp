@@ -667,6 +667,10 @@ void FramebufferManager::SetRenderFrameBuffer() {
 			vfb = v;
 			// Update fb stride in case it changed
 			vfb->fb_stride = fb_stride;
+			if (v->width < drawing_width && v->height < drawing_height) {
+				v->width = drawing_width;
+				v->height = drawing_height;
+			}
 			if (v->format != fmt) {
 				v->width = drawing_width;
 				v->height = drawing_height;
@@ -1529,7 +1533,7 @@ bool FramebufferManager::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
 		return true;
 	}
 
-	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GE_FORMAT_8888, true);
+	buffer.Allocate(vfb->renderWidth, vfb->renderHeight, GE_FORMAT_8888, true, true);
 	if (vfb->fbo)
 		fbo_bind_for_read(vfb->fbo);
 #ifndef USING_GLES2

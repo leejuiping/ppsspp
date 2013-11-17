@@ -103,6 +103,7 @@ public:
 		{
 		case 0:
 			return cpu->r[index];
+
 		case 1:
 			memcpy(&temp, &cpu->f[index], 4);
 			return temp;
@@ -121,7 +122,8 @@ public:
 		switch (cat)
 		{
 		case 0:
-			cpu->r[index] = value;
+			if (index != 0)
+				cpu->r[index] = value;
 			break;
 
 		case 1:

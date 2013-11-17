@@ -737,7 +737,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 #endif
 
 			int bytesRead;
-			transformDraw_.SubmitPrim(verts, inds, prim, count, gstate.vertType, -1, &bytesRead);
+			transformDraw_.SubmitPrim(verts, inds, prim, count, gstate.vertType, &bytesRead);
 
 			int vertexCost = transformDraw_.EstimatePerVertexCost();
 			gpuStats.vertexGPUCycles += vertexCost * count;
@@ -1601,7 +1601,8 @@ void GLES_GPU::DoState(PointerWrap &p) {
 
 	// TODO: Some of these things may not be necessary.
 	// None of these are necessary when saving.
-	if (p.mode == p.MODE_READ) {
+	// In Freeze-Frame mode, we don't want to do any of this.
+	if (p.mode == p.MODE_READ && !PSP_CoreParameter().frozen) {
 		textureCache_.Clear(true);
 		transformDraw_.ClearTrackedVertexArrays();
 

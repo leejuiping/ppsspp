@@ -454,7 +454,7 @@ void EmuScreen::update(InputState &input) {
 	PSP_CoreParameter().pixelHeight = pixel_yres;
 
 	UpdateUIState(UISTATE_INGAME);
-	
+
 	if (errorMessage_.size()) {
 		I18NCategory *g = GetI18NCategory("Error");
 		std::string errLoadingFile = g->T("Error loading file");
@@ -482,8 +482,7 @@ void EmuScreen::update(InputState &input) {
 	// TODO: Make into an axis
 #ifdef USING_GLES2
 	if (g_Config.bAccelerometerToAnalogHoriz) {
-		
-		//get the "base" coordinate system which is setup by the calibration system 
+		// Get the "base" coordinate system which is setup by the calibration system
 		float base_x = g_Config.fTiltBaseX;
 		float base_y = g_Config.fTiltBaseY;
 
@@ -513,7 +512,6 @@ void EmuScreen::update(InputState &input) {
 		
 		leftstick_y += clamp1(delta_y);
 		__CtrlSetAnalogY(clamp1(leftstick_y), CTRL_STICK_LEFT);
-		
 	}
 #endif
 
@@ -532,6 +530,17 @@ void EmuScreen::update(InputState &input) {
 void EmuScreen::render() {
 	if (invalid_)
 		return;
+
+	if (PSP_CoreParameter().freezeNext) {
+		PSP_CoreParameter().frozen = true;
+		PSP_CoreParameter().freezeNext = false;
+		SaveState::SaveToRam(freezeState_);
+	} else if (PSP_CoreParameter().frozen) {
+		if (CChunkFileReader::ERROR_NONE != SaveState::LoadFromRam(freezeState_)) {
+			ERROR_LOG(HLE, "Failed to load freeze state. Unfreezing.");
+			PSP_CoreParameter().frozen = false;
+		}
+	}
 
 	// Reapply the graphics state of the PSP
 	ReapplyGfxState();
@@ -604,6 +613,8 @@ void EmuScreen::render() {
 			sprintf(fpsbuf, "FPS: %0.1f", actual_fps); break;
 		case 3:
 			sprintf(fpsbuf, "%0.0f/%0.0f (%0.1f%%)", actual_fps, fps, vps / 60.0f * 100.0f); break;
+		default:
+			return;
 		}
 		ui_draw2d.SetFontScale(0.7f, 0.7f);
 		ui_draw2d.DrawText(UBUNTU24, fpsbuf, dp_xres - 8, 12, 0xc0000000, ALIGN_TOPRIGHT | FLAG_DYNAMIC_ASCII);

@@ -30,6 +30,7 @@ LIBS += -lCore$${XT} -lCommon$${XT} -lNative$${XT}
 # FFMPEG Path
 win32:  FFMPEG_DIR = ../ffmpeg/Windows/$${QMAKE_TARGET.arch}/lib/
 linux:  FFMPEG_DIR = ../ffmpeg/linux/$${QMAKE_TARGET.arch}/lib/
+macx:!mobile_platform:   FFMPEG_DIR = ../ffmpeg/macosx/x86_64/lib/
 qnx:    FFMPEG_DIR = ../ffmpeg/blackberry/armv7/lib/
 symbian:FFMPEG_DIR = -l
 
@@ -100,13 +101,8 @@ INCLUDEPATH += .. ../Common ../native
 	# Desktop handles the Init separately
 	SOURCES += ../UI/NativeApp.cpp
 }
-symbian {
-	RESOURCES += assets_lowmem.qrc
-	SOURCES += ../UI/ui_atlas_lowmem.cpp
-} else {
-	RESOURCES += assets.qrc
-	SOURCES += ../UI/ui_atlas.cpp
-}
+RESOURCES += assets.qrc
+SOURCES += ../UI/ui_atlas_nofont.cpp
 
 # Packaging
 symbian {
@@ -116,14 +112,11 @@ symbian {
 	ICON = ../assets/icon.svg
 
 	# Folders:
-	assets.sources = ../flash0 ../assets/langregion.ini
+	assets.sources = ../flash0 ../assets/langregion.ini ../assets/unknown.png
 	assets.path = E:/PPSSPP
 	shaders.sources = ../assets/shaders
 	shaders.path = E:/PPSSPP/PSP
 	lang.sources = $$files(../lang/*.ini)
-	# Unsupported languages on Symbian. Slashes differ depending on host.
-	contains(QMAKE_HOST.os, "Windows"): lang.sources -= ..\\lang/ja_JP.ini ..\\lang/ko_KR.ini ..\\lang/zh_CN.ini ..\\lang/zh_TW.ini
-	else: lang.sources -= ../lang/ja_JP.ini ../lang/ko_KR.ini ../lang/zh_CN.ini ../lang/zh_TW.ini
 	lang.path = E:/PPSSPP/lang
 
 	DEPLOYMENT += vendor_deploy assets shaders lang
@@ -135,7 +128,7 @@ symbian {
 
 contains(MEEGO_EDITION,harmattan) {
 	target.path = /opt/PPSSPP/bin
-	assets.files = ../flash0 ../assets/langregion.ini
+	assets.files = ../flash0 ../assets/langregion.ini ../assets/unknown.png
 	assets.path = /opt/PPSSPP
 	shaders.files = ../assets/shaders
 	shaders.path = /opt/PPSSPP/PSP

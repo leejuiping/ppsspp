@@ -117,7 +117,7 @@ void Jit::Comp_FPULS(MIPSOpcode op)
 				SetCCAndR0ForSafeAddress(rs, offset, R1);
 				doCheck = true;
 			}
-			ADD(R0, R0, R11);
+			ADD(R0, R0, MEMBASEREG);
 		}
 #ifdef __ARM_ARCH_7S__
 		FixupBranch skip;
@@ -161,7 +161,7 @@ void Jit::Comp_FPULS(MIPSOpcode op)
 				SetCCAndR0ForSafeAddress(rs, offset, R1);
 				doCheck = true;
 			}
-			ADD(R0, R0, R11);
+			ADD(R0, R0, MEMBASEREG);
 		}
 #ifdef __ARM_ARCH_7S__
 		FixupBranch skip2;
@@ -339,22 +339,21 @@ void Jit::Comp_mxc1(MIPSOpcode op)
 		return;
 
 	case 2: //cfc1
-		if (fs == 31)
-		{
+		if (fs == 31) {
 			gpr.MapDirtyIn(rt, MIPS_REG_FPCOND);
 			LDR(gpr.R(rt), CTXREG, offsetof(MIPSState, fcr31));
-			if (cpu_info.bArmV7) {
-				BFI(gpr.R(rt), gpr.R(MIPS_REG_FPCOND), 23, 1);
-			} else {
-				AND(R0, gpr.R(MIPS_REG_FPCOND), Operand2(1)); // Just in case
-				ANDI2R(gpr.R(rt), gpr.R(rt), ~(0x1 << 23), R1);  // R1 won't be used, this turns into a simple BIC.
-				ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSL, 23));
-			}
-		}
-		else if (fs == 0)
-		{
-			gpr.MapReg(rt, MAP_DIRTY | MAP_NOINIT);
-			LDR(gpr.R(rt), CTXREG, offsetof(MIPSState, fcr0));
+#ifdef HAVE_ARMV7
+			BFI(gpr.R(rt), gpr.R(MIPS_REG_FPCOND), 23, 1);
+#else
+			AND(R0, gpr.R(MIPS_REG_FPCOND), Operand2(1)); // Just in case
+			ANDI2R(gpr.R(rt), gpr.R(rt), ~(0x1 << 23), R1);  // R1 won't be used, this turns into a simple BIC.
+			ORR(gpr.R(rt), gpr.R(rt), Operand2(R0, ST_LSL, 23));
+#endif
+		} else if (fs == 0) {
+			gpr.SetImm(rt, MIPSState::FCR0_VALUE);
+		} else {
+			// Unsupported regs are always 0.
+			gpr.SetImm(rt, 0);
 		}
 		return;
 
@@ -386,13 +385,14 @@ void Jit::Comp_mxc1(MIPSOpcode op)
 			VMSR(R1);
 			*/
 			// Update MIPS state
+			// TODO: Technically, should mask by 0x0181FFFF.  Maybe just put all of FCR31 in the reg?
 			STR(gpr.R(rt), CTXREG, offsetof(MIPSState, fcr31));
-			if (cpu_info.bArmV7) {
-				UBFX(gpr.R(MIPS_REG_FPCOND), gpr.R(rt), 23, 1);
-			} else {
-				MOV(R0, Operand2(gpr.R(rt), ST_LSR, 23));
-				AND(gpr.R(MIPS_REG_FPCOND), R0, Operand2(1));
-			}
+#ifdef HAVE_ARMV7
+			UBFX(gpr.R(MIPS_REG_FPCOND), gpr.R(rt), 23, 1);
+#else
+			MOV(R0, Operand2(gpr.R(rt), ST_LSR, 23));
+			AND(gpr.R(MIPS_REG_FPCOND), R0, Operand2(1));
+#endif
 		}
 		return;
 	}

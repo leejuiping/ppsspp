@@ -38,7 +38,9 @@
 
 // __FUNCTION__ is misused a lot below, it's no longer a string literal but a virtual
 // variable so this use fails in some compilers. Just define it away for now.
+#ifndef _MSC_VER
 #define __FUNCTION__ "(n/a)"
+#endif
 
 namespace ArmGen
 {
@@ -166,8 +168,8 @@ void ARMXEmitter::ADDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 			// Decompose into two additions.
 			ADD(rd, rs, Operand2((u8)(val >> 8), 12));   // rotation right by 12*2 == rotation left by 8
 			ADD(rd, rd, Operand2((u8)(val), 0));
-		} else if (((-(u32)(s32)val) & 0xFFFF0000) == 0) {
-			val = -(u32)(s32)val;
+		} else if ((((u32)-(s32)val) & 0xFFFF0000) == 0) {
+			val = (u32)-(s32)val;
 			SUB(rd, rs, Operand2((u8)(val >> 8), 12));
 			SUB(rd, rd, Operand2((u8)(val), 0));
 		} else {
@@ -202,7 +204,13 @@ void ARMXEmitter::ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 		}
 
 		// The worst case is 4 (e.g. 0x55555555.)
-		if (ops <= 3 || !cpu_info.bArmV7) {
+#ifdef HAVE_ARMV7
+		if (ops > 3) {
+			MOVI2R(scratch, val);
+			AND(rd, rs, scratch);
+		} else
+#endif
+		{
 			bool first = true;
 			for (int i = 0; i < 32; i += 2) {
 				u8 bits = RotR(val, i) & 0xFF;
@@ -218,9 +226,6 @@ void ARMXEmitter::ANDI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 					i += 8 - 2;
 				}
 			}
-		} else {
-			MOVI2R(scratch, val);
-			AND(rd, rs, scratch);
 		}
 	}
 }
@@ -272,7 +277,12 @@ void ARMXEmitter::ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 		if (TryMakeOperand2_AllowInverse(val, op2, &inversed) && ops >= 3) {
 			MVN(scratch, op2);
 			ORR(rd, rs, scratch);
-		} else if (ops <= 3 || !cpu_info.bArmV7) {
+#ifdef HAVE_ARMV7
+		} else if (ops > 3) {
+			MOVI2R(scratch, val);
+			ORR(rd, rs, scratch);
+#endif
+		} else {
 			bool first = true;
 			for (int i = 0; i < 32; i += 2) {
 				u8 bits = RotR(val, i) & 0xFF;
@@ -288,9 +298,6 @@ void ARMXEmitter::ORI2R(ARMReg rd, ARMReg rs, u32 val, ARMReg scratch)
 					i += 8 - 2;
 				}
 			}
-		} else {
-			MOVI2R(scratch, val);
-			ORR(rd, rs, scratch);
 		}
 	}
 }
@@ -333,26 +340,48 @@ void ARMXEmitter::MOVI2R(ARMReg reg, u32 val, bool optimize)
 	Operand2 op2;
 	bool inverse;
 
-	if (cpu_info.bArmV7 && !optimize)
+#ifdef HAVE_ARMV7
+	// Unused
+	if (!optimize)
 	{
 		// For backpatching on ARMv7
 		MOVW(reg, val & 0xFFFF);
 		MOVT(reg, val, true);
+		return;
 	}
-	else if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
+#endif
+
+	if (TryMakeOperand2_AllowInverse(val, op2, &inverse)) {
 		inverse ? MVN(reg, op2) : MOV(reg, op2);
 	} else {
-		if (cpu_info.bArmV7)
-		{
-			// Use MOVW+MOVT for ARMv7+
-			MOVW(reg, val & 0xFFFF);
-			if(val & 0xFFFF0000)
-				MOVT(reg, val, true);
-		} else if (!TrySetValue_TwoOp(reg,val)) {
+#ifdef HAVE_ARMV7
+		// Use MOVW+MOVT for ARMv7+
+		MOVW(reg, val & 0xFFFF);
+		if(val & 0xFFFF0000)
+			MOVT(reg, val, true);
+#else
+		if (!TrySetValue_TwoOp(reg,val)) {
+			bool first = true;
+			for (int i = 0; i < 32; i += 2) {
+				u8 bits = RotR(val, i) & 0xFF;
+				if ((bits & 3) != 0) {
+					u8 rotation = i == 0 ? 0 : 16 - i / 2;
+					if (first) {
+						MOV(reg, Operand2(bits, rotation));
+						first = false;
+					} else {
+						ORR(reg, reg, Operand2(bits, rotation));
+					}
+					// Well, we took care of these other bits while we were at it.
+					i += 8 - 2;
+				}
+			}
 			// Use literal pool for ARMv6.
-			AddNewLit(val);
-			LDR(reg, _PC); // To be backpatched later
+			// Disabled for now as it is crashing since Vertex Decoder JIT
+//			AddNewLit(val);
+//			LDR(reg, _PC); // To be backpatched later
 		}
+#endif
 	}
 }
 

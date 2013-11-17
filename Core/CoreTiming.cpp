@@ -24,8 +24,10 @@
 #include "Atomics.h"
 #include "CoreTiming.h"
 #include "Core.h"
+#include "Config.h"
 #include "HLE/sceKernelThread.h"
 #include "../Common/ChunkFile.h"
+#include "HLE/sceDisplay.h"
 
 int CPU_HZ = 222000000;
 
@@ -103,10 +105,16 @@ int GetClockFrequencyMHz()
 u64 GetGlobalTimeUs()
 {
 	s64 ticksSinceLast = GetTicks() - lastGlobalTimeTicks;
-	s64 usSinceLast = ticksSinceLast / GetClockFrequencyMHz();
+	int freq = GetClockFrequencyMHz();
+	if (g_Config.bTimerHack) {
+		float vps;
+		__DisplayGetVPS(&vps);
+		if (vps > 5.0f)
+			freq = (int)(((float)CPU_HZ * vps) / (1000000.0f * 60.0f));
+	}
+	s64 usSinceLast = ticksSinceLast / freq;
 	return lastGlobalTimeUs + usSinceLast;
 }
-
 
 Event* GetNewEvent()
 {

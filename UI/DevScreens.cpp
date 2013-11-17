@@ -29,8 +29,11 @@
 #include "Common/LogManager.h"
 #include "Core/MemMap.h"
 #include "Core/Config.h"
+#include "Core/CoreParameter.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
+#include "GPU/GPUInterface.h"
+#include "GPU/GPUState.h"
 #include "ext/disarm.h"
 #include "Common/CPUDetect.h"
 
@@ -49,6 +52,8 @@ void DevMenu::CreatePopupContents(UI::ViewGroup *parent) {
 	parent->Add(new Choice("Log Channels"))->OnClick.Handle(this, &DevMenu::OnLogConfig);
 	parent->Add(new Choice("Developer Tools"))->OnClick.Handle(this, &DevMenu::OnDeveloperTools);
 	parent->Add(new Choice("Jit Compare"))->OnClick.Handle(this, &DevMenu::OnJitCompare);
+	parent->Add(new Choice("Toggle Freeze"))->OnClick.Handle(this, &DevMenu::OnFreezeFrame);
+	parent->Add(new Choice("Dump Frame GPU Commands"))->OnClick.Handle(this, &DevMenu::OnDumpFrame);
 }
 
 UI::EventReturn DevMenu::OnLogConfig(UI::EventParams &e) {
@@ -63,6 +68,20 @@ UI::EventReturn DevMenu::OnDeveloperTools(UI::EventParams &e) {
 
 UI::EventReturn DevMenu::OnJitCompare(UI::EventParams &e) {
 	screenManager()->push(new JitCompareScreen());
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn DevMenu::OnFreezeFrame(UI::EventParams &e) {
+	if (PSP_CoreParameter().frozen) {
+		PSP_CoreParameter().frozen = false;
+	} else {
+		PSP_CoreParameter().freezeNext = true;
+	}
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn DevMenu::OnDumpFrame(UI::EventParams &e) {
+	gpu->DumpNextFrame();
 	return UI::EVENT_DONE;
 }
 
@@ -201,6 +220,20 @@ void SystemInfoScreen::CreateViews() {
 	openGL.resize(30);
 	deviceSpecs->Add(new InfoItem("OpenGL", openGL));
 	deviceSpecs->Add(new InfoItem("GLSL", (char *)glGetString(GL_SHADING_LANGUAGE_VERSION)));
+
+	ViewGroup *cpuExtensionsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
+	LinearLayout *cpuExtensions = new LinearLayout(ORIENT_VERTICAL);
+	cpuExtensions->SetSpacing(0);
+	cpuExtensionsScroll->Add(cpuExtensions);
+
+	tabHolder->AddTab("CPU Extensions", cpuExtensionsScroll);
+
+	cpuExtensions->Add(new ItemHeader("CPU Extensions"));
+	std::vector<std::string> exts;
+	SplitString(cpu_info.Summarize(), ',', exts);
+	for (size_t i = 2; i < exts.size(); i++) {
+		cpuExtensions->Add(new TextView(exts[i]));
+	}
 	
 	ViewGroup *oglExtensionsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	LinearLayout *oglExtensions = new LinearLayout(ORIENT_VERTICAL);
@@ -218,7 +251,7 @@ void SystemInfoScreen::CreateViews() {
 		oglExtensions->Add(new ItemHeader("OpenGL ES 2.0 Extensions"));
 #endif
 
-	std::vector<std::string> exts;
+	exts.clear();
 	SplitString(g_all_gl_extensions, ' ', exts);
 	std::sort(exts.begin(), exts.end());
 	for (size_t i = 0; i < exts.size(); i++) {

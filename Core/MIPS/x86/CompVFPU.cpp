@@ -410,8 +410,6 @@ void Jit::Comp_SVQ(MIPSOpcode op)
 		}
 		break;
 
-
-
 	default:
 		DISABLE;
 		break;
@@ -1178,7 +1176,7 @@ void Jit::Comp_Vh2f(MIPSOpcode op) {
 	X64Reg tempR = fpr.GetFreeXReg();
 	
 	MOVSS(XMM0, fpr.V(sregs[0]));
-	if (sz != V_Single) {
+ 	if (sz != V_Single) {
 		MOVSS(XMM1, fpr.V(sregs[1]));
 		PUNPCKLDQ(XMM0, R(XMM1));
 	}
@@ -1440,6 +1438,55 @@ void Jit::Comp_Vsgn(MIPSOpcode op) {
 		// If really was equal to zero, zap. Note that ANDN negates the destination.
 		ANDNPS(XMM0, R(XMM1));
 		MOVAPS(tempxregs[i], R(XMM0));
+	}
+
+	for (int i = 0; i < n; ++i) {
+		if (!fpr.V(dregs[i]).IsSimpleReg(tempxregs[i]))
+			MOVSS(fpr.V(dregs[i]), tempxregs[i]);
+	}
+
+	ApplyPrefixD(dregs, sz);
+
+	fpr.ReleaseSpillLocks();
+}
+
+void Jit::Comp_Vocp(MIPSOpcode op) {
+	CONDITIONAL_DISABLE;
+
+	if (js.HasUnknownPrefix())
+		DISABLE;
+
+	VectorSize sz = GetVecSize(op);
+	int n = GetNumVectorElements(sz);
+
+	u8 sregs[4], dregs[4];
+	GetVectorRegsPrefixS(sregs, sz, _VS);
+	GetVectorRegsPrefixD(dregs, sz, _VD);
+
+	X64Reg tempxregs[4];
+	for (int i = 0; i < n; ++i)
+	{
+		if (!IsOverlapSafeAllowS(dregs[i], i, n, sregs))
+		{
+			int reg = fpr.GetTempV();
+			fpr.MapRegV(reg, MAP_NOINIT | MAP_DIRTY);
+			fpr.SpillLockV(reg);
+			tempxregs[i] = fpr.VX(reg);
+		}
+		else
+		{
+			fpr.MapRegV(dregs[i], (dregs[i] == sregs[i] ? 0 : MAP_NOINIT) | MAP_DIRTY);
+			fpr.SpillLockV(dregs[i]);
+			tempxregs[i] = fpr.VX(dregs[i]);
+		}
+	}
+
+	MOVSS(XMM1, M((void *)&one));
+	for (int i = 0; i < n; ++i)
+	{
+		MOVSS(XMM0, R(XMM1));
+		SUBSS(XMM0, fpr.V(sregs[i]));
+		MOVSS(tempxregs[i], R(XMM0));
 	}
 
 	for (int i = 0; i < n; ++i) {
@@ -1965,6 +2012,14 @@ void Jit::Comp_Vi2x(MIPSOpcode op) {
 
 void Jit::Comp_Vhoriz(MIPSOpcode op) {
 	DISABLE;
+
+	// Do any games use these a noticable amount?
+	switch ((op >> 16) & 31) {
+	case 6:  // vfad
+		break;
+	case 7:  // vavg
+		break;
+	}
 }
 
 void Jit::Comp_Viim(MIPSOpcode op) {
@@ -2100,6 +2155,5 @@ void Jit::Comp_VRot(MIPSOpcode op) {
 
 	fpr.ReleaseSpillLocks();
 }
-
 
 }

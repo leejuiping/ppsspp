@@ -1,4 +1,4 @@
-// This file is Qt's equivalent of NativeApp.cpp
+// This file is Qt Desktop's equivalent of NativeApp.cpp
 
 #include <QFileInfo>
 #include <QDebug>
@@ -20,7 +20,6 @@
 #include "ui/ui_context.h"
 #include "gfx_es2/draw_text.h"
 #include "GPU/ge_constants.h"
-#include "EmuThread.h"
 
 static UI::Theme ui_theme;
 
@@ -67,7 +66,7 @@ void QtHost::SetWindowTitle(const char *message)
 
 void QtHost::UpdateUI()
 {
-	mainWindow->UpdateMenus();
+	mainWindow->updateMenus();
 }
 
 
@@ -98,7 +97,6 @@ void QtHost::SetDebugMode(bool mode)
 
 void QtHost::BeginFrame()
 {
-	mainWindow->Update();
 }
 
 void QtHost::EndFrame()
@@ -122,9 +120,9 @@ void QtHost::BootDone()
 }
 
 
-static QString SymbolMapFilename(QString currentFilename)
+static const char* SymbolMapFilename(std::string currentFilename)
 {
-	std::string result = currentFilename.toStdString();
+	std::string result = currentFilename;
 	size_t dot = result.rfind('.');
 	if (dot == result.npos)
 		return (result + ".map").c_str();
@@ -135,12 +133,12 @@ static QString SymbolMapFilename(QString currentFilename)
 
 bool QtHost::AttemptLoadSymbolMap()
 {
-	return symbolMap.LoadSymbolMap(SymbolMapFilename(GetCurrentFilename()).toStdString().c_str());
+	return symbolMap.LoadSymbolMap(SymbolMapFilename(PSP_CoreParameter().fileToStart));
 }
 
 void QtHost::PrepareShutdown()
 {
-	symbolMap.SaveSymbolMap(SymbolMapFilename(GetCurrentFilename()).toStdString().c_str());
+	symbolMap.SaveSymbolMap(SymbolMapFilename(PSP_CoreParameter().fileToStart));
 }
 
 void QtHost::AddSymbol(std::string name, u32 addr, u32 size, int type=0)
@@ -180,7 +178,6 @@ void QtHost::GPUNotifyCommand(u32 pc)
 
 void QtHost::SendCoreWait(bool isWaiting)
 {
-	mainWindow->CoreEmitWait(isWaiting);
 }
 
 bool QtHost::GpuStep()
@@ -190,20 +187,14 @@ bool QtHost::GpuStep()
 
 void QtHost::SendGPUStart()
 {
-	EmuThread_LockDraw(false);
-
 	if(m_GPUFlag == -1)
 	{
 		m_GPUFlag = 0;
 	}
-
-	EmuThread_LockDraw(true);
 }
 
 void QtHost::SendGPUWait(u32 cmd, u32 addr, void *data)
 {
-	EmuThread_LockDraw(false);
-
 	if((m_GPUFlag == 1 && (cmd == GE_CMD_PRIM || cmd == GE_CMD_BEZIER || cmd == GE_CMD_SPLINE)))
 	{
 		// Break after the draw
@@ -232,8 +223,6 @@ void QtHost::SendGPUWait(u32 cmd, u32 addr, void *data)
 			m_hGPUStepEvent.wait(m_hGPUStepMutex);
 		}
 	}
-
-	EmuThread_LockDraw(true);
 }
 
 void QtHost::SetGPUStep(bool value, int flag, u32 data)
@@ -315,7 +304,7 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 
 	g_Config.memCardDirectory = QDir::homePath().toStdString() + "/.ppsspp/";
 
-#if defined(Q_OS_LINUX) && !defined(ARM)
+#if defined(Q_OS_LINUX)
 	std::string program_path = QCoreApplication::applicationDirPath().toStdString();
 	if (File::Exists(program_path + "/flash0"))
 		g_Config.flash0Directory = program_path + "/flash0/";
@@ -333,11 +322,9 @@ void NativeInit(int argc, const char *argv[], const char *savegame_directory, co
 
 	g_gameInfoCache.Init();
 
-#if !defined(ARM)
 	// Start Desktop UI
 	MainWindow* mainWindow = new MainWindow();
 	mainWindow->show();
-#endif
 }
 
 int NativeMix(short *audio, int num_samples)

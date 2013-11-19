@@ -1,28 +1,27 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QMainWindow>
-#include <QTranslator>
-#include <QTimer>
+#include "ConsoleListener.h"
 #include "Core/Core.h"
+#include "Core/Config.h"
 #include "input/input_state.h"
 #include "debugger_disasm.h"
 #include "debugger_memory.h"
 #include "debugger_memorytex.h"
 #include "debugger_displaylist.h"
 
+#include <QtCore>
+#include <QtGui>
+
 class QtEmuGL;
-namespace Ui {
-class MainWindow;
-}
 
 class MainWindow : public QMainWindow
 {
-    Q_OBJECT
-    
+	Q_OBJECT
+
 public:
-    explicit MainWindow(QWidget *parent = 0);
-	~MainWindow();
+	explicit MainWindow(QWidget *parent = 0);
+	~MainWindow() { };
 
 	Debugger_Disasm* GetDialogDisasm() { return dialogDisasm; }
 	Debugger_Memory* GetDialogMemory() { return memoryWindow; }
@@ -31,117 +30,104 @@ public:
 	CoreState GetNextState() { return nextState; }
 
 	void ShowMemory(u32 addr);
-	void UpdateMenus();
+	void updateMenus();
 
 protected:
-	void changeEvent(QEvent *e);
 	void closeEvent(QCloseEvent *);
 	void keyPressEvent(QKeyEvent *e);
 	void keyReleaseEvent(QKeyEvent *e);
+	void timerEvent(QTimerEvent *);
 
 public slots:
 	void Boot();
-	void CoreEmitWait(bool);
-	void Update();
 
 private slots:
 	// File
-	void on_action_FileLoad_triggered();
-	void on_action_FileClose_triggered();
-	void on_action_FileQuickloadState_triggered();
-	void on_action_FileQuickSaveState_triggered();
-	void on_action_FileLoadStateFile_triggered();
-	void on_action_FileSaveStateFile_triggered();
-	void on_action_FileExit_triggered();
+	void openAct_triggered();
+	void closeAct_triggered();
+	void qlstateAct_triggered();
+	void qsstateAct_triggered();
+	void lstateAct_triggered();
+	void sstateAct_triggered();
+	void exitAct_triggered();
 
 	// Emulation
-	void on_action_EmulationRun_triggered();
-	void on_action_EmulationPause_triggered();
-	void on_action_EmulationReset_triggered();
-	void on_action_EmulationRunLoad_triggered();
+	void runAct_triggered();
+	void pauseAct_triggered();
+	void resetAct_triggered();
+	void runonloadAct_triggered();
 
 	// Debug
-	void on_action_DebugLoadMapFile_triggered();
-	void on_action_DebugSaveMapFile_triggered();
-	void on_action_DebugResetSymbolTable_triggered();
-	void on_action_DebugDumpFrame_triggered();
-	void on_action_DebugDisassembly_triggered();
-	void on_action_DebugDisplayList_triggered();
-	void on_action_DebugLog_triggered();
-	void on_action_DebugMemoryView_triggered();
-	void on_action_DebugMemoryViewTexture_triggered();
+	void lmapAct_triggered();
+	void smapAct_triggered();
+	void resetTableAct_triggered();
+	void dumpNextAct_triggered();
+	void disasmAct_triggered();
+	void dpyListAct_triggered();
+	void consoleAct_triggered();
+	void memviewAct_triggered();
+	void memviewTexAct_triggered();
 
 	// Options
 	// Core
-	void on_action_CPUDynarec_triggered();
-	void on_action_CPUInterpreter_triggered();
-	void on_action_OptionsFastMemory_triggered();
-	void on_action_OptionsIgnoreIllegalReadsWrites_triggered();
+	void dynarecAct_triggered() { g_Config.bJit = !g_Config.bJit; }
+	void vertexDynarecAct_triggered() { g_Config.bVertexDecoderJit = !g_Config.bVertexDecoderJit; }
+	void fastmemAct_triggered() { g_Config.bFastMemory = !g_Config.bFastMemory; }
+	void ignoreIllegalAct_triggered() { g_Config.bIgnoreBadMemAccess = !g_Config.bIgnoreBadMemAccess; }
 
 	// Video
-	void on_action_AFOff_triggered();
-	void on_action_AF2x_triggered();
-	void on_action_AF4x_triggered();
-	void on_action_AF8x_triggered();
-	void on_action_AF16x_triggered();
+	void anisotropicGroup_triggered(QAction *action) { g_Config.iAnisotropyLevel = action->data().toInt(); }
 
-	void on_action_OptionsBufferedRendering_triggered();
-	void on_action_OptionsLinearFiltering_triggered();
+	void bufferRenderAct_triggered() { g_Config.iRenderingMode = !g_Config.iRenderingMode; }
+	void linearAct_triggered() { g_Config.iTexFiltering = (g_Config.iTexFiltering != 0) ? 0 : 3; }
 
-	void on_action_OptionsScreen1x_triggered();
-	void on_action_OptionsScreen2x_triggered();
-	void on_action_OptionsScreen3x_triggered();
-	void on_action_OptionsScreen4x_triggered();
+	void screenGroup_triggered(QAction *action) { SetZoom(action->data().toInt()); }
 
-	void on_action_Stretch_to_display_triggered();
-	void on_action_OptionsHardwareTransform_triggered();
-	void on_action_OptionsVertexCache_triggered();
-	void on_actionFrameskip_triggered();
+	void stretchAct_triggered();
+	void transformAct_triggered() { g_Config.bHardwareTransform = !g_Config.bHardwareTransform; }
+	void vertexCacheAct_triggered() { g_Config.bVertexCache = !g_Config.bVertexCache; }
+	void frameskipAct_triggered() { g_Config.iFrameSkip = !g_Config.iFrameSkip; }
 
 	// Sound
-	void on_action_Sound_triggered();
+	void audioAct_triggered() { g_Config.bEnableSound = !g_Config.bEnableSound; }
 
-	void on_action_OptionsFullScreen_triggered();
-	void on_action_OptionsShowDebugStatistics_triggered();
-	void on_action_Show_FPS_counter_triggered();
+	void fullscreenAct_triggered();
+	void statsAct_triggered() { g_Config.bShowDebugStats = !g_Config.bShowDebugStats; }
+	void showFPSAct_triggered() { g_Config.iShowFPSCounter = !g_Config.iShowFPSCounter; }
 
 	// Logs
-	void on_actionLogDefDebug_triggered();
-	void on_actionLogDefWarning_triggered();
-	void on_actionLogDefInfo_triggered();
-	void on_actionLogDefError_triggered();
-
-	void on_actionLogG3DDebug_triggered();
-	void on_actionLogG3DWarning_triggered();
-	void on_actionLogG3DError_triggered();
-	void on_actionLogG3DInfo_triggered();
-
-	void on_actionLogHLEDebug_triggered();
-	void on_actionLogHLEWarning_triggered();
-	void on_actionLogHLEInfo_triggered();
-	void on_actionLogHLEError_triggered();
+	void defaultLogGroup_triggered(QAction * action) {
+		LogTypes::LOG_LEVELS level = (LogTypes::LOG_LEVELS)action->data().toInt();
+		for (int i = 0; i < LogTypes::NUMBER_OF_LOGS; i++)
+		{
+			LogTypes::LOG_TYPE type = (LogTypes::LOG_TYPE)i;
+			if(type == LogTypes::G3D || type == LogTypes::HLE)
+				continue;
+			LogManager::GetInstance()->SetLogLevel(type, level);
+		}
+	 }
+	void g3dLogGroup_triggered(QAction * action) { LogManager::GetInstance()->SetLogLevel(LogTypes::G3D, (LogTypes::LOG_LEVELS)action->data().toInt()); }
+	void hleLogGroup_triggered(QAction * action) { LogManager::GetInstance()->SetLogLevel(LogTypes::HLE, (LogTypes::LOG_LEVELS)action->data().toInt()); }
 
 	// Help
-	void on_action_HelpOpenWebsite_triggered();
-	void on_action_HelpAbout_triggered();
+	void websiteAct_triggered();
+	void aboutAct_triggered();
 
 	// Others
-	void on_language_changed(QAction *action);
+	void langChanged(QAction *action) { loadLanguage(action->data().toString(), true); }
 
 private:
-	void SetZoom(float zoom);
+	void SetZoom(int zoom);
 	void SetGameTitle(QString text);
-	void loadLanguage(const QString &language);
-	void createLanguageMenu();
+	void loadLanguage(const QString &language, bool retranslate);
+	void retranslateUi();
+	void createMenus();
 	void notifyMapsLoaded();
 
 	QTranslator translator;
 	QString currentLanguage;
 
-	Ui::MainWindow *ui;
-
 	QtEmuGL *emugl;
-	QTimer timer;
 	CoreState nextState;
 	InputState input_state;
 	GlobalUIState lastUIState;
@@ -150,6 +136,34 @@ private:
 	Debugger_Memory *memoryWindow;
 	Debugger_MemoryTex *memoryTexWindow;
 	Debugger_DisplayList *displaylistWindow;
+
+	// Menus
+	// File
+	QMenu *fileMenu;
+	QAction *openAct, *closeAct, *qlstateAct, *qsstateAct,
+	        *lstateAct, *sstateAct, *exitAct;
+	// Emulation
+	QMenu *emuMenu;
+	QAction *runAct, *pauseAct, *resetAct, *runonloadAct;
+	// Debug
+	QMenu *debugMenu;
+	QAction *lmapAct, *smapAct, *resetTableAct, *dumpNextAct,
+	        *disasmAct, *dpyListAct, *consoleAct, *memviewAct,
+	        *memviewTexAct;
+	// Options
+	QMenu *optionsMenu, *coreMenu, *videoMenu, *anisotropicMenu,
+	      *screenMenu, *levelsMenu, *langMenu;
+	QAction *dynarecAct, *vertexDynarecAct, *fastmemAct,
+	        *ignoreIllegalAct, *bufferRenderAct,
+	        *linearAct, *stretchAct, *transformAct, *vertexCacheAct,
+	        *frameskipAct, *audioAct, *fullscreenAct, *statsAct,
+	        *showFPSAct;
+	QActionGroup *anisotropicGroup, *screenGroup, *langGroup,
+	             *defaultLogGroup, *g3dLogGroup, *hleLogGroup;
+	// Help
+	QMenu *helpMenu;
+	QAction *websiteAct, *aboutAct;
+	
 };
 
 #endif // MAINWINDOW_H

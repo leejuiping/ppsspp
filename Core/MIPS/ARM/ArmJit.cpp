@@ -57,8 +57,7 @@ void DisassembleArm(const u8 *data, int size) {
 namespace MIPSComp
 {
 
-ArmJitOptions::ArmJitOptions()
-{
+ArmJitOptions::ArmJitOptions() {
 	enableBlocklink = true;
 	downcountInRegister = true;
 	useBackJump = false;
@@ -70,6 +69,10 @@ ArmJitOptions::ArmJitOptions()
 	continueBranches = false;
 	continueJumps = false;
 	continueMaxInstructions = 300;
+
+	useNEONVFPU = false;  // true
+	if (!cpu_info.bNEON)
+		useNEONVFPU = false;
 }
 
 Jit::Jit(MIPSState *mips) : blocks(mips, this), gpr(mips, &jo), fpr(mips), mips_(mips)
@@ -372,12 +375,12 @@ void Jit::MovToPC(ARMReg r) {
 
 void Jit::SaveDowncount() {
 	if (jo.downcountInRegister)
-		STR(R7, CTXREG, offsetof(MIPSState, downcount));
+		STR(DOWNCOUNTREG, CTXREG, offsetof(MIPSState, downcount));
 }
 
 void Jit::RestoreDowncount() {
 	if (jo.downcountInRegister)
-		LDR(R7, CTXREG, offsetof(MIPSState, downcount));
+		LDR(DOWNCOUNTREG, CTXREG, offsetof(MIPSState, downcount));
 }
 
 void Jit::WriteDownCount(int offset)
@@ -386,12 +389,12 @@ void Jit::WriteDownCount(int offset)
 		int theDowncount = js.downcountAmount + offset;
 		Operand2 op2;
 		if (TryMakeOperand2(theDowncount, op2)) {
-			SUBS(R7, R7, op2);
+			SUBS(DOWNCOUNTREG, DOWNCOUNTREG, op2);
 		} else {
 			// Should be fine to use R2 here, flushed the regcache anyway.
 			// If js.downcountAmount can be expressed as an Imm8, we don't need this anyway.
 			gpr.SetRegImm(R2, theDowncount);
-			SUBS(R7, R7, R2);
+			SUBS(DOWNCOUNTREG, DOWNCOUNTREG, R2);
 		}
 	} else {
 		int theDowncount = js.downcountAmount + offset;
@@ -399,14 +402,13 @@ void Jit::WriteDownCount(int offset)
 		Operand2 op2;
 		if (TryMakeOperand2(theDowncount, op2)) {
 			SUBS(R1, R1, op2);
-			STR(R1, CTXREG, offsetof(MIPSState, downcount));
 		} else {
 			// Should be fine to use R2 here, flushed the regcache anyway.
 			// If js.downcountAmount can be expressed as an Imm8, we don't need this anyway.
 			gpr.SetRegImm(R2, theDowncount);
 			SUBS(R1, R1, R2);
-			STR(R1, CTXREG, offsetof(MIPSState, downcount));
 		}
+		STR(R1, CTXREG, offsetof(MIPSState, downcount));
 	}
 }
 

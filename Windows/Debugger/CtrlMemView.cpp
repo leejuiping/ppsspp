@@ -437,7 +437,10 @@ void CtrlMemView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
      
 			if (!Core_IsStepping()) // If emulator isn't paused
 			{
-				MessageBox(wnd,L"You have to pause the emulator first",0,0);
+				Core_EnableStepping(true); //force paused state
+				DumpMemoryWindow dump(wnd,debugger);
+				dump.exec();
+				Core_EnableStepping(false); //Resume emulation automatically
 				break;
 			}
 			else
@@ -445,7 +448,7 @@ void CtrlMemView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 				DumpMemoryWindow dump(wnd,debugger);
 				dump.exec();
 				break;
-			}
+			}       
 
 		case ID_MEMVIEW_COPYVALUE_8:
 			{

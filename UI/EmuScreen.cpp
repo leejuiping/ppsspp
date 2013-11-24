@@ -170,29 +170,23 @@ void EmuScreen::sendMessage(const char *message, const char *value) {
 			Core_EnableStepping(true);
 		}
 #endif
-	}
-	else if (!strcmp(message, "boot")) {
+	} else if (!strcmp(message, "boot")) {
 		PSP_Shutdown();
 		bootGame(value);
-	}
-	else if (!strcmp(message, "control mapping")) {
+	} else if (!strcmp(message, "control mapping")) {
 		UpdateUIState(UISTATE_MENU);
 		screenManager()->push(new ControlMappingScreen());
-	}
-	else if (!strcmp(message, "settings")) {
+	} else if (!strcmp(message, "settings")) {
 		UpdateUIState(UISTATE_MENU);
 		screenManager()->push(new GameSettingsScreen(gamePath_));
-	}
-	else if (!strcmp(message, "gpu resized")) {
-		if (gpu) gpu->Resized();
-	}
-	else if (!strcmp(message, "gpu clear cache")) {
-		if (gpu) gpu->ClearCacheNextFrame();
-	}
-	else if (!strcmp(message, "gpu dump next frame")) {
+	} else if (!strcmp(message, "gpu resized") || !strcmp(message, "gpu clear cache")) {
+		if (gpu) {
+			gpu->ClearCacheNextFrame();
+			gpu->Resized();
+		}
+	} else if (!strcmp(message, "gpu dump next frame")) {
 		if (gpu) gpu->DumpNextFrame();
-	}
-	if (!strcmp(message, "clear jit")) {
+	} else if (!strcmp(message, "clear jit")) {
 		if (MIPSComp::jit) {
 			MIPSComp::jit->ClearCache();
 		}
@@ -608,11 +602,11 @@ void EmuScreen::render() {
 		char fpsbuf[256];
 		switch (g_Config.iShowFPSCounter) {
 		case 1:
-			sprintf(fpsbuf, "Speed: %0.1f%%", vps / 60.0f * 100.0f); break;
+			sprintf(fpsbuf, "Speed: %0.1f%%", vps / (59.94f / 100.0f)); break;
 		case 2:
 			sprintf(fpsbuf, "FPS: %0.1f", actual_fps); break;
 		case 3:
-			sprintf(fpsbuf, "%0.0f/%0.0f (%0.1f%%)", actual_fps, fps, vps / 60.0f * 100.0f); break;
+			sprintf(fpsbuf, "%0.0f/%0.0f (%0.1f%%)", actual_fps, fps, vps / (59.94f / 100.0f)); break;
 		default:
 			return;
 		}

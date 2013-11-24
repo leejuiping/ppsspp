@@ -464,7 +464,10 @@ elseif(SDL_FOUND)
 	set(TargetBin PPSSPPSDL)
 	# Require SDL
 	include_directories(${SDL_INCLUDE_DIR})
-	set(nativeExtra ${nativeExtra} native/base/PCMain.cpp)
+	set(nativeExtra ${nativeExtra} 
+		SDL/SDLJoystick.h
+		SDL/SDLJoystick.cpp
+		native/base/PCMain.cpp)
 	set(nativeExtraLibs ${nativeExtraLibs} ${SDL_LIBRARY})
 	if(APPLE)
 		set(nativeExtra ${nativeExtra} SDL/SDLMain.h SDL/SDLMain.mm)
@@ -686,6 +689,8 @@ if(ARM)
 		Core/MIPS/ARM/ArmRegCache.h
 		Core/MIPS/ARM/ArmRegCacheFPU.cpp
 		Core/MIPS/ARM/ArmRegCacheFPU.h
+		GPU/GLES/VertexDecoderArm.cpp
+		GPU/GLES/VertexDecoder.h
 		ext/disarm.cpp)
 elseif(X86)
 	set(CoreExtra ${CoreExtra}
@@ -702,6 +707,8 @@ elseif(X86)
 		Core/MIPS/x86/RegCache.h
 		Core/MIPS/x86/RegCacheFPU.cpp
 		Core/MIPS/x86/RegCacheFPU.h
+		GPU/GLES/VertexDecoderX86.cpp
+		GPU/GLES/VertexDecoder.h
 		ext/disarm.cpp)
 endif()
 

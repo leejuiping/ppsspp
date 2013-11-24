@@ -125,11 +125,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	cpu->Get("SeparateCPUThread", &bSeparateCPUThread, false);
 	cpu->Get("AtomicAudioLocks", &bAtomicAudioLocks, false);
 
-#ifdef __SYMBIAN32__
-	cpu->Get("SeparateIOThread", &bSeparateIOThread, false);
-#else
 	cpu->Get("SeparateIOThread", &bSeparateIOThread, true);
-#endif
 	cpu->Get("FastMemory", &bFastMemory, false);
 	cpu->Get("CPUSpeed", &iLockedCPUSpeed, 0);
 
@@ -146,11 +142,11 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	graphics->Get("HardwareTransform", &bHardwareTransform, true);
 	graphics->Get("SoftwareSkinning", &bSoftwareSkinning, true);
 	graphics->Get("TextureFiltering", &iTexFiltering, 1);
-	// Auto on Windows, 1x elsewhere. Maybe change to 2x on large screens?
+	// Auto on Windows, 2x on large screens, 1x elsewhere.
 #ifdef _WIN32
 	graphics->Get("InternalResolution", &iInternalResolution, 0);
 #else
-	graphics->Get("InternalResolution", &iInternalResolution, 1);
+	graphics->Get("InternalResolution", &iInternalResolution, pixel_xres >= 1024 ? 2 : 1);
 #endif
 
 	graphics->Get("FrameSkip", &iFrameSkip, 0);
@@ -553,8 +549,12 @@ void Config::Save() {
 }
 
 void Config::AddRecent(const std::string &file) {
-	for (auto str = recentIsos.begin(); str != recentIsos.end(); str++) {
-		if (*str == file) {
+	for (auto str = recentIsos.begin(); str != recentIsos.end(); ++str) {
+#ifdef _WIN32
+		if (!strcmpIgnore((*str).c_str(), file.c_str(), "\\", "/")) {
+#else
+		if (!strcmp((*str).c_str(), file.c_str())) {
+#endif
 			recentIsos.erase(str);
 			recentIsos.insert(recentIsos.begin(), file);
 			if ((int)recentIsos.size() > iMaxRecent)

@@ -23,7 +23,6 @@
 #include "base/stringutil.h"
 #include "file/file_util.h"
 #include "file/zip_read.h"
-#include "image/png_load.h"
 #include "thread/prioritizedworkqueue.h"
 #include "Common/StringUtils.h"
 #include "GameInfoCache.h"
@@ -223,7 +222,7 @@ public:
 					} else {
 						// Read standard icon
 						size_t sz;
-						INFO_LOG(LOADER, "Loading unknown.png because a PBP was missing an icon");
+						DEBUG_LOG(LOADER, "Loading unknown.png because a PBP was missing an icon");
 						uint8_t *contents = VFSReadFile("unknown.png", &sz);
 						if (contents) {
 							lock_guard lock(info_->lock);
@@ -253,7 +252,7 @@ public:
 				// Read standard icon
 				size_t sz;
 				uint8_t *contents = VFSReadFile("unknown.png", &sz);
-				INFO_LOG(LOADER, "Loading unknown.png because there was an ELF");
+				DEBUG_LOG(LOADER, "Loading unknown.png because there was an ELF");
 				if (contents) {
 					lock_guard lock(info_->lock);
 					info_->iconTextureData = std::string((const char *)contents, sz);

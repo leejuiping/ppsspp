@@ -51,6 +51,14 @@ SOURCES += $$P/ext/snappy/*.cpp
 HEADERS += $$P/ext/snappy/*.h
 INCLUDEPATH += $$P/ext/snappy
 
+# VJSON
+
+SOURCES += $$P/native/ext/vjson/json.cpp \
+	$$P/native/ext/vjson/block_allocator.cpp
+HEADERS += $$P/native/ext/vjson/json.h \
+	$$P/native/ext/vjson/block_allocator.h
+INCLUDEPATH += $$P/native/ext/vjson
+
 # Zlib
 win32|contains(QT_CONFIG, no-zlib) {
 	SOURCES += $$P/ext/zlib/*.c
@@ -90,7 +98,8 @@ SOURCES +=  $$P/native/audio/*.cpp \
 	$$P/native/util/bits/*.cpp \
 	$$P/native/util/hash/hash.cpp \
 	$$P/native/util/random/perlin.cpp \
-	$$P/native/util/text/utf8.cpp
+	$$P/native/util/text/utf8.cpp \
+	$$P/native/util/text/parsers.cpp
 
 HEADERS +=  $$P/native/audio/*.h \
 	$$P/native/base/basictypes.h \
@@ -123,6 +132,7 @@ HEADERS +=  $$P/native/audio/*.h \
 	$$P/native/util/bits/*.h \
 	$$P/native/util/hash/hash.h \
 	$$P/native/util/random/*.h \
-	$$P/native/util/text/utf8.h
+	$$P/native/util/text/utf8.h \
+	$$P/native/util/text/parsers.h
 INCLUDEPATH += $$P/native
 

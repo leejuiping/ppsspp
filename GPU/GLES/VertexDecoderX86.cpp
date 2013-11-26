@@ -354,10 +354,10 @@ void VertexDecoderJitCache::Jit_WeightsU8Skin() {
 		if (j == 0) {
 			MOVAPS(XMM4, MDisp(tempReg2, 0));
 			MOVAPS(XMM5, MDisp(tempReg2, 16));
-			MULPS(XMM4, R(XMM1));
-			MULPS(XMM5, R(XMM1));
 			MOVAPS(XMM6, MDisp(tempReg2, 32));
 			MOVAPS(XMM7, MDisp(tempReg2, 48));
+			MULPS(XMM4, R(XMM1));
+			MULPS(XMM5, R(XMM1));
 			MULPS(XMM6, R(XMM1));
 			MULPS(XMM7, R(XMM1));
 		} else {
@@ -392,10 +392,10 @@ void VertexDecoderJitCache::Jit_WeightsU16Skin() {
 		if (j == 0) {
 			MOVAPS(XMM4, MDisp(tempReg2, 0));
 			MOVAPS(XMM5, MDisp(tempReg2, 16));
-			MULPS(XMM4, R(XMM1));
-			MULPS(XMM5, R(XMM1));
 			MOVAPS(XMM6, MDisp(tempReg2, 32));
 			MOVAPS(XMM7, MDisp(tempReg2, 48));
+			MULPS(XMM4, R(XMM1));
+			MULPS(XMM5, R(XMM1));
 			MULPS(XMM6, R(XMM1));
 			MULPS(XMM7, R(XMM1));
 		} else {
@@ -428,10 +428,10 @@ void VertexDecoderJitCache::Jit_WeightsFloatSkin() {
 		if (j == 0) {
 			MOVAPS(XMM4, MDisp(tempReg2, 0));
 			MOVAPS(XMM5, MDisp(tempReg2, 16));
-			MULPS(XMM4, R(XMM1));
-			MULPS(XMM5, R(XMM1));
 			MOVAPS(XMM6, MDisp(tempReg2, 32));
 			MOVAPS(XMM7, MDisp(tempReg2, 48));
+			MULPS(XMM4, R(XMM1));
+			MULPS(XMM5, R(XMM1));
 			MULPS(XMM6, R(XMM1));
 			MULPS(XMM7, R(XMM1));
 		} else {
@@ -576,7 +576,7 @@ void VertexDecoderJitCache::Jit_Color4444() {
 	return;
 #endif
 
-	MOV(32, R(tempReg1), MDisp(srcReg, dec_->coloff));
+	MOVZX(32, 16, tempReg1, MDisp(srcReg, dec_->coloff));
 
 	// 0000ABGR, copy R and double forwards.
 	MOV(32, R(tempReg3), R(tempReg1));
@@ -612,7 +612,7 @@ void VertexDecoderJitCache::Jit_Color4444() {
 }
 
 void VertexDecoderJitCache::Jit_Color565() {
-	MOV(32, R(tempReg1), MDisp(srcReg, dec_->coloff));
+	MOVZX(32, 16, tempReg1, MDisp(srcReg, dec_->coloff));
 
 	MOV(32, R(tempReg2), R(tempReg1));
 	AND(32, R(tempReg2), Imm32(0x0000001F));
@@ -648,12 +648,11 @@ void VertexDecoderJitCache::Jit_Color565() {
 }
 
 void VertexDecoderJitCache::Jit_Color5551() {
-	MOV(32, R(tempReg1), MDisp(srcReg, dec_->coloff));
+	MOVZX(32, 16, tempReg1, MDisp(srcReg, dec_->coloff));
 
 	MOV(32, R(tempReg2), R(tempReg1));
-	AND(32, R(tempReg2), Imm32(0x0000001F));
-
 	MOV(32, R(tempReg3), R(tempReg1));
+	AND(32, R(tempReg2), Imm32(0x0000001F));
 	AND(32, R(tempReg3), Imm32(0x000003E0));
 	SHL(32, R(tempReg3), Imm8(3));
 	OR(32, R(tempReg2), R(tempReg3));
@@ -710,16 +709,15 @@ void VertexDecoderJitCache::Jit_NormalFloat() {
 // This could be a bit shorter with AVX 3-operand instructions and FMA.
 void VertexDecoderJitCache::Jit_WriteMatrixMul(int outOff, bool pos) {
 	MOVAPS(XMM1, R(XMM3));
+	MOVAPS(XMM2, R(XMM3));
 	SHUFPS(XMM1, R(XMM1), _MM_SHUFFLE(0, 0, 0, 0));
-	MULPS(XMM1, R(XMM4));
-	MOVAPS(XMM2, R(XMM3));
 	SHUFPS(XMM2, R(XMM2), _MM_SHUFFLE(1, 1, 1, 1));
+	SHUFPS(XMM3, R(XMM3), _MM_SHUFFLE(2, 2, 2, 2));
+	MULPS(XMM1, R(XMM4));
 	MULPS(XMM2, R(XMM5));
+	MULPS(XMM3, R(XMM6));
 	ADDPS(XMM1, R(XMM2));
-	MOVAPS(XMM2, R(XMM3));
-	SHUFPS(XMM2, R(XMM2), _MM_SHUFFLE(2, 2, 2, 2));
-	MULPS(XMM2, R(XMM6));
-	ADDPS(XMM1, R(XMM2));
+	ADDPS(XMM1, R(XMM3));
 	if (pos) {
 		ADDPS(XMM1, R(XMM7));
 	}

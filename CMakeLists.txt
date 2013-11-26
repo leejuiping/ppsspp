@@ -15,8 +15,13 @@ if(BLACKBERRY)
 endif()
 
 if (IOS OR BLACKBERRY)
-	set(ARM ON)
-	set(USE_FFMPEG ON)
+	if (SIMULATOR)
+		set(X86 ON)
+	else()
+		set(ARM ON)
+		set(ARMEABI_V7A ON)
+		set(USE_FFMPEG ON)
+	endif()
 endif()
 
 if (MAEMO)
@@ -29,7 +34,7 @@ if(LOONGSON)
 	set(MIPS ON) # MIPS + x86 for now
 endif()
 
-if(ARM)
+if(ARM OR SIMULATOR)
 	set(USING_GLES2 ON)
 else() # Assume x86
 	set(X86 ON)
@@ -64,6 +69,7 @@ option(IOS "Set to ON if targeting an iOS device" ${IOS})
 option(USING_GLES2 "Set to ON if target device uses OpenGL ES 2.0" ${USING_GLES2})
 option(USING_QT_UI "Set to ON if you wish to use the Qt frontend wrapper" ${USING_QT_UI})
 option(HEADLESS "Set to OFF to not generate the PPSSPPHeadless target" ${HEADLESS})
+option(SIMULATOR "Set to ON when targeting an x86 simulator of an ARM platform" ${SIMULATOR})
 option(USE_FFMPEG "Build with FFMPEG support" ${USE_FFMPEG})
 
 if(ANDROID)
@@ -160,7 +166,10 @@ if(NOT MSVC)
 	endif()
 
 	if(BLACKBERRY)
-		add_definitions(-D_QNX_SOURCE -DARMV7 -O3 -mfpu=neon -mtune=cortex-a9)
+		add_definitions(-D_QNX_SOURCE)
+		if(ARM)
+			add_definitions(-DARMV7 -O3 -mfpu=neon -mcpu=cortex-a9)
+		endif()
 	endif()
 
 	if(X86 AND NOT MIPS)
@@ -325,6 +334,13 @@ add_library(snappy STATIC
 	ext/snappy/snappy.h
 )
 include_directories(ext/snappy)
+
+add_library(vjson STATIC
+	native/ext/vjson/json.cpp
+	native/ext/vjson/json.h
+	native/ext/vjson/block_allocator.cpp
+	native/ext/vjson/block_allocator.h
+)
 
 add_library(rg_etc1 STATIC
 	native/ext/rg_etc1/rg_etc1.cpp
@@ -631,13 +647,15 @@ add_library(native STATIC
 	native/util/random/rng.h
 	native/util/text/utf8.h
 	native/util/text/utf8.cpp
+	native/util/text/parsers.h
+	native/util/text/parsers.cpp
 	native/util/const_map.h
 	native/ext/jpge/jpgd.cpp
 	native/ext/jpge/jpgd.h
 	native/ext/jpge/jpge.cpp
 	native/ext/jpge/jpge.h)
 include_directories(native)
-target_link_libraries(native ${LIBZIP} rg_etc1 stb_image stb_vorbis snappy ${GLEW_LIBRARIES})
+target_link_libraries(native ${LIBZIP} rg_etc1 vjson stb_image stb_vorbis snappy ${GLEW_LIBRARIES})
 
 if(ANDROID)
 	target_link_libraries(native log)
@@ -976,7 +994,7 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/git-version.cpp
 	PROPERTIES GENERATED TRUE)
 add_dependencies(${CoreLibName} GitVersion)
 
-if(BLACKBERRY OR IOS OR ARMEABI_V7A)
+if(ARMEABI_V7A)
 	set(GPU_NEON GPU/Common/TextureDecoderNEON.cpp)
 endif()
 add_library(GPU OBJECT

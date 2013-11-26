@@ -17,15 +17,26 @@
 
 #include "base/display.h"
 #include "base/NativeApp.h"
+#include "ext/vjson/json.h"
+#include "file/ini_file.h"
+#include "i18n/i18n.h"
+#include "gfx_es2/gpu_features.h"
+#include "net/http_client.h"
+#include "util/text/parsers.h"
+
+#include "Common/CPUDetect.h"
 #include "Common/KeyMap.h"
 #include "Common/FileUtil.h"
 #include "Common/StringUtils.h"
 #include "Config.h"
-#include "file/ini_file.h"
-#include "i18n/i18n.h"
-#include "gfx_es2/gpu_features.h"
 #include "HLE/sceUtility.h"
-#include "Common/CPUDetect.h"
+
+#ifndef USING_QT_UI
+extern const char *PPSSPP_GIT_VERSION; 
+#endif
+
+// TODO: Find a better place for this.
+http::Downloader g_DownloadManager;
 
 Config g_Config;
 
@@ -52,6 +63,8 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	IniFile::Section *general = iniFile.GetOrCreateSection("General");
 
 	general->Get("FirstRun", &bFirstRun, true);
+	general->Get("RunCount", &iRunCount, 0);
+	iRunCount++;
 	general->Get("Enable Logging", &bEnableLogging, true);
 	general->Get("AutoRun", &bAutoRun, true);
 	general->Get("Browse", &bBrowse, false);
@@ -323,6 +336,24 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	IniFile::Section *jitConfig = iniFile.GetOrCreateSection("JIT");
 	jitConfig->Get("DiscardRegsOnJRRA", &bDiscardRegsOnJRRA, false);
 
+	IniFile::Section *upgrade = iniFile.GetOrCreateSection("Upgrade");
+	upgrade->Get("UpgradeMessage", &upgradeMessage, "");
+	upgrade->Get("UpgradeVersion", &upgradeVersion, "");
+	upgrade->Get("DismissedVersion", &dismissedVersion, "");
+	
+	if (dismissedVersion == upgradeVersion) {
+		upgradeMessage = "";
+	}
+
+	// Check for new version on every 5 runs.
+	// Sometimes the download may not be finished when the main screen shows (if the user dismisses the
+	// splash screen quickly), but then we'll just show the notification next time instead, we store the
+	// upgrade number in the ini.
+	if (iRunCount % 5 == 0) {
+		g_DownloadManager.StartDownloadWithCallback(
+			"http://www.ppsspp.org/version.json", "", &DownloadCompletedCallback);
+	}
+
 	INFO_LOG(LOADER, "Loading controller config: %s", controllerIniFilename_.c_str());
 	bSaveSettings = true;
 
@@ -351,6 +382,7 @@ void Config::Save() {
 		// Need to do this somewhere...
 		bFirstRun = false;
 		general->Set("FirstRun", bFirstRun);
+		general->Set("RunCount", iRunCount);
 		general->Set("Enable Logging", bEnableLogging);
 		general->Set("AutoRun", bAutoRun);
 		general->Set("Browse", bBrowse);
@@ -525,6 +557,12 @@ void Config::Save() {
 		speedhacks->Set("PrescaleUV", bPrescaleUV);
 		speedhacks->Set("DisableAlphaTest", bDisableAlphaTest);
 
+		// Save upgrade check state
+		IniFile::Section *upgrade = iniFile.GetOrCreateSection("Upgrade");
+		upgrade->Set("UpgradeMessage", upgradeMessage);
+		upgrade->Set("UpgradeVersion", upgradeVersion);
+		upgrade->Set("DismissedVersion", dismissedVersion);
+
 		if (!iniFile.Save(iniFilename_.c_str())) {
 			ERROR_LOG(LOADER, "Error saving config - can't write ini %s", iniFilename_.c_str());
 			return;
@@ -546,6 +584,60 @@ void Config::Save() {
 	} else {
 		INFO_LOG(LOADER, "Not saving config");
 	}
+}
+
+// Use for debugging the version check without messing with the server
+#if 0
+#define PPSSPP_GIT_VERSION "v0.0.1-gaaaaaaaaa"
+#endif
+
+void Config::DownloadCompletedCallback(http::Download &download) {
+	if (download.ResultCode() != 200) {
+		ERROR_LOG(LOADER, "Failed to download version.json");
+		return;
+	}
+	std::string data;
+	download.buffer().TakeAll(&data);
+	if (data.empty()) {
+		ERROR_LOG(LOADER, "Version check: Empty data from server!");
+		return;
+	}
+
+	JsonReader reader(data.c_str(), data.size());
+	const json_value *root = reader.root();
+	std::string version = root->getString("version", "");
+
+	const char *gitVer = PPSSPP_GIT_VERSION;
+	Version installed(gitVer);
+	Version upgrade(version);
+	Version dismissed(g_Config.dismissedVersion);
+
+	if (!installed.IsValid()) {
+		ERROR_LOG(LOADER, "Version check: Local version string invalid. Build problems? %s", PPSSPP_GIT_VERSION);
+		return;
+	}
+	if (!upgrade.IsValid()) {
+		ERROR_LOG(LOADER, "Version check: Invalid server version: %s", version.c_str());
+		return;
+	}
+
+	if (installed >= upgrade) {
+		INFO_LOG(LOADER, "Version check: Already up to date, erasing any upgrade message");
+		g_Config.upgradeMessage = "";
+		g_Config.upgradeVersion = upgrade.ToString();
+		g_Config.dismissedVersion = "";
+		return;
+	}
+
+	if (installed < upgrade && dismissed != upgrade) {
+		g_Config.upgradeMessage = "New version of PPSSPP available!";
+		g_Config.upgradeVersion = upgrade.ToString();
+		g_Config.dismissedVersion = "";
+	}
+}
+
+void Config::DismissUpgrade() {
+	g_Config.dismissedVersion = g_Config.upgradeVersion;
 }
 
 void Config::AddRecent(const std::string &file) {

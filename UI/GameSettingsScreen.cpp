@@ -123,10 +123,8 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")))->OnClick.Handle(this, &GameSettingsScreen::OnFullscreenChange);
 #endif
 	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
-#ifdef BLACKBERRY
-	if (pixel_xres == pixel_yres)
+	if (pixel_xres < pixel_yres * 1.3) // Smaller than 4:3
 		graphicsSettings->Add(new CheckBox(&g_Config.bPartialStretch, gs->T("Partial Vertical Stretch")));
-#endif
 	graphicsSettings->Add(new CheckBox(&g_Config.bMipMap, gs->T("Mipmapping")));
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Performance")));
@@ -145,7 +143,10 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gs->T("Hardware Transform")));
 	CheckBox *swSkin = graphicsSettings->Add(new CheckBox(&g_Config.bSoftwareSkinning, gs->T("Software Skinning")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
+
+	// Seems solid, so we hide the setting.
 	CheckBox *vtxJit = graphicsSettings->Add(new CheckBox(&g_Config.bVertexDecoderJit, gs->T("Vertex Decoder JIT")));
+
 	if (PSP_IsInited()) {
 		swSkin->SetEnabled(false);
 		vtxJit->SetEnabled(false);
@@ -185,11 +186,12 @@ void GameSettingsScreen::CreateViews() {
 		prescale->SetEnabled(false);
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Overlay Information")));
-	static const char *fpsChoices[] = {"None", "Speed", "FPS", "Both"
+	static const char *fpsChoices[] = {
+		"None", "Speed", "FPS", "Both"
 #ifdef BLACKBERRY
-	                                   , "Statistics"
+     , "Statistics"
 #endif
-	                                  };
+	};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gs, screenManager()));
 	graphicsSettings->Add(new CheckBox(&showDebugStats_, gs->T("Show Debug Statistics")));
 

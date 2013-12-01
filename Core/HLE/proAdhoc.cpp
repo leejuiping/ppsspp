@@ -1,3 +1,6 @@
+// TODO: Add license
+
+#include "util/text/parsers.h"
 #include "proAdhoc.h" 
 
 uint32_t fakePoolSize                 = 0;
@@ -286,7 +289,7 @@ int friendFinder(){
       // BSSID Packet
       if(rx[0] == OPCODE_CONNECT_BSSID) {
         // Enough Data available
-        if(rxpos >= sizeof(SceNetAdhocctlConnectBSSIDPacketS2C)) {
+        if(rxpos >= (int)sizeof(SceNetAdhocctlConnectBSSIDPacketS2C)) {
           // Cast Packet
           SceNetAdhocctlConnectBSSIDPacketS2C * packet = (SceNetAdhocctlConnectBSSIDPacketS2C *)rx;
           // Update BSSID
@@ -307,16 +310,12 @@ int friendFinder(){
       // Chat Packet
       else if(rx[0] == OPCODE_CHAT) {
         // Enough Data available
-        if(rxpos >= sizeof(SceNetAdhocctlChatPacketS2C)) {
+        if(rxpos >= (int)sizeof(SceNetAdhocctlChatPacketS2C)) {
           // Cast Packet
           SceNetAdhocctlChatPacketS2C * packet = (SceNetAdhocctlChatPacketS2C *)rx;
 
           // Fix for Idiots that try to troll the "ME" Nametag
-#ifdef _MSC_VER 
-          if(stricmp((char *)packet->name.data, "ME") == 0) strcpy((char *)packet->name.data, "NOT ME");
-#else
           if(strcasecmp((char *)packet->name.data, "ME") == 0) strcpy((char *)packet->name.data, "NOT ME");
-#endif
 
           // Add Incoming Chat to HUD
           //printf("Receive chat message %s", packet->base.message);
@@ -332,7 +331,7 @@ int friendFinder(){
       // Connect Packet
       else if(rx[0] == OPCODE_CONNECT) {
         // Enough Data available
-        if(rxpos >= sizeof(SceNetAdhocctlConnectPacketS2C)) {
+        if(rxpos >= (int)sizeof(SceNetAdhocctlConnectPacketS2C)) {
           // Log Incoming Peer
           INFO_LOG(SCENET,"Incoming Peer Data...");
 
@@ -360,7 +359,7 @@ int friendFinder(){
       // Disconnect Packet
       else if(rx[0] == OPCODE_DISCONNECT) {
         // Enough Data available
-        if(rxpos >= sizeof(SceNetAdhocctlDisconnectPacketS2C)) {
+        if(rxpos >= (int)sizeof(SceNetAdhocctlDisconnectPacketS2C)) {
           // Log Incoming Peer Delete Request
           INFO_LOG(SCENET,"FriendFinder: Incoming Peer Data Delete Request...");
 
@@ -388,7 +387,7 @@ int friendFinder(){
       // Scan Packet
       else if(rx[0] == OPCODE_SCAN) {
         // Enough Data available
-        if(rxpos >= sizeof(SceNetAdhocctlScanPacketS2C)) {
+        if(rxpos >= (int)sizeof(SceNetAdhocctlScanPacketS2C)) {
           // Log Incoming Network Information
           INFO_LOG(SCENET,"Incoming Group Information...");
           // Cast Packet
@@ -482,31 +481,33 @@ int getActivePeerCount(void) {
 
 int getLocalIp(sockaddr_in * SocketAddress){
 #ifdef _MSC_VER
-  // Get local host name
-  char szHostName[128] = "";
+	// Get local host name
+	char szHostName[128] = "";
 
-  if(::gethostname(szHostName, sizeof(szHostName))) {
-    // Error handling 
-  }
-  // Get local IP addresses
-  struct hostent     *pHost        = 0;
-  pHost = ::gethostbyname(szHostName);
-  if(pHost) {
-    memcpy(&SocketAddress->sin_addr, pHost->h_addr_list[0], pHost->h_length);
-    return 0;
-  }
-  return -1;
+	if(::gethostname(szHostName, sizeof(szHostName))) {
+		// Error handling 
+	}
+	// Get local IP addresses
+	struct hostent     *pHost        = 0;
+	pHost = ::gethostbyname(szHostName);
+	if(pHost) {
+		memcpy(&SocketAddress->sin_addr, pHost->h_addr_list[0], pHost->h_length);
+		return 0;
+	}
+	return -1;
 #else
-  SocketAddress->sin_addr.s_addr = inet_addr("192.168.12.1");
-  return 0;
+	SocketAddress->sin_addr.s_addr = inet_addr("192.168.12.1");
+	return 0;
 #endif
 }
 
 void getLocalMac(SceNetEtherAddr * addr){
-    //MAC Adress from config
-    uint8_t mac[ETHER_ADDR_LEN];
-    sscanf(g_Config.localMacAddress.c_str(), "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",&mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-    memcpy(addr,mac,ETHER_ADDR_LEN);
+	// Read MAC Address from config
+	uint8_t mac[ETHER_ADDR_LEN] = {0};
+	if (!ParseMacAddress(g_Config.localMacAddress.c_str(), mac)) {
+		ERROR_LOG(SCENET, "Error parsing mac address %s", g_Config.localMacAddress.c_str());
+	}
+	memcpy(addr, mac, ETHER_ADDR_LEN);
 }
 
 int getPTPSocketCount(void) {
@@ -530,11 +531,11 @@ int initNetwork(SceNetAdhocctlAdhocId *adhoc_id){
     return iResult;
   }
 #endif
-  metasocket = INVALID_SOCKET;
+  metasocket = (int)INVALID_SOCKET;
   metasocket = socket(AF_INET,SOCK_STREAM, IPPROTO_TCP);
   if(metasocket == INVALID_SOCKET){
     ERROR_LOG(SCENET,"invalid socket");
-    return INVALID_SOCKET;
+    return -1;
   }
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;

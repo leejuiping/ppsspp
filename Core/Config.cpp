@@ -139,7 +139,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	cpu->Get("AtomicAudioLocks", &bAtomicAudioLocks, false);
 
 	cpu->Get("SeparateIOThread", &bSeparateIOThread, true);
-	cpu->Get("FastMemory", &bFastMemory, false);
+	cpu->Get("FastMemoryAccess", &bFastMemory, true);
 	cpu->Get("CPUSpeed", &iLockedCPUSpeed, 0);
 
 	IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
@@ -179,14 +179,16 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 		iAnisotropyLevel = 4;
 	}
 	graphics->Get("VertexCache", &bVertexCache, true);
-	graphics->Get("VertexDecoderJit", &bVertexDecoderJit, true);
+	graphics->Get("VertexDecJit", &bVertexDecoderJit, true);
 
 #ifdef _WIN32
 	graphics->Get("FullScreen", &bFullScreen, false);
 #endif
+	bool partialStretchDefault = false;
 #ifdef BLACKBERRY
-	graphics->Get("PartialStretch", &bPartialStretch, pixel_xres == pixel_yres);
+	partialStretchDefault = pixel_xres < 1.3 * pixel_yres;
 #endif
+	graphics->Get("PartialStretch", &bPartialStretch, partialStretchDefault);
 	graphics->Get("StretchToDisplay", &bStretchToDisplay, false);
 	graphics->Get("TrueColor", &bTrueColor, true);
 	graphics->Get("MipMap", &bMipMap, true);
@@ -296,9 +298,14 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	}
 	
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
+#ifndef ANDROID
+	pspConfig->Get("PSPModel", &iPSPModel, PSP_MODEL_SLIM);
+#else
+	pspConfig->Get("PSPModel", &iPSPModel, PSP_MODEL_FAT);
+#endif
 	pspConfig->Get("NickName", &sNickName, "PPSSPP");
-    pspConfig->Get("proAdhocServer", &proAdhocServer, "localhost");
-    pspConfig->Get("MacAddress", &localMacAddress, "01:02:03:04:05:06");
+	pspConfig->Get("proAdhocServer", &proAdhocServer, "localhost");
+	pspConfig->Get("MacAddress", &localMacAddress, "01:02:03:04:05:06");
 	pspConfig->Get("Language", &iLanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 	pspConfig->Get("TimeFormat", &iTimeFormat, PSP_SYSTEMPARAM_TIME_FORMAT_24HR);
 	pspConfig->Get("DateFormat", &iDateFormat, PSP_SYSTEMPARAM_DATE_FORMAT_YYYYMMDD);
@@ -411,10 +418,10 @@ void Config::Save() {
 		general->Set("GridView1", bGridView1);
 		general->Set("GridView2", bGridView2);
 		general->Set("GridView3", bGridView3);
-		
+
 		IniFile::Section *recent = iniFile.GetOrCreateSection("Recent");
 		recent->Set("MaxRecent", iMaxRecent);
-	
+
 		for (int i = 0; i < iMaxRecent; i++) {
 			char keyName[64];
 			sprintf(keyName,"FileName%d",i);
@@ -422,7 +429,7 @@ void Config::Save() {
 				recent->Set(keyName, recentIsos[i]);
 			} else {
 				recent->Delete(keyName); // delete the nonexisting FileName
-			} 
+			}
 		}
 
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
@@ -430,7 +437,7 @@ void Config::Save() {
 		cpu->Set("SeparateCPUThread", bSeparateCPUThread);
 		cpu->Set("AtomicAudioLocks", bAtomicAudioLocks);	
 		cpu->Set("SeparateIOThread", bSeparateIOThread);
-		cpu->Set("FastMemory", bFastMemory);
+		cpu->Set("FastMemoryAccess", bFastMemory);
 		cpu->Set("CPUSpeed", iLockedCPUSpeed);
 
 		IniFile::Section *graphics = iniFile.GetOrCreateSection("Graphics");
@@ -447,13 +454,10 @@ void Config::Save() {
 		graphics->Set("ForceMaxEmulatedFPS", iForceMaxEmulatedFPS);
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("VertexCache", bVertexCache);
-		graphics->Set("VertexDecoderJit", bVertexDecoderJit);
 #ifdef _WIN32
 		graphics->Set("FullScreen", bFullScreen);
-#endif		
-#ifdef BLACKBERRY
-		graphics->Set("PartialStretch", bPartialStretch);
 #endif
+		graphics->Set("PartialStretch", bPartialStretch);
 		graphics->Set("StretchToDisplay", bStretchToDisplay);
 		graphics->Set("TrueColor", bTrueColor);
 		graphics->Set("MipMap", bMipMap);
@@ -522,6 +526,7 @@ void Config::Save() {
 
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
+		pspConfig->Set("PSPModel", iPSPModel);
 		pspConfig->Set("NickName", sNickName.c_str());
         pspConfig->Set("proAdhocServer", proAdhocServer.c_str());
         pspConfig->Set("MacAddress", localMacAddress.c_str());

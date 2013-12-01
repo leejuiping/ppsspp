@@ -1080,8 +1080,9 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 	case GE_CMD_TEXSIZE5:
 	case GE_CMD_TEXSIZE6:
 	case GE_CMD_TEXSIZE7:
-		if (diff)
+		if (diff) {
 			gstate_c.textureChanged = true;
+		}
 		break;
 
 	case GE_CMD_ZBUFPTR:
@@ -1445,6 +1446,9 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 	case GE_CMD_MASKALPHA:
 		break;
 
+	case GE_CMD_REVERSENORMAL:
+		break;
+
 	case GE_CMD_UNKNOWN_03: 
 	case GE_CMD_UNKNOWN_0D:
 	case GE_CMD_UNKNOWN_11:
@@ -1656,4 +1660,12 @@ bool GLES_GPU::GetCurrentTexture(GPUDebugBuffer &buffer) {
 
 bool GLES_GPU::GetCurrentSimpleVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices) {
 	return transformDraw_.GetCurrentSimpleVertices(count, vertices, indices);
+}
+
+bool GLES_GPU::DescribeCodePtr(const u8 *ptr, std::string &name) {
+	if (transformDraw_.IsCodePtrVertexDecoder(ptr)) {
+		name = "VertexDecoderJit";
+		return true;
+	}
+	return false;
 }

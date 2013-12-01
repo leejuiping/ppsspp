@@ -98,7 +98,7 @@ bool SymbolMap::LoadSymbolMap(const char *filename)
 
 		u32 address,size,vaddress;
 		SymbolType type;
-		char name[128];
+		char name[128] = {0};
 
 		sscanf(line,"%08x %08x %08x %i %127c",&address,&size,&vaddress,(int*)&type,name);
 		
@@ -118,6 +118,10 @@ bool SymbolMap::LoadSymbolMap(const char *filename)
 				AddData(vaddress,size,DATATYPE_BYTE);
 				if (name[0] != 0)
 					AddLabel(name,vaddress);
+				break;
+			case ST_NONE:
+			case ST_ALL:
+				// Shouldn't be possible.
 				break;
 			}
 		}
@@ -186,6 +190,9 @@ bool SymbolMap::LoadNocashSym(const char *filename)
 				} else if (strcasecmp(value,".dbl") == 0)
 				{
 					AddData(address,size,DATATYPE_WORD);
+				} else if (strcasecmp(value,".asc") == 0)
+				{
+					AddData(address,size,DATATYPE_ASCII);
 				}
 			}
 		} else {				// labels
@@ -225,8 +232,8 @@ SymbolType SymbolMap::GetSymbolType(u32 address) const
 
 bool SymbolMap::GetSymbolInfo(SymbolInfo *info, u32 address, SymbolType symmask) const
 {
-	u32 functionAddress = -1;
-	u32 dataAddress = -1;
+	u32 functionAddress = INVALID_ADDRESS;
+	u32 dataAddress = INVALID_ADDRESS;
 
 	if (symmask & ST_FUNCTION)
 		functionAddress = GetFunctionStart(address);
@@ -234,9 +241,9 @@ bool SymbolMap::GetSymbolInfo(SymbolInfo *info, u32 address, SymbolType symmask)
 	if (symmask & ST_DATA)
 		dataAddress = GetDataStart(address);
 
-	if (functionAddress == -1 || dataAddress == -1)
+	if (functionAddress == INVALID_ADDRESS || dataAddress == INVALID_ADDRESS)
 	{
-		if (functionAddress != -1)
+		if (functionAddress != INVALID_ADDRESS)
 		{
 			if (info != NULL)
 			{
@@ -248,13 +255,13 @@ bool SymbolMap::GetSymbolInfo(SymbolInfo *info, u32 address, SymbolType symmask)
 			return true;
 		}
 		
-		if (dataAddress != -1)
+		if (dataAddress != INVALID_ADDRESS)
 		{
 			if (info != NULL)
 			{
 				info->type = ST_DATA;
 				info->address = dataAddress;
-				info->size = GetDataSize(functionAddress);
+				info->size = GetDataSize(dataAddress);
 			}
 
 			return true;
@@ -280,7 +287,7 @@ u32 SymbolMap::GetNextSymbolAddress(u32 address, SymbolType symmask)
 	const auto dataEntry = symmask & ST_DATA ? data.upper_bound(address) : data.end();
 	
 	if (functionEntry == functions.end() && dataEntry == data.end())
-		return -1;
+		return INVALID_ADDRESS;
 
 	u32 funcAddress = (functionEntry != functions.end()) ? functionEntry->first : 0xFFFFFFFF;
 	u32 dataAddress = (dataEntry != data.end()) ? dataEntry->first : 0xFFFFFFFF;
@@ -299,12 +306,12 @@ const char *SymbolMap::GetDescription(unsigned int address) const
 	const char* labelName = NULL;
 
 	u32 funcStart = GetFunctionStart(address);
-	if (funcStart != -1)
+	if (funcStart != INVALID_ADDRESS)
 	{
 		labelName = GetLabelName(funcStart);
 	} else {
 		u32 dataStart = GetDataStart(address);
-		if (dataStart != -1)
+		if (dataStart != INVALID_ADDRESS)
 			labelName = GetLabelName(dataStart);
 	}
 
@@ -381,7 +388,7 @@ u32 SymbolMap::GetFunctionStart(u32 address) const
 		}
 		
 		// otherwise there's no function that contains this address
-		return -1;
+		return INVALID_ADDRESS;
 	}
 
 	if (it != functions.begin())
@@ -394,14 +401,14 @@ u32 SymbolMap::GetFunctionStart(u32 address) const
 			return start;
 	}
 
-	return -1;
+	return INVALID_ADDRESS;
 }
 
 u32 SymbolMap::GetFunctionSize(u32 startAddress) const
 {
 	auto it = functions.find(startAddress);
 	if (it == functions.end())
-		return -1;
+		return INVALID_ADDRESS;
 
 	return it->second.size;
 }
@@ -409,12 +416,12 @@ u32 SymbolMap::GetFunctionSize(u32 startAddress) const
 int SymbolMap::GetFunctionNum(u32 address) const
 {
 	u32 start = GetFunctionStart(address);
-	if (start == -1)
-		return -1;
+	if (start == INVALID_ADDRESS)
+		return INVALID_ADDRESS;
 
 	auto it = functions.find(start);
 	if (it == functions.end())
-		return -1;
+		return INVALID_ADDRESS;
 
 	return it->second.index;
 }
@@ -545,7 +552,7 @@ u32 SymbolMap::GetDataStart(u32 address) const
 		}
 		
 		// otherwise there's no data that contains this address
-		return -1;
+		return INVALID_ADDRESS;
 	}
 
 	if (it != data.begin())
@@ -558,14 +565,14 @@ u32 SymbolMap::GetDataStart(u32 address) const
 			return start;
 	}
 
-	return -1;
+	return INVALID_ADDRESS;
 }
 
 u32 SymbolMap::GetDataSize(u32 startAddress) const
 {
 	auto it = data.find(startAddress);
 	if (it == data.end())
-		return -1;
+		return INVALID_ADDRESS;
 
 	return it->second.size;
 }
@@ -658,69 +665,6 @@ void SymbolMap::FillSymbolListBox(HWND listbox,SymbolType symType) const
 
 	SendMessage(listbox, WM_SETREDRAW, TRUE, 0);
 	RedrawWindow(listbox, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
-}
-
-void SymbolMap::FillSymbolComboBox(HWND comboxBox, SymbolType symType) const
-{
-	wchar_t temp[256];
-	lock_guard guard(lock_);
-	
-	SendMessage(comboxBox, WM_SETREDRAW, FALSE, 0);
-	ComboBox_ResetContent(comboxBox);
-
-	switch (symType)
-	{
-	case ST_FUNCTION:
-		{
-			SendMessage(comboxBox, CB_INITSTORAGE, (WPARAM)functions.size(), (LPARAM)functions.size() * 30);
-
-			for (auto it = functions.begin(), end = functions.end(); it != end; ++it)
-			{
-				const FunctionEntry& entry = it->second;
-				const char* name = GetLabelName(it->first);
-				
-				if (name != NULL)
-					wsprintf(temp, L"%S", name);
-				else
-					wsprintf(temp, L"0x%08X", it->first);
-				
-				int index = ComboBox_AddString(comboxBox,temp);
-				ComboBox_SetItemData(comboxBox,index,it->first);
-			}
-		}
-		break;
-
-	case ST_DATA:
-		{
-			int count = ARRAYSIZE(defaultSymbols)+(int)data.size();
-			SendMessage(comboxBox, CB_INITSTORAGE, (WPARAM)count, (LPARAM)count * 30);
-			
-			for (int i = 0; i < ARRAYSIZE(defaultSymbols); i++)
-			{
-				wsprintf(temp, L"0x%08X (%S)", defaultSymbols[i].address, defaultSymbols[i].name);
-				int index = ComboBox_AddString(comboxBox,temp);
-				ComboBox_SetItemData(comboxBox,index,defaultSymbols[i].address);
-			}
-
-			for (auto it = data.begin(), end = data.end(); it != end; ++it)
-			{
-				const DataEntry& entry = it->second;
-				const char* name = GetLabelName(it->first);
-
-				if (name != NULL)
-					wsprintf(temp, L"%S", name);
-				else
-					wsprintf(temp, L"0x%08X", it->first);
-
-				int index = ComboBox_AddString(comboxBox,temp);
-				ComboBox_SetItemData(comboxBox,index,it->first);
-			}
-		}
-		break;
-	}
-
-	SendMessage(comboxBox, WM_SETREDRAW, TRUE, 0);
-	RedrawWindow(comboxBox, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
 #endif

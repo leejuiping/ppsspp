@@ -10,7 +10,6 @@ if(ANDROID)
 endif()
 
 if(BLACKBERRY)
-	set(CMAKE_SYSTEM_NAME "QNX")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__STDC_CONSTANT_MACROS")
 endif()
 
@@ -72,24 +71,25 @@ option(HEADLESS "Set to OFF to not generate the PPSSPPHeadless target" ${HEADLES
 option(SIMULATOR "Set to ON when targeting an x86 simulator of an ARM platform" ${SIMULATOR})
 option(USE_FFMPEG "Build with FFMPEG support" ${USE_FFMPEG})
 
-if(ANDROID)
-	if(NOT ANDROID_ABI)
+if(ANDROID OR BLACKBERRY OR IOS)
+	if (NOT CMAKE_TOOLCHAIN_FILE)
+		if (ANDROID)
+			set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/android/android.toolchain.cmake)
+		elseif(BLACKBERRY)
+			set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/Blackberry/bb.toolchain.cmake)
+		elseif(IOS)
+			set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/ios/ios.toolchain.cmake)
+		endif()
 		message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE was not set!\n"
-			"Delete the CMakeCache.txt file and CMakeFiles directory."
-			"Rerun ${CMAKE_COMMAND} with \"-DCMAKE_TOOLCHAIN_FILE"
-			"=${CMAKE_SOURCE_DIR}/android/android.toolchain.cmake\"")
+			"Delete the CMakeCache.txt file and CMakeFiles directory.\n"
+			"Re-run ${CMAKE_COMMAND} with:\n"
+			"\"-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}\"")
 	endif()
+endif()
+
+if(ANDROID)
 	set(CoreLibName ppsspp_jni)
 	set(CoreLinkType SHARED)
-elseif(IOS)
-	if (NOT IOS_PLATFORM)
-		message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE was not set!\n"
-			"Delete the CMakeCache.txt file and CMakeFiles directory."
-			"Rerun ${CMAKE_COMMAND} with \"-DCMAKE_TOOLCHAIN_FILE"
-			"=${CMAKE_SOURCE_DIR}/ios/ios.toolchain.cmake\"")
-	endif()
-	set(CoreLibName Core)
-	set(CoreLinkType STATIC)
 else()
 	set(CoreLibName Core)
 	set(CoreLinkType STATIC)
@@ -155,7 +155,7 @@ if(NOT MSVC)
 		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -parallel -fopenmp")
 	endif()
 	if(NOT APPLE)
-		if (NOT CMAKE_C_COMPILER_ID STREQUAL "Intel")
+		if (NOT CMAKE_C_COMPILER_ID STREQUAL "Intel" AND NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
 			add_definitions(-Wno-psabi)
 		endif()
 		add_definitions(-D_XOPEN_SOURCE=600 -D_XOPEN_SOURCE_EXTENDED -D__BSD_VISIBLE=1)

@@ -27,6 +27,8 @@ extern const char *PPSSPP_GIT_VERSION;
 #endif
 
 const int MAX_CONFIG_VOLUME = 8;
+const int PSP_MODEL_FAT = 0;
+const int PSP_MODEL_SLIM = 1;
 
 namespace http {
 	class Download;
@@ -77,9 +79,7 @@ public:
 
 	int iRenderingMode; // 0 = non-buffered rendering 1 = buffered rendering 2 = Read Framebuffer to memory (CPU) 3 = Read Framebuffer to memory (GPU)
 	int iTexFiltering; // 1 = off , 2 = nearest , 3 = linear , 4 = linear(CG)
-#ifdef BLACKBERRY
 	bool bPartialStretch;
-#endif
 	bool bStretchToDisplay;
 	bool bVSync;
 	int iFrameSkip;
@@ -203,8 +203,8 @@ public:
 
 	// SystemParam
 	std::string sNickName;
-    std::string proAdhocServer;
-    std::string localMacAddress;
+	std::string proAdhocServer;
+	std::string localMacAddress;
 	int iLanguage;
 	int iTimeFormat;
 	int iDateFormat;
@@ -215,6 +215,7 @@ public:
 	bool bEncryptSave;
 	int iWlanAdhocChannel;
 	bool bWlanPowerSave;
+	int iPSPModel;
 	// TODO: Make this work with your platform, too!
 #ifdef _WIN32
 	bool bBypassOSKWithKeyboard;

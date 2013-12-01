@@ -202,13 +202,6 @@ namespace MIPSComp
 				SetCC(CC_GT);
 				VMOV(fpr.V(vregs[i]), S1);
 				SetCC(CC_AL);
-
-				/*
-				VABS(S1, fpr.V(vregs[i]));                  // S1 = fabs(x)
-				VSUB(fpr.V(vregs[i]), fpr.V(vregs[i]), S0); // S2 = fabs(x-0.5f) {VABD}
-				VABS(fpr.V(vregs[i]), fpr.V(vregs[i]));
-				VSUB(fpr.V(vregs[i]), S1, fpr.V(vregs[i])); // v[i] = S1 - S2 + 0.5f
-				VADD(fpr.V(vregs[i]), fpr.V(vregs[i]), S0);*/
 			} else if (sat == 3) {
 				fpr.MapRegV(vregs[i], MAP_DIRTY);
 
@@ -224,16 +217,6 @@ namespace MIPSComp
 				SetCC(CC_GT);
 				VMOV(fpr.V(vregs[i]), S1);
 				SetCC(CC_AL);
-
-				// clamped = fabs(x) - fabs(x-1.0f);        // [-1, 1]
-				/*
-				fpr.MapRegV(vregs[i], MAP_DIRTY);
-				MOVI2F(S0, 1.0f, R0);
-				VABS(S1, fpr.V(vregs[i]));                  // S1 = fabs(x)
-				VSUB(fpr.V(vregs[i]), fpr.V(vregs[i]), S0); // S2 = fabs(x-1.0f) {VABD}
-				VABS(fpr.V(vregs[i]), fpr.V(vregs[i]));
-				VSUB(fpr.V(vregs[i]), S1, fpr.V(vregs[i])); // v[i] = S1 - S2
-				*/
 			}
 		}
 	}
@@ -799,6 +782,20 @@ namespace MIPSComp
 			}
 		}
 
+		// Get some extra temps, used by vasin only. 
+		ARMReg t2 = INVALID_REG, t3 = INVALID_REG, t4 = INVALID_REG;
+		if (((op >> 16) & 0x1f) == 23) {
+			int t[3] = { fpr.GetTempV(), fpr.GetTempV(), fpr.GetTempV() };
+			fpr.MapRegV(t[0], MAP_NOINIT);
+			fpr.MapRegV(t[1], MAP_NOINIT);
+			fpr.MapRegV(t[2], MAP_NOINIT);
+			t2 = fpr.V(t[0]);
+			t3 = fpr.V(t[1]);
+			t4 = fpr.V(t[2]);
+			INFO_LOG(JIT, "t2 %i t3 %i t4 %i", t2, t3, t4);
+			logBlocks = 1;
+		}
+
 		// Warning: sregs[i] and tempxregs[i] may be the same reg.
 		// Helps for vmov, hurts for vrcp, etc.
 		for (int i = 0; i < n; ++i) {
@@ -866,7 +863,35 @@ namespace MIPSComp
 				VABS(fpr.V(tempregs[i]), fpr.V(tempregs[i]));
 				break;
 			case 23: // d[i] = asinf(s[i] * (float)M_2_PI); break; //vasin
-				DISABLE;
+				// DISABLE;
+				// Seems to work well enough but can disable if it becomes a problem.
+				// Should be easy enough to translate to NEON. There we can load all the constants
+				// in one go of course.
+				fpr.MapDirtyInV(tempregs[i], sregs[i]);
+				MOVI2F(S0, 0.0f, R0);
+				VCMP(fpr.V(sregs[i]), S0);       // flags = sign(sregs[i])
+				VMRS_APSR();
+				MOVI2F(S0, 1.0f, R0);
+				VABS(t4, fpr.V(sregs[i]));   // t4 = |sregs[i]|
+				VSUB(t3, S0, t4);
+				VSQRT(t3, t3);               // t3 = sqrt(1 - |sregs[i]|)
+				MOVI2F(S1, -0.0187293f, R0);
+				MOVI2F(t2, 0.0742610f, R0);
+				VMLA(t2, t4, S1);
+				MOVI2F(S1, -0.2121144f, R0);
+				VMLA(S1, t4, t2);
+				MOVI2F(t2, 1.5707288f, R0);
+				VMLA(t2, t4, S1);
+				MOVI2F(fpr.V(tempregs[i]), M_PI / 2, R0);
+				VMLS(fpr.V(tempregs[i]), t2, t3);    // tr[i] = M_PI / 2 - t2 * t3
+				{
+					FixupBranch br = B_CC(CC_GE);
+					VNEG(fpr.V(tempregs[i]), fpr.V(tempregs[i]));
+					SetJumpTarget(br);
+				}
+				// Correction factor for PSP range. Could be baked into the calculation above?
+				MOVI2F(S1, 1.0f / (M_PI / 2), R0);
+				VMUL(fpr.V(tempregs[i]), fpr.V(tempregs[i]), S1);
 				break;
 			case 24: // d[i] = -1.0f / s[i]; break; // vnrcp
 				fpr.MapDirtyInV(tempregs[i], sregs[i]);

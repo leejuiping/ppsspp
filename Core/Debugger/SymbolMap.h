@@ -43,7 +43,7 @@ struct SymbolEntry
 	u32 size;
 };
 
-enum DataType { DATATYPE_NONE, DATATYPE_BYTE, DATATYPE_HALFWORD, DATATYPE_WORD };
+enum DataType { DATATYPE_NONE, DATATYPE_BYTE, DATATYPE_HALFWORD, DATATYPE_WORD, DATATYPE_ASCII };
 
 #ifdef _WIN32
 struct HWND__;
@@ -68,7 +68,6 @@ public:
 
 #ifdef _WIN32
 	void FillSymbolListBox(HWND listbox, SymbolType symType) const;
-	void FillSymbolComboBox(HWND listbox,SymbolType symType) const;
 #endif
 
 	void AddFunction(const char* name, u32 address, u32 size);
@@ -87,6 +86,8 @@ public:
 	u32 GetDataStart(u32 address) const;
 	u32 GetDataSize(u32 startAddress) const;
 	DataType GetDataType(u32 startAddress) const;
+
+	static const u32 INVALID_ADDRESS = (u32)-1;
 private:
 	void AssignFunctionIndices();
 

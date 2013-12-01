@@ -189,9 +189,9 @@ void GameButton::Draw(UIContext &dc) {
 
 	char discNumInfo[8];
 	if (ginfo->disc_total > 1)
-		sprintf(discNumInfo, "-DISC%d",ginfo->disc_number);
+		sprintf(discNumInfo, "-DISC%d", ginfo->disc_number);
 	else
-		sprintf(discNumInfo, "");
+		strcpy(discNumInfo, "");
 
 	dc.Draw()->Flush();
 	dc.RebindTexture();
@@ -445,7 +445,7 @@ void MainScreen::CreateViews() {
 		m->T("How to get games"), "http://www.ppsspp.org/getgames.html",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	GameBrowser *tabHomebrew = new GameBrowser(GetSysDirectory(DIRECTORY_GAME), false, &g_Config.bGridView3,
-		m->T("How to get homebrew & demos"), "http://www.ppsspp.org/gethomebrew.html",
+		m->T("How to get homebrew & demos", "How to get homebrew && demos"), "http://www.ppsspp.org/gethomebrew.html",
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 
 	

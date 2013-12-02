@@ -41,7 +41,7 @@ http::Downloader g_DownloadManager;
 Config g_Config;
 
 #ifdef IOS
-extern bool isJailed;
+extern bool iosCanUseJit;
 #endif
 
 Config::Config() { }
@@ -92,7 +92,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	general->Get("RewindFlipFrequency", &iRewindFlipFrequency, 0);
 	general->Get("GridView1", &bGridView1, true);
 	general->Get("GridView2", &bGridView2, true);
-	general->Get("GridView3", &bGridView3, true);
+	general->Get("GridView3", &bGridView3, false);
 
 	// "default" means let emulator decide, "" means disable.
 	general->Get("ReportingHost", &sReportHost, "default");
@@ -131,7 +131,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 
 	IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 #ifdef IOS
-	cpu->Get("Jit", &bJit, !isJailed);
+	cpu->Get("Jit", &bJit, iosCanUseJit);
 #else
 	cpu->Get("Jit", &bJit, true);
 #endif
@@ -179,7 +179,11 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 		iAnisotropyLevel = 4;
 	}
 	graphics->Get("VertexCache", &bVertexCache, true);
+#ifdef IOS
+	graphics->Get("VertexDecJit", &bVertexDecoderJit, iosCanUseJit);
+#else
 	graphics->Get("VertexDecJit", &bVertexDecoderJit, true);
+#endif
 
 #ifdef _WIN32
 	graphics->Get("FullScreen", &bFullScreen, false);
@@ -252,29 +256,38 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	control->Get("DeadzoneRadius", &fDeadzoneRadius, 0.35);
 
 #endif
+	control->Get("DisableDpadDiagonals", &bDisableDpadDiagonals, false);
 	control->Get("TouchButtonOpacity", &iTouchButtonOpacity, 65);
-	control->Get("ButtonScale", &fButtonScale, 1.15);
 	//set these to -1 if not initialized. initializing these
 	//requires pixel coordinates which is not known right now.
 	//will be initialized in GamepadEmu::CreatePadLayout
-	control->Get("ActionButtonSpacing", &iActionButtonSpacing, -1);
+	float defaultScale = 1.15f;
+	control->Get("ActionButtonSpacing2", &fActionButtonSpacing, 1.0f);
 	control->Get("ActionButtonCenterX", &fActionButtonCenterX, -1.0);
 	control->Get("ActionButtonCenterY", &fActionButtonCenterY, -1.0);
-	control->Get("DPadRadius", &iDpadRadius, -1);
+	control->Get("ActionButtonScale", &fActionButtonScale, defaultScale);
 	control->Get("DPadX", &fDpadX, -1.0);
 	control->Get("DPadY", &fDpadY, -1.0);
+	control->Get("DPadScale", &fDpadScale, defaultScale);
+	control->Get("DPadSpacing", &fDpadSpacing, 1.0f);
 	control->Get("StartKeyX", &fStartKeyX, -1.0);
 	control->Get("StartKeyY", &fStartKeyY, -1.0);
+	control->Get("StartKeyScale", &fStartKeyScale, defaultScale);
 	control->Get("SelectKeyX", &fSelectKeyX, -1.0);
 	control->Get("SelectKeyY", &fSelectKeyY, -1.0);
+	control->Get("SelectKeyScale", &fSelectKeyScale, defaultScale);
 	control->Get("UnthrottleKeyX", &fUnthrottleKeyX, -1.0);
 	control->Get("UnthrottleKeyY", &fUnthrottleKeyY, -1.0);
+	control->Get("UnthrottleKeyScale", &fUnthrottleKeyScale, defaultScale);
 	control->Get("LKeyX", &fLKeyX, -1.0);
 	control->Get("LKeyY", &fLKeyY, -1.0);
+	control->Get("LKeyScale", &fLKeyScale, defaultScale);
 	control->Get("RKeyX", &fRKeyX, -1.0);
 	control->Get("RKeyY", &fRKeyY, -1.0);
+	control->Get("RKeyScale", &fRKeyScale, defaultScale);
 	control->Get("AnalogStickX", &fAnalogStickX, -1.0);
 	control->Get("AnalogStickY", &fAnalogStickY, -1.0);
+	control->Get("AnalogStickScale", &fAnalogStickScale, defaultScale);
 
 	// MIGRATION: For users who had the old static touch layout, aren't I nice?
 	if (fDpadX > 1.0 || fDpadY > 1.0) // Likely the rest are too!
@@ -387,7 +400,7 @@ void Config::Save() {
 		}
 
 		IniFile::Section *general = iniFile.GetOrCreateSection("General");
-		
+
 		// Need to do this somewhere...
 		bFirstRun = false;
 		general->Set("FirstRun", bFirstRun);
@@ -435,7 +448,7 @@ void Config::Save() {
 		IniFile::Section *cpu = iniFile.GetOrCreateSection("CPU");
 		cpu->Set("Jit", bJit);
 		cpu->Set("SeparateCPUThread", bSeparateCPUThread);
-		cpu->Set("AtomicAudioLocks", bAtomicAudioLocks);	
+		cpu->Set("AtomicAudioLocks", bAtomicAudioLocks);
 		cpu->Set("SeparateIOThread", bSeparateIOThread);
 		cpu->Set("FastMemoryAccess", bFastMemory);
 		cpu->Set("CPUSpeed", iLockedCPUSpeed);
@@ -492,7 +505,6 @@ void Config::Save() {
 		control->Set("ShowTouchUnthrottle", bShowTouchUnthrottle);
 		control->Set("ShowTouchDpad", bShowTouchDpad);
 
-		// control->Set("KeyMapping",iMappingMap);
 #ifdef USING_GLES2
 		control->Set("AccelerometerToAnalogHoriz", bAccelerometerToAnalogHoriz);
 		control->Set("TiltBaseX", fTiltBaseX);
@@ -503,33 +515,41 @@ void Config::Save() {
 		control->Set("TiltSensitivityY", iTiltSensitivityY);
 		control->Set("DeadzoneRadius", fDeadzoneRadius);
 #endif
+		control->Set("DisableDpadDiagonals", bDisableDpadDiagonals);
+
 		control->Set("TouchButtonOpacity", iTouchButtonOpacity);
-		control->Set("ButtonScale", fButtonScale);
-		control->Set("ActionButtonSpacing", iActionButtonSpacing);
+		control->Set("ActionButtonScale", fActionButtonScale);
+		control->Set("ActionButtonSpacing2", fActionButtonSpacing);
 		control->Set("ActionButtonCenterX", fActionButtonCenterX);
 		control->Set("ActionButtonCenterY", fActionButtonCenterY);
-		control->Set("DPadRadius", iDpadRadius);
 		control->Set("DPadX", fDpadX);
 		control->Set("DPadY", fDpadY);
+		control->Set("DPadScale", fDpadScale);
+		control->Set("DPadSpacing", fDpadSpacing);
 		control->Set("StartKeyX", fStartKeyX);
 		control->Set("StartKeyY", fStartKeyY);
+		control->Set("StartKeyScale", fStartKeyScale);
 		control->Set("SelectKeyX", fSelectKeyX);
 		control->Set("SelectKeyY", fSelectKeyY);
+		control->Set("SelectKeyScale", fSelectKeyScale);
 		control->Set("UnthrottleKeyX", fUnthrottleKeyX);
 		control->Set("UnthrottleKeyY", fUnthrottleKeyY);
+		control->Set("UnthrottleKeyScale", fUnthrottleKeyScale);
 		control->Set("LKeyX", fLKeyX);
 		control->Set("LKeyY", fLKeyY);
+		control->Set("LKeyScale", fLKeyScale);
 		control->Set("RKeyX", fRKeyX);
 		control->Set("RKeyY", fRKeyY);
+		control->Set("RKeyScale", fRKeyScale);
 		control->Set("AnalogStickX", fAnalogStickX);
 		control->Set("AnalogStickY", fAnalogStickY);
-
+		control->Set("AnalogStickScale", fAnalogStickScale);
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("PSPModel", iPSPModel);
 		pspConfig->Set("NickName", sNickName.c_str());
-        pspConfig->Set("proAdhocServer", proAdhocServer.c_str());
-        pspConfig->Set("MacAddress", localMacAddress.c_str());
+		pspConfig->Set("proAdhocServer", proAdhocServer.c_str());
+		pspConfig->Set("MacAddress", localMacAddress.c_str());
 		pspConfig->Set("Language", iLanguage);
 		pspConfig->Set("TimeFormat", iTimeFormat);
 		pspConfig->Set("DateFormat", iDateFormat);

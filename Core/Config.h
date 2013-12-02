@@ -145,26 +145,40 @@ public:
 	bool bGridView2;
 	bool bGridView3;
 
+	// Disable diagonals
+	bool bDisableDpadDiagonals;
 	// Control Positions
 	int iTouchButtonOpacity;
-	float fButtonScale;
 	//space between PSP buttons
-	int iActionButtonSpacing;
 	//the PSP button's center (triangle, circle, square, cross)
 	float fActionButtonCenterX, fActionButtonCenterY;
+	float fActionButtonScale;
+	float fActionButtonSpacing;
 	//radius of the D-pad (PSP cross)
-	int iDpadRadius;
+	// int iDpadRadius;
 	//the D-pad (PSP cross) position
 	float fDpadX, fDpadY;
+	float fDpadScale;
+	float fDpadSpacing;
 	//the start key position
 	float fStartKeyX, fStartKeyY;
-	//the select key position; 
+	float fStartKeyScale;
+	//the select key position;
 	float fSelectKeyX, fSelectKeyY;
+	float fSelectKeyScale;
+
 	float fUnthrottleKeyX, fUnthrottleKeyY;
+	float fUnthrottleKeyScale;
+
 	float fLKeyX, fLKeyY;
+	float fLKeyScale;
+
 	float fRKeyX, fRKeyY;
+	float fRKeyScale;
+
 	//position of the analog stick
 	float fAnalogStickX, fAnalogStickY;
+	float fAnalogStickScale;
 
 	// Controls Visibility
 	bool bShowTouchControls;
@@ -180,10 +194,10 @@ public:
 
 	bool bShowTouchLTrigger;
 	bool bShowTouchRTrigger;
-	
+
 	bool bShowTouchAnalogStick;
 	bool bShowTouchDpad;
-	
+
 	bool bHapticFeedback;
 
 	// GLES backend-specific hacks. Not saved to the ini file, do not add checkboxes. Will be made into

@@ -26,6 +26,7 @@
 #include "UI/EmuScreen.h"
 #include "UI/GameSettingsScreen.h"
 #include "UI/GameInfoCache.h"
+#include "UI/GamepadEmu.h"
 #include "UI/MiscScreens.h"
 #include "UI/ControlMappingScreen.h"
 #include "UI/DevScreens.h"
@@ -47,8 +48,9 @@ namespace MainWindow {
 	extern HWND hwndMain;
 }
 #endif
+
 #ifdef IOS
-extern bool isJailed;
+extern bool iosCanUseJit;
 #endif
 
 static const int alternateSpeedTable[9] = {
@@ -154,9 +156,6 @@ void GameSettingsScreen::CreateViews() {
 
 	graphicsSettings->Add(new CheckBox(&g_Config.bLowQualitySplineBezier, gs->T("LowCurves", "Low quality spline/bezier curves")));
 
-	// This setting is not really useful for anyone atm.
-	// graphicsSettings->Add(new CheckBox(&g_Config.bTrueColor, gs->T("True Color")));
-
 	// In case we're going to add few other antialiasing option like MSAA in the future.
 	// graphicsSettings->Add(new CheckBox(&g_Config.bFXAA, gs->T("FXAA")));
 	graphicsSettings->Add(new ItemHeader(gs->T("Texture Scaling")));
@@ -243,8 +242,9 @@ void GameSettingsScreen::CreateViews() {
 	layoutEditorChoice_ = controlsSettings->Add(new Choice(c->T("Custom layout...")));
 	layoutEditorChoice_->OnClick.Handle(this, &GameSettingsScreen::OnTouchControlLayout);
 	layoutEditorChoice_->SetEnabledPtr(&g_Config.bShowTouchControls);
+	CheckBox *disableDiags = controlsSettings->Add(new CheckBox(&g_Config.bDisableDpadDiagonals, c->T("Disable D-Pad diagonals (4-way touch)")));
+	disableDiags->SetEnabledPtr(&g_Config.bShowTouchControls);
 	controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, c->T("Button Opacity"), screenManager()));
-	controlsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fButtonScale, 0.80, 2.0, c->T("Button Scaling"), screenManager()));
 
 	// System
 	ViewGroup *systemSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
@@ -291,7 +291,7 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeNickname);
 	// Screenshot functionality is not yet available on non-Windows
 	systemSettings->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, s->T("Screenshots as PNG")));
-#endif	
+#endif
 	systemSettings->Add(new CheckBox(&g_Config.bDayLightSavings, s->T("Day Light Saving")));
 	static const char *dateFormat[] = { "YYYYMMDD", "MMDDYYYY", "DDMMYYYY"};
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iDateFormat, s->T("Date Format"), dateFormat, 1, 3, s, screenManager()));
@@ -507,7 +507,7 @@ void DeveloperToolsScreen::CreateViews() {
 	list->Add(new ItemHeader(s->T("General")));
 
 #ifdef IOS
-	if (isJailed) {
+	if (!iosCanUseJit) {
 		list->Add(new TextView(s->T("DynarecisJailed", "Dynarec (JIT) - (Not jailbroken - JIT not available)")));
 	} else {
 		list->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")));

@@ -72,6 +72,7 @@ public:
 	std::vector<std::string> recentIsos;
 	std::string sLanguageIni;
 
+
 	// GFX
 	bool bSoftwareRendering;
 	bool bHardwareTransform; // only used in the GLES backend
@@ -112,7 +113,6 @@ public:
 	bool bAlwaysDepthWrite;
 	bool bTimerHack;
 	bool bLowQualitySplineBezier;
-	bool bWipeFramebufferAlpha;  // this was meant to be CopyStencilToAlpha but not done yet.
 	std::string sPostShaderName;  // Off for off.
 
 	// Sound
@@ -227,8 +227,12 @@ public:
 	int iButtonPreference;
 	int iLockParentalLevel;
 	bool bEncryptSave;
+
+	// Networking
+	bool bEnableWlan;
 	int iWlanAdhocChannel;
 	bool bWlanPowerSave;
+
 	int iPSPModel;
 	// TODO: Make this work with your platform, too!
 #ifdef _WIN32

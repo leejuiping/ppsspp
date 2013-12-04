@@ -195,7 +195,9 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	graphics->Get("PartialStretch", &bPartialStretch, partialStretchDefault);
 	graphics->Get("StretchToDisplay", &bStretchToDisplay, false);
 	graphics->Get("TrueColor", &bTrueColor, true);
-	graphics->Get("MipMap", &bMipMap, true);
+
+	graphics->Get("MipMap", &bMipMap, false);
+
 	graphics->Get("TexScalingLevel", &iTexScalingLevel, 1);
 	graphics->Get("TexScalingType", &iTexScalingType, 0);
 	graphics->Get("TexDeposterize", &bTexDeposterize, false);
@@ -209,7 +211,6 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	graphics->Get("TimerHack", &bTimerHack, false);
 #endif
 	graphics->Get("LowQualitySplineBezier", &bLowQualitySplineBezier, false);
-	graphics->Get("WipeFramebufferAlpha", &bWipeFramebufferAlpha, false);
 	graphics->Get("PostShader", &sPostShaderName, "Off");
 
 	IniFile::Section *sound = iniFile.GetOrCreateSection("Sound");
@@ -309,6 +310,9 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 		fAnalogStickX /= dp_xres;
 		fAnalogStickY /= dp_yres;
 	}
+
+	IniFile::Section *network = iniFile.GetOrCreateSection("Network");
+	network->Get("EnableWlan", &bEnableWlan, true);
 	
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 #ifndef ANDROID
@@ -544,6 +548,9 @@ void Config::Save() {
 		control->Set("AnalogStickX", fAnalogStickX);
 		control->Set("AnalogStickY", fAnalogStickY);
 		control->Set("AnalogStickScale", fAnalogStickScale);
+
+		IniFile::Section *network = iniFile.GetOrCreateSection("Network");
+		network->Set("EnableWlan", &bEnableWlan, true);
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("PSPModel", iPSPModel);

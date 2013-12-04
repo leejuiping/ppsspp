@@ -339,6 +339,12 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		bool gmask = ((gstate.pmskc >> 8) & 0xFF) < 128;
 		bool bmask = ((gstate.pmskc >> 16) & 0xFF) < 128;
 		bool amask = (gstate.pmska & 0xFF) < 128;
+
+		// Let's not write to alpha if stencil isn't enabled.
+		if (!gstate.isStencilTestEnabled()) {
+			amask = false;
+		}
+
 		glstate.colorMask.set(rmask, gmask, bmask, amask);
 
 		// Stencil Test

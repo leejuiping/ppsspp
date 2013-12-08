@@ -28,14 +28,16 @@
 // in NativeShutdown.
 
 #include <locale.h>
+#ifdef _WIN32
+#include <png.h>
+#include "ext/jpge/jpge.h"
+#endif
 
 #include "base/logging.h"
 #include "base/mutex.h"
 #include "base/NativeApp.h"
 #include "file/vfs.h"
 #include "file/zip_read.h"
-#include "ext/stb_image_write/stb_image_writer.h"
-#include "ext/jpge/jpge.h"
 #include "thread/thread.h"
 #include "net/http_client.h"
 #include "gfx_es2/gl_state.h"
@@ -61,6 +63,7 @@
 #include "Core/HLE/sceCtrl.h"
 #include "Core/Host.h"
 #include "Core/SaveState.h"
+#include "Core/Util/GameManager.h"
 #include "Common/MemArena.h"
 
 #include "ui_atlas.h"
@@ -79,12 +82,10 @@ static UI::Theme ui_theme;
 #include "../../android/jni/ArmEmitterTest.h"
 #endif
 
-#if defined(__APPLE__) && !defined(IOS)
-#include <mach-o/dyld.h>
-#endif
-
 #ifdef IOS
 #include "ios/iOSCoreAudio.h"
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
 #endif
 
 // https://github.com/richq/android-ndk-profiler
@@ -188,28 +189,24 @@ std::string boot_filename = "";
 
 void NativeHost::InitSound(PMixer *mixer) {
 	g_mixer = mixer;
-    
 #ifdef IOS
-    iOSCoreAudioInit();
+	iOSCoreAudioInit();
 #endif
 }
 
 void NativeHost::ShutdownSound() {
 #ifdef IOS
-    iOSCoreAudioShutdown();
+	iOSCoreAudioShutdown();
 #endif
-    
 	g_mixer = 0;
 }
 
 int NativeMix(short *audio, int num_samples) {
-	// ILOG("Entering mixer");
 	if (g_mixer) {
 		num_samples = g_mixer->Mix(audio, num_samples);
 	}	else {
 		memset(audio, 0, num_samples * 2 * sizeof(short));
 	}
-	// ILOG("Leaving mixer");
 	return num_samples;
 }
 
@@ -239,13 +236,6 @@ void NativeInit(int argc, const char *argv[],
 
 #ifdef IOS
 	user_data_path += "/";
-#elif defined(__APPLE__)
-	if (File::Exists(File::GetExeDirectory() + "assets"))
-		VFSRegister("", new DirectoryAssetReader((File::GetExeDirectory() + "assets/").c_str()));
-	// It's common to be in a build-xyz/ directory.
-	else
-		VFSRegister("", new DirectoryAssetReader((File::GetExeDirectory() + "../assets/").c_str()));
-	VFSRegister("", new DirectoryAssetReader((File::GetExeDirectory()).c_str()));
 #endif
 
 	// We want this to be FIRST.
@@ -254,6 +244,9 @@ void NativeInit(int argc, const char *argv[],
 #elif defined(BLACKBERRY) || defined(IOS)
 	// Packed assets are included in app
 	VFSRegister("", new DirectoryAssetReader(external_directory));
+#elif defined(__APPLE__) || (defined(__linux__) && !defined(ANDROID))
+	VFSRegister("", new DirectoryAssetReader((File::GetExeDirectory() + "assets/").c_str()));
+	VFSRegister("", new DirectoryAssetReader((File::GetExeDirectory()).c_str()));
 #else
 	VFSRegister("", new DirectoryAssetReader("assets/"));
 #endif
@@ -278,14 +271,7 @@ void NativeInit(int argc, const char *argv[],
 		strcat(config, "/.config");
 	}
 	g_Config.memCardDirectory = std::string(config) + "/ppsspp/";
-	std::string program_path = File::GetExeDirectory();
-	if (program_path.empty())
-		g_Config.flash0Directory = g_Config.memCardDirectory + "/flash0/";
-	else if (File::Exists(program_path + "flash0"))
-		g_Config.flash0Directory = program_path + "flash0/";
-	// It's common to be in a build-xyz/ directory.
-	else
-		g_Config.flash0Directory = program_path + "../flash0/";
+	g_Config.flash0Directory = File::GetExeDirectory() + "/flash0/";
 #endif
 
 #ifndef _WIN32
@@ -304,7 +290,7 @@ void NativeInit(int argc, const char *argv[],
 
 #ifdef ANDROID
 	// On Android, create a PSP directory tree in the external_directory,
-	// to hopefully reduce confusion a bit. 
+	// to hopefully reduce confusion a bit.
 	ILOG("Creating %s", (g_Config.memCardDirectory + "PSP").c_str());
 	mkDir((g_Config.memCardDirectory + "PSP").c_str());
 	mkDir((g_Config.memCardDirectory + "PSP/SAVEDATA").c_str());
@@ -387,12 +373,12 @@ void NativeInit(int argc, const char *argv[],
 	if (!gfxLog)
 		logman->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
 	INFO_LOG(BOOT, "Logger inited.");
-#endif	
+#endif
 
 	i18nrepo.LoadIni(g_Config.sLanguageIni);
 	I18NCategory *d = GetI18NCategory("DesktopUI");
-	// Note to translators: do not translate this/add this to PPSSPP-lang's files. 
-	// It's intended to be custom for every user. 
+	// Note to translators: do not translate this/add this to PPSSPP-lang's files.
+	// It's intended to be custom for every user.
 	// Only add it to your own personal copies of PPSSPP.
 #ifdef _WIN32
 	// TODO: Could allow a setting to specify a font file to load?
@@ -406,9 +392,7 @@ void NativeInit(int argc, const char *argv[],
 
 	g_gameInfoCache.Init();
 
-
 	screenManager = new ScreenManager();
-
 	if (skipLogo) {
 		screenManager->switchScreen(new EmuScreen(boot_filename));
 	} else {
@@ -519,8 +503,8 @@ void NativeShutdownGraphics() {
 }
 
 void TakeScreenshot() {
-#ifdef _WIN32
 	g_TakeScreenshot = false;
+#ifdef _WIN32
 	mkDir(g_Config.memCardDirectory + "/PSP/SCREENSHOT");
 
 	// First, find a free filename.
@@ -539,23 +523,29 @@ void TakeScreenshot() {
 	}
 
 	// Okay, allocate a buffer.
-	u8 *buffer = new u8[4 * pixel_xres * pixel_yres];
+	u8 *buffer = new u8[3 * pixel_xres * pixel_yres];
 	// Silly openGL reads upside down, we flip to another buffer for simplicity.
-	u8 *flipbuffer = new u8[4 * pixel_xres * pixel_yres];
+	u8 *flipbuffer = new u8[3 * pixel_xres * pixel_yres];
 
-	glReadPixels(0, 0, pixel_xres, pixel_yres, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+	glReadPixels(0, 0, pixel_xres, pixel_yres, GL_RGB, GL_UNSIGNED_BYTE, buffer);
 
 	for (int y = 0; y < pixel_yres; y++) {
-		memcpy(flipbuffer + y * pixel_xres * 4, buffer + (pixel_yres - y - 1) * pixel_xres * 4, pixel_xres * 4);
+		memcpy(flipbuffer + y * pixel_xres * 3, buffer + (pixel_yres - y - 1) * pixel_xres * 3, pixel_xres * 3);
 	}
 
-	if(g_Config.bScreenshotsAsPNG)
-		stbi_write_png(temp, pixel_xres, pixel_yres, 4, flipbuffer, pixel_xres * 4);
-	else
-	{
+	if (g_Config.bScreenshotsAsPNG) {
+		png_image png;
+		memset(&png, 0, sizeof(png));
+		png.version = PNG_IMAGE_VERSION;
+		png.format = PNG_FORMAT_RGB;
+		png.width = pixel_xres;
+		png.height = pixel_yres;
+		png_image_write_to_file(&png, temp, 0, flipbuffer, pixel_xres * 3, NULL);
+		png_image_free(&png);
+	} else {
 		jpge::params params;
 		params.m_quality = 90;
-		compress_image_to_jpeg_file(temp, pixel_xres, pixel_yres, 4, flipbuffer, params);
+		compress_image_to_jpeg_file(temp, pixel_xres, pixel_yres, 3, flipbuffer, params);
 	}
 
 	delete [] buffer;
@@ -565,7 +555,35 @@ void TakeScreenshot() {
 #endif
 }
 
+void DrawDownloadsOverlay(UIContext &ctx) {
+	// Thin bar at the top of the screen like Chrome.
+	std::vector<float> progress = g_DownloadManager.GetCurrentProgress();
+	if (progress.empty()) {
+		return;
+	}
+
+	static const uint32_t colors[4] = {
+		0xFFFFFFFF,
+		0xFFCCCCCC,
+		0xFFAAAAAA,
+		0xFF777777,
+	};
+
+	ctx.Begin();
+	int h = 5;
+	for (size_t i = 0; i < progress.size(); i++) {
+		float barWidth = 10 + (dp_xres - 10) * progress[i];
+		Bounds bounds(0, h * i, barWidth, h);
+		UI::Drawable solid(colors[i & 3]);
+		ctx.FillRect(solid, bounds);
+	}
+	ctx.End();
+	ctx.Flush();
+}
+
 void NativeRender() {
+	g_GameManager.Update();
+
 	glstate.depthWrite.set(GL_TRUE);
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
@@ -585,6 +603,8 @@ void NativeRender() {
 	if (screenManager->getUIContext()->Text()) {
 		screenManager->getUIContext()->Text()->OncePerFrame();
 	}
+
+	DrawDownloadsOverlay(*screenManager->getUIContext());
 
 	if (g_TakeScreenshot) {
 		TakeScreenshot();

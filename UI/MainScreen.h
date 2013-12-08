@@ -32,10 +32,14 @@ public:
 
 	virtual bool isTopLevel() const { return true; }
 
+	// Horrible hack to show the demos & homebrew tab after having installed a game from a zip file.
+	static bool showHomebrewTab;
+
 protected:
 	virtual void CreateViews();
 	virtual void update(InputState &input);
 	virtual void sendMessage(const char *message, const char *value);
+	virtual void dialogFinished(const Screen *dialog, DialogResult result);
 
 private:
 	UI::EventReturn OnGameSelected(UI::EventParams &e);
@@ -51,8 +55,12 @@ private:
 	UI::EventReturn OnExit(UI::EventParams &e);
 	UI::EventReturn OnDownloadUpgrade(UI::EventParams &e);
 	UI::EventReturn OnDismissUpgrade(UI::EventParams &e);
+	UI::EventReturn OnHomebrewStore(UI::EventParams &e);
 
 	UI::LinearLayout *upgradeBar_;
+	UI::TabHolder *tabHolder_;
+
+	bool backFromStore_;
 };
 
 class GamePauseScreen : public UIDialogScreen {

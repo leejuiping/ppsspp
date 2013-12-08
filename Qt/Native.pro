@@ -28,17 +28,6 @@ SOURCES += $$P/native/ext/jpge/*.cpp
 HEADERS += $$P/native/ext/jpge/*.h
 INCLUDEPATH += $$P/native/ext/jpge
 
-# Stb_image
-
-SOURCES += $$P/native/ext/stb_image/stb_image.c
-HEADERS += $$P/native/ext/stb_image/stb_image.h
-INCLUDEPATH += $$P/native/ext/stb_image
-win32 {
-    SOURCES += $$P/native/ext/stb_image_write/stb_image_write.c
-    HEADERS += $$P/native/ext/stb_image_write/stb_image_writer.h
-    INCLUDEPATH += $$P/native/ext/stb_image_write
-}
-
 # Stb_vorbis
 
 SOURCES += $$P/native/ext/stb_vorbis/stb_vorbis.c
@@ -64,6 +53,16 @@ win32|contains(QT_CONFIG, no-zlib) {
 	SOURCES += $$P/ext/zlib/*.c
 	HEADERS += $$P/ext/zlib/*.h
 }
+
+# Libzip
+SOURCES += $$P/native/ext/libzip/*.c
+HEADERS += $$P/native/ext/libzip/*.h
+
+# Libpng
+SOURCES += $$P/native/ext/libpng16/*.c
+HEADERS += $$P/native/ext/libpng16/*.h
+INCLUDEPATH += $$P/native/ext/libpng16
+
 
 # Native
 

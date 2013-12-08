@@ -71,6 +71,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	general->Get("IgnoreBadMemAccess", &bIgnoreBadMemAccess, true);
 	general->Get("CurrentDirectory", &currentDirectory, "");
 	general->Get("ShowDebuggerOnLoad", &bShowDebuggerOnLoad, false);
+	general->Get("HomebrewStore", &bHomebrewStore, false);
 
 	if (!File::Exists(currentDirectory))
 		currentDirectory = "";
@@ -312,7 +313,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	}
 
 	IniFile::Section *network = iniFile.GetOrCreateSection("Network");
-	network->Get("EnableWlan", &bEnableWlan, true);
+	network->Get("EnableWlan", &bEnableWlan, false);
 	
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 #ifndef ANDROID
@@ -354,6 +355,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	debugConfig->Get("ShowBottomTabTitles",&bShowBottomTabTitles,true);
 	debugConfig->Get("ShowDeveloperMenu", &bShowDeveloperMenu, false);
 	debugConfig->Get("SkipDeadbeefFilling", &bSkipDeadbeefFilling, false);
+	debugConfig->Get("FuncHashMap", &bFuncHashMap, false);
 
 	IniFile::Section *speedhacks = iniFile.GetOrCreateSection("SpeedHacks");
 	speedhacks->Get("PrescaleUV", &bPrescaleUV, false);
@@ -550,7 +552,7 @@ void Config::Save() {
 		control->Set("AnalogStickScale", fAnalogStickScale);
 
 		IniFile::Section *network = iniFile.GetOrCreateSection("Network");
-		network->Set("EnableWlan", &bEnableWlan, true);
+		network->Set("EnableWlan", bEnableWlan);
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("PSPModel", iPSPModel);
@@ -588,6 +590,7 @@ void Config::Save() {
 		debugConfig->Set("ShowBottomTabTitles",bShowBottomTabTitles);
 		debugConfig->Set("ShowDeveloperMenu", bShowDeveloperMenu);
 		debugConfig->Set("SkipDeadbeefFilling", bSkipDeadbeefFilling);
+		debugConfig->Set("FuncHashMap", bFuncHashMap);
 
 		IniFile::Section *speedhacks = iniFile.GetOrCreateSection("SpeedHacks");
 		speedhacks->Set("PrescaleUV", bPrescaleUV);
@@ -698,15 +701,15 @@ void Config::AddRecent(const std::string &file) {
 void Config::CleanRecent() {
 	std::vector<std::string> cleanedRecent;
 	for (size_t i = 0; i < recentIsos.size(); i++) {
-		if (File::Exists(recentIsos[i])){
+		if (File::Exists(recentIsos[i])) {
 			// clean the redundant recent games' list.
-			if (cleanedRecent.size()==0){ // add first one
-					cleanedRecent.push_back(recentIsos[i]);
+			if (cleanedRecent.size()==0) { // add first one
+				cleanedRecent.push_back(recentIsos[i]);
 			}
-			for (size_t j=0; j<cleanedRecent.size();j++){
-				if (cleanedRecent[j]==recentIsos[i])
+			for (size_t j = 0; j < cleanedRecent.size();j++) {
+				if (cleanedRecent[j] == recentIsos[i])
 					break; // skip if found redundant
-				if (j==cleanedRecent.size()-1){ // add if no redundant found
+				if (j == cleanedRecent.size() - 1){ // add if no redundant found
 					cleanedRecent.push_back(recentIsos[i]);
 				}
 			}

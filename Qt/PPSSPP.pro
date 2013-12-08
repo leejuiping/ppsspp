@@ -79,6 +79,7 @@ symbian {
 # UI
 SOURCES += $$P/UI/*Screen.cpp \
 	$$P/UI/*Screens.cpp \
+	$$P/UI/Store.cpp \
 	$$P/UI/GamepadEmu.cpp \
 	$$P/UI/GameInfoCache.cpp \
 	$$P/UI/OnScreenDisplay.cpp \
@@ -87,7 +88,7 @@ SOURCES += $$P/UI/*Screen.cpp \
 	$$P/android/jni/TestRunner.cpp
 
 HEADERS += $$P/UI/*.h
-INCLUDEPATH += $$P $$P/Common $$P/native
+INCLUDEPATH += $$P $$P/Common $$P/native $$P/native/ext/libpng16
 
 # Use forms UI for desktop platforms
 !mobile_platform {

@@ -121,7 +121,7 @@ void GameSettingsScreen::CreateViews() {
 	postProcChoice_->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
 	postProcChoice_->SetEnabled(g_Config.iRenderingMode != 0);
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(USING_QT_UI)
 	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")))->OnClick.Handle(this, &GameSettingsScreen::OnFullscreenChange);
 #endif
 	graphicsSettings->Add(new CheckBox(&g_Config.bStretchToDisplay, gs->T("Stretch to Display")));
@@ -262,7 +262,9 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new CheckBox(&g_Config.bSeparateCPUThread, s->T("Multithreaded (experimental)")))->SetEnabled(!PSP_IsInited());
 	systemSettings->Add(new CheckBox(&g_Config.bSeparateIOThread, s->T("I/O on thread (experimental)")))->SetEnabled(!PSP_IsInited());
 	systemSettings->Add(new PopupSliderChoice(&g_Config.iLockedCPUSpeed, 0, 1000, s->T("Change CPU Clock", "Change CPU Clock (0 = default)"), screenManager()));
+#ifndef USING_GLES2
 	systemSettings->Add(new PopupSliderChoice(&g_Config.iRewindFlipFrequency, 0, 1800, s->T("Rewind Snapshot Frequency", "Rewind Snapshot Frequency (0 = off, mem hog)"), screenManager()));
+#endif
 
 	systemSettings->Add(new CheckBox(&g_Config.bAtomicAudioLocks, s->T("Atomic Audio locks (experimental)")))->SetEnabled(!PSP_IsInited());
 
@@ -291,9 +293,11 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new ItemHeader(s->T("PSP Settings")));
 	// TODO: Come up with a way to display a keyboard for mobile users,
 	// so until then, this is Windows/Desktop only.
-#ifdef _WIN32
+#if defined(_WIN32) || defined(USING_QT_UI)
 	systemSettings->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeNickname);
-	// Screenshot functionality is not yet available on non-Windows
+#endif
+#if defined(_WIN32) || (defined(USING_QT_UI) && !defined(USING_GLES2))
+	// Screenshot functionality is not yet available on non-Windows/non-Qt
 	systemSettings->Add(new CheckBox(&g_Config.bScreenshotsAsPNG, s->T("Screenshots as PNG")));
 #endif
 	systemSettings->Add(new CheckBox(&g_Config.bDayLightSavings, s->T("Day Light Saving")));
@@ -430,18 +434,17 @@ void GlobalSettingsScreen::CreateViews() {
 }*/
 
 UI::EventReturn GameSettingsScreen::OnChangeNickname(UI::EventParams &e) {
-	#ifdef _WIN32
-
+#if defined(_WIN32) || defined(USING_QT_UI)
 	const size_t name_len = 256;
 
 	char name[name_len];
 	memset(name, 0, sizeof(name));
 
-	if (host->InputBoxGetString("Enter a new PSP nickname", g_Config.sNickName.c_str(), name, name_len)) {
+	if (System_InputBoxGetString("Enter a new PSP nickname", g_Config.sNickName.c_str(), name, name_len)) {
 		g_Config.sNickName = name;
 	}
+#endif
 
-	#endif
 	return UI::EVENT_DONE;
 }
 

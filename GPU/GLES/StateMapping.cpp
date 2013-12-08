@@ -33,6 +33,7 @@
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/GLES/TextureCache.h"
 #include "GPU/GLES/Framebuffer.h"
+#include "GPU/GLES/FragmentShaderGenerator.h"
 
 static const GLushort aLookup[11] = {
 	GL_DST_COLOR,
@@ -178,6 +179,13 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		if (blendFuncA > GE_SRCBLEND_FIXA) blendFuncA = GE_SRCBLEND_FIXA;
 		if (blendFuncB > GE_DSTBLEND_FIXB) blendFuncB = GE_DSTBLEND_FIXB;
 
+		float constantAlpha = 1.0f;
+		if (gstate.isStencilTestEnabled() && !CanReplaceAlphaWithStencil()) {
+			if (gstate.isStencilTestEnabled() == STENCIL_VALUE_UNIFORM) {
+				constantAlpha = gstate.getStencilTestRef() / 255.0f;
+			}
+		}
+
 		// Shortcut by using GL_ONE where possible, no need to set blendcolor
 		GLuint glBlendFuncA = blendFuncA == GE_SRCBLEND_FIXA ? blendColor2Func(gstate.getFixA()) : aLookup[blendFuncA];
 		GLuint glBlendFuncB = blendFuncB == GE_DSTBLEND_FIXB ? blendColor2Func(gstate.getFixB()) : bLookup[blendFuncB];
@@ -186,24 +194,24 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 			Vec3f fixB = Vec3f::FromRGB(gstate.getFixB());
 			if (glBlendFuncA == GL_INVALID_ENUM && glBlendFuncB != GL_INVALID_ENUM) {
 				// Can use blendcolor trivially.
-				const float blendColor[4] = {fixA.x, fixA.y, fixA.z, 1.0f};
+				const float blendColor[4] = {fixA.x, fixA.y, fixA.z, constantAlpha};
 				glstate.blendColor.set(blendColor);
 				glBlendFuncA = GL_CONSTANT_COLOR;
 			} else if (glBlendFuncA != GL_INVALID_ENUM && glBlendFuncB == GL_INVALID_ENUM) {
 				// Can use blendcolor trivially.
-				const float blendColor[4] = {fixB.x, fixB.y, fixB.z, 1.0f};
+				const float blendColor[4] = {fixB.x, fixB.y, fixB.z, constantAlpha};
 				glstate.blendColor.set(blendColor);
 				glBlendFuncB = GL_CONSTANT_COLOR;
 			} else if (glBlendFuncA == GL_INVALID_ENUM && glBlendFuncB == GL_INVALID_ENUM) {
-				if (blendColorSimilar(fixA, Vec3f::AssignToAll(1.0f) - fixB)) {
+				if (blendColorSimilar(fixA, Vec3f::AssignToAll(constantAlpha) - fixB)) {
 					glBlendFuncA = GL_CONSTANT_COLOR;
 					glBlendFuncB = GL_ONE_MINUS_CONSTANT_COLOR;
-					const float blendColor[4] = {fixA.x, fixA.y, fixA.z, 1.0f};
+					const float blendColor[4] = {fixA.x, fixA.y, fixA.z, constantAlpha};
 					glstate.blendColor.set(blendColor);
 				} else if (blendColorSimilar(fixA, fixB)) {
 					glBlendFuncA = GL_CONSTANT_COLOR;
 					glBlendFuncB = GL_CONSTANT_COLOR;
-					const float blendColor[4] = {fixA.x, fixA.y, fixA.z, 1.0f};
+					const float blendColor[4] = {fixA.x, fixA.y, fixA.z, constantAlpha};
 					glstate.blendColor.set(blendColor);
 				} else {
 					static bool didReportBlend = false;
@@ -218,17 +226,32 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 					if (nearZeroA || blendColorSimilar(fixA, Vec3f::AssignToAll(1.0f), 0.25f)) {
 						glBlendFuncA = nearZeroA ? GL_ZERO : GL_ONE;
 						glBlendFuncB = GL_CONSTANT_COLOR;
-						const float blendColor[4] = {fixB.x, fixB.y, fixB.z, 1.0f};
+						const float blendColor[4] = {fixB.x, fixB.y, fixB.z, constantAlpha};
 						glstate.blendColor.set(blendColor);
 					// We need to pick something.  Let's go with A as the fixed color.
 					} else {
 						glBlendFuncA = GL_CONSTANT_COLOR;
 						glBlendFuncB = nearZeroB ? GL_ZERO : GL_ONE;
-						const float blendColor[4] = {fixA.x, fixA.y, fixA.z, 1.0f};
+						const float blendColor[4] = {fixA.x, fixA.y, fixA.z, constantAlpha};
 						glstate.blendColor.set(blendColor);
 					}
 				}
+			} else {
+				// We optimized both, but that's probably not necessary, so let's pick one to be constant.
+				// For now let's just pick whichever was fixed instead of checking error.
+				if (blendFuncA == GE_SRCBLEND_FIXA) {
+					glBlendFuncA = GL_CONSTANT_COLOR;
+					const float blendColor[4] = {fixA.x, fixA.y, fixA.z, constantAlpha};
+					glstate.blendColor.set(blendColor);
+				} else {
+					glBlendFuncB = GL_CONSTANT_COLOR;
+					const float blendColor[4] = {fixB.x, fixB.y, fixB.z, constantAlpha};
+					glstate.blendColor.set(blendColor);
+				}
 			}
+		} else if (constantAlpha < 1.0f) {
+			const float blendColor[4] = {1.0f, 1.0f, 1.0f, constantAlpha};
+			glstate.blendColor.set(blendColor);
 		}
 
 		// Some Android devices (especially Mali, it seems) composite badly if there's alpha in the backbuffer.
@@ -248,7 +271,34 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		// do any blending in the alpha channel as that doesn't seem to happen on PSP. So lacking a better option,
 		// the only value we can set alpha to here without multipass and dual source alpha is zero (by setting
 		// the factors to zero). So let's do that.
-		glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ZERO);
+		if (CanReplaceAlphaWithStencil()) {
+			// Let the fragment shader take care of it.
+			glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ONE, GL_ZERO);
+		} else if (gstate.isStencilTestEnabled()) {
+			switch (ReplaceAlphaWithStencilType()) {
+			case STENCIL_VALUE_KEEP:
+				glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ONE);
+				break;
+			case STENCIL_VALUE_ONE:
+				// This won't give one but it's our best shot...
+				glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ONE, GL_ONE);
+				break;
+			case STENCIL_VALUE_ZERO:
+				glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ZERO);
+				break;
+			case STENCIL_VALUE_UNIFORM:
+				// This won't give a correct value (it multiplies) but it may be better than random values.
+				glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_CONSTANT_ALPHA, GL_ZERO);
+				break;
+			case STENCIL_VALUE_UNKNOWN:
+				// For now, let's err at zero.  This is INVERT or INCR/DECR.
+				glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ZERO);
+				break;
+			}
+		} else {
+			// Retain the existing value when stencil testing is off.
+			glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ONE);
+		}
 
 		// Don't report on Android device (why?)
 #if !defined(USING_GLES2)
@@ -275,14 +325,13 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		glstate.dither.disable();
 
 	if (gstate.isModeClear()) {
-
 #if !defined(USING_GLES2)
 		// Logic Ops
 		glstate.colorLogicOp.disable();
 #endif
-		// Culling 
+		// Culling
 		glstate.cullFace.disable();
-		
+
 		// Depth Test
 		glstate.depthTest.enable();
 		glstate.depthFunc.set(GL_ALWAYS);
@@ -343,6 +392,11 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		// Let's not write to alpha if stencil isn't enabled.
 		if (!gstate.isStencilTestEnabled()) {
 			amask = false;
+		} else {
+			// If the stencil type is set to KEEP, we shouldn't write to the stencil/alpha channel.
+			if (ReplaceAlphaWithStencilType() == STENCIL_VALUE_KEEP) {
+				amask = false;
+			}
 		}
 
 		glstate.colorMask.set(rmask, gmask, bmask, amask);
@@ -356,9 +410,9 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 			glstate.stencilOp.set(stencilOps[gstate.getStencilOpSFail()],  // stencil fail
 				stencilOps[gstate.getStencilOpZFail()],  // depth fail
 				stencilOps[gstate.getStencilOpZPass()]); // depth pass
-		} else 
+		} else {
 			glstate.stencilTest.disable();
-		
+		}
 	}
 
 	float renderWidthFactor, renderHeightFactor;
@@ -376,7 +430,7 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		float pixelH = PSP_CoreParameter().pixelHeight;
 		CenterRect(&renderX, &renderY, &renderWidth, &renderHeight, 480, 272, pixelW, pixelH);
 	}
-	
+
 	renderWidthFactor = (float)renderWidth / framebufferManager_->GetTargetWidth();
 	renderHeightFactor = (float)renderHeight / framebufferManager_->GetTargetHeight();
 

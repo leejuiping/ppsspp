@@ -99,14 +99,45 @@ static bool IsAlphaTestTriviallyTrue() {
 	}
 }
 
-enum StencilValueType {
-	STENCIL_VALUE_UNKNOWN,
-	STENCIL_VALUE_UNIFORM,
-	STENCIL_VALUE_ZERO,
-	STENCIL_VALUE_ONE,
+const bool nonAlphaSrcFactors[16] = {
+	true,  // GE_SRCBLEND_DSTCOLOR,
+	true,  // GE_SRCBLEND_INVDSTCOLOR,
+	false, // GE_SRCBLEND_SRCALPHA,
+	false, // GE_SRCBLEND_INVSRCALPHA,
+	true,  // GE_SRCBLEND_DSTALPHA,
+	true,  // GE_SRCBLEND_INVDSTALPHA,
+	false, // GE_SRCBLEND_DOUBLESRCALPHA,
+	false, // GE_SRCBLEND_DOUBLEINVSRCALPHA,
+	true,  // GE_SRCBLEND_DOUBLEDSTALPHA,
+	true,  // GE_SRCBLEND_DOUBLEINVDSTALPHA,
+	true,  // GE_SRCBLEND_FIXA,
 };
 
-static StencilValueType ReplaceAlphaWithStencilType() {
+const bool nonAlphaDestFactors[16] = {
+	true,  // GE_DSTBLEND_SRCCOLOR,
+	true,  // GE_DSTBLEND_INVSRCCOLOR,
+	false, // GE_DSTBLEND_SRCALPHA,
+	false, // GE_DSTBLEND_INVSRCALPHA,
+	true,  // GE_DSTBLEND_DSTALPHA,
+	true,  // GE_DSTBLEND_INVDSTALPHA,
+	false, // GE_DSTBLEND_DOUBLESRCALPHA,
+	false, // GE_DSTBLEND_DOUBLEINVSRCALPHA,
+	true,  // GE_DSTBLEND_DOUBLEDSTALPHA,
+	true,  // GE_DSTBLEND_DOUBLEINVDSTALPHA,
+	true,  // GE_DSTBLEND_FIXB,
+};
+
+bool CanReplaceAlphaWithStencil() {
+	if (!gstate.isStencilTestEnabled()) {
+		return false;
+	}
+	if (gstate.isAlphaBlendEnabled()) {
+		return nonAlphaSrcFactors[gstate.getBlendFuncA()] && nonAlphaDestFactors[gstate.getBlendFuncA()];
+	}
+	return true;
+}
+
+StencilValueType ReplaceAlphaWithStencilType() {
 	switch (gstate.FrameBufFormat()) {
 	case GE_FORMAT_565:
 		// There's never a stencil value.  Maybe the right alpha is 1?
@@ -127,9 +158,11 @@ static StencilValueType ReplaceAlphaWithStencilType() {
 		case GE_STENCILOP_INCR:
 			return STENCIL_VALUE_ONE;
 
-		case GE_STENCILOP_KEEP:
 		case GE_STENCILOP_INVERT:
 			return STENCIL_VALUE_UNKNOWN;
+
+		case GE_STENCILOP_KEEP:
+			return STENCIL_VALUE_KEEP;
 		}
 		break;
 
@@ -141,14 +174,19 @@ static StencilValueType ReplaceAlphaWithStencilType() {
 			return STENCIL_VALUE_UNIFORM;
 
 		case GE_STENCILOP_ZERO:
-			return STENCIL_VALUE_ZERO;
+			if (gstate.getStencilOpZFail() == GE_STENCILOP_ZERO) {
+				return STENCIL_VALUE_ZERO;
+			} else {
+				return STENCIL_VALUE_KEEP;
+			}
 
 		// Decrementing always zeros, since there's only one bit.
 		case GE_STENCILOP_DECR:
 		case GE_STENCILOP_INCR:
-		case GE_STENCILOP_KEEP:
 		case GE_STENCILOP_INVERT:
 			return STENCIL_VALUE_UNKNOWN;
+		case GE_STENCILOP_KEEP:
+			return STENCIL_VALUE_KEEP;
 		}
 		break;
 	}
@@ -218,7 +256,7 @@ void ComputeFragmentShaderID(FragmentShaderID *id) {
 		bool enableAlphaDoubling = CanDoubleSrcBlendMode();
 		bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 		bool doTextureAlpha = gstate.isTextureAlphaUsed();
-		bool stencilToAlpha = gstate.isStencilTestEnabled() && !gstate.isAlphaBlendEnabled();
+		bool stencilToAlpha = CanReplaceAlphaWithStencil();
 
 		// All texfuncs except replace are the same for RGB as for RGBA with full alpha.
 		if (gstate_c.textureFullAlpha && gstate.getTextureFunction() != GE_TEXFUNC_REPLACE)
@@ -243,7 +281,7 @@ void ComputeFragmentShaderID(FragmentShaderID *id) {
 		id->d[0] |= (enableColorDoubling & 1) << 17;
 		id->d[0] |= (enableAlphaDoubling & 1) << 18;
 		if (stencilToAlpha) {
-			// 2 bits
+			// 3 bits
 			id->d[0] |= ReplaceAlphaWithStencilType() << 19;
 		}
 		if (enableAlphaTest)
@@ -288,7 +326,7 @@ void GenerateFragmentShader(char *buffer) {
 	bool enableAlphaDoubling = CanDoubleSrcBlendMode();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doTextureAlpha = gstate.isTextureAlphaUsed();
-	bool stencilToAlpha = !gstate.isModeClear() && gstate.isStencilTestEnabled() && !gstate.isAlphaBlendEnabled();
+	bool stencilToAlpha = !gstate.isModeClear() && CanReplaceAlphaWithStencil();
 
 	if (gstate_c.textureFullAlpha && gstate.getTextureFunction() != GE_TEXFUNC_REPLACE)
 		doTextureAlpha = false;
@@ -415,7 +453,7 @@ void GenerateFragmentShader(char *buffer) {
 		} else if (enableAlphaDoubling) {
 			WRITE(p, "  v.a = v.a * 2.0;\n");
 		}
-		
+
 		if (enableColorTest) {
 			GEComparison colorTestFunc = gstate.getColorTestFunction();
 			const char *colorTestFuncs[] = { "#", "#", " != ", " == " };	// never/always don't make sense
@@ -456,6 +494,10 @@ void GenerateFragmentShader(char *buffer) {
 			// Maybe we should even mask away alpha using glColorMask and not change it at all? We do get here
 			// if the stencil mode is KEEP for example.
 			WRITE(p, "  gl_FragColor.a = 0.0;\n");
+			break;
+
+		case STENCIL_VALUE_KEEP:
+			// Do nothing. We'll mask out the alpha using color mask.
 			break;
 		}
 	}

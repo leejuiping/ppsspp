@@ -15,7 +15,8 @@
 #include "debugger_displaylist.h"
 #include "base/QtMain.h"
 
-class QtEmuGL;
+extern bool g_TakeScreenshot;
+
 class MenuAction;
 class MenuTree;
 
@@ -68,6 +69,7 @@ private slots:
 	void smapAct();
 	void resetTableAct();
 	void dumpNextAct();
+	void takeScreen() { g_TakeScreenshot = true; }
 	void disasmAct();
 	void dpyListAct();
 	void consoleAct();
@@ -132,7 +134,6 @@ private:
 	QTranslator translator;
 	QString currentLanguage;
 
-	MainUI *emugl;
 	CoreState nextState;
 	InputState input_state;
 	GlobalUIState lastUIState;

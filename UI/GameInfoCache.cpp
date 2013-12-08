@@ -24,15 +24,16 @@
 #include "file/file_util.h"
 #include "file/zip_read.h"
 #include "thread/prioritizedworkqueue.h"
+#include "Common/FileUtil.h"
 #include "Common/StringUtils.h"
-#include "GameInfoCache.h"
 #include "Core/FileSystems/ISOFileSystem.h"
 #include "Core/FileSystems/DirectoryFileSystem.h"
 #include "Core/FileSystems/VirtualDiscFileSystem.h"
 #include "Core/ELF/PBPReader.h"
 #include "Core/System.h"
-
+#include "Core/Util/GameManager.h"
 #include "Core/Config.h"
+#include "UI/GameInfoCache.h"
 
 GameInfoCache g_gameInfoCache;
 
@@ -51,8 +52,18 @@ bool GameInfo::DeleteGame() {
 			return true;
 		}
 	case FILETYPE_PSP_PBP_DIRECTORY:
-		// Recursively deleting directories not yet supported
-		return false;
+		{
+			// TODO: This could be handled by Core/Util/GameManager too somehow.
+
+			const char *directoryToRemove = fileInfo.fullName.c_str();
+			INFO_LOG(HLE, "Deleting %s", directoryToRemove);
+			if (!File::DeleteDirRecursively(directoryToRemove)) {
+				ERROR_LOG(HLE, "Failed to delete file");
+				return false;
+			}
+			g_Config.CleanRecent();
+			return true;
+		}
 
 	default:
 		return false;
@@ -74,7 +85,7 @@ std::vector<std::string> GameInfo::GetSaveDataDirectories() {
 
 	std::vector<FileInfo> dirs;
 	getFilesInDir(memc.c_str(), &dirs);
-	
+
 	std::vector<std::string> directories;
 	for (size_t i = 0; i < dirs.size(); i++) {
 		if (startsWith(dirs[i].name, id)) {
@@ -268,8 +279,8 @@ public:
 			{
 				info_->fileType = FILETYPE_PSP_ISO;
 				SequentialHandleAllocator handles;
-				VirtualDiscFileSystem umd(&handles,gamePath_.c_str());
-				
+				VirtualDiscFileSystem umd(&handles, gamePath_.c_str());
+
 				// Alright, let's fetch the PARAM.SFO.
 				std::string paramSFOcontents;
 				if (ReadFileToString(&umd, "/PSP_GAME/PARAM.SFO", &paramSFOcontents, 0)) {
@@ -328,7 +339,7 @@ public:
 				ReadFileToString(&umd, "/PSP_GAME/PIC1.PNG", &info_->pic1TextureData, &info_->lock);
 				break;
 			}
-		
+
 			case FILETYPE_NORMAL_DIRECTORY:
 				info_->title = gamePath_;
 				break;
@@ -337,7 +348,8 @@ public:
 			{
 				std::string fn, ext;
 				SplitPath(gamePath_, 0, &fn, &ext);
-				info_->title = fn + "." + ext;
+				// ext includes the dot
+				info_->title = fn + ext;
 			}
 			break;
 		}
@@ -439,7 +451,7 @@ void GameInfoCache::Add(const std::string &key, GameInfo *info_) {
 // This may run off-main-thread and we thus can't use the global
 // pspFileSystem (well, we could with synchronization but there might not
 // even be a game running).
-GameInfo *GameInfoCache::GetInfo(const std::string &gamePath, bool wantBG) {
+GameInfo *GameInfoCache::GetInfo(const std::string &gamePath, bool wantBG, bool synchronous) {
 	auto iter = info_.find(gamePath);
 	if (iter != info_.end()) {
 		GameInfo *info = iter->second;
@@ -500,6 +512,10 @@ again:
 
 	GameInfoWorkItem *item = new GameInfoWorkItem(gamePath, info);
 	gameInfoWQ_->Add(item);
+
+	if (synchronous) {
+		gameInfoWQ_->Wait(item);
+	}
 
 	info_[gamePath] = info;
 	return info;

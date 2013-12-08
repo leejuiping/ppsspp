@@ -44,11 +44,10 @@
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/SaveState.h"
 
-#include "UI/OnScreenDisplay.h"
 #include "UI/ui_atlas.h"
+#include "UI/OnScreenDisplay.h"
 #include "UI/GamepadEmu.h"
 #include "UI/UIShader.h"
-
 #include "UI/MainScreen.h"
 #include "UI/EmuScreen.h"
 #include "UI/DevScreens.h"
@@ -56,7 +55,7 @@
 #include "UI/MiscScreens.h"
 #include "UI/ControlMappingScreen.h"
 #include "UI/GameSettingsScreen.h"
-
+#include "UI/InstallZipScreen.h"
 
 EmuScreen::EmuScreen(const std::string &filename)
 	: booted_(false), gamePath_(filename), invalid_(true), pauseTrigger_(false) {
@@ -262,6 +261,22 @@ void EmuScreen::onVKeyDown(int virtualKeyCode) {
 	case VIRTKEY_AXIS_RIGHT_Y_MAX:
 		setVKeyAnalogY(CTRL_STICK_RIGHT, VIRTKEY_AXIS_RIGHT_Y_MIN, VIRTKEY_AXIS_RIGHT_Y_MAX);
 		break;
+
+	case VIRTKEY_REWIND:
+		if (SaveState::CanRewind()) {
+			SaveState::Rewind();
+		} else {
+			osm.Show(s->T("norewind", "No rewind save states available"), 2.0);
+		}
+		break;
+	case VIRTKEY_SAVE_STATE:
+		SaveState::SaveSlot(g_Config.iCurrentStateSlot, 0);
+		break;
+	case VIRTKEY_LOAD_STATE:
+		if (SaveState::HasSaveInSlot(g_Config.iCurrentStateSlot)) {
+			SaveState::LoadSlot(g_Config.iCurrentStateSlot, 0);
+		}
+		break;
 	}
 }
 
@@ -459,13 +474,20 @@ void EmuScreen::update(InputState &input) {
 	UpdateUIState(UISTATE_INGAME);
 
 	if (errorMessage_.size()) {
+		// Special handling for ZIP files. It's not very robust to check an error message but meh,
+		// at least it's pre-translation.
+		if (errorMessage_.find("ZIP") != std::string::npos) {
+			screenManager()->push(new InstallZipScreen(gamePath_));
+			errorMessage_ = "";
+			return;
+		}
 		I18NCategory *g = GetI18NCategory("Error");
-		std::string errLoadingFile = g->T("Error loading file");
+		std::string errLoadingFile = g->T("Error loading file", "Could not load game");
+
 		errLoadingFile.append(" ");
 		errLoadingFile.append(g->T(errorMessage_.c_str()));
 
-		screenManager()->push(new PromptScreen(
-			errLoadingFile, "OK", ""));
+		screenManager()->push(new PromptScreen(errLoadingFile, "OK", ""));
 		errorMessage_ = "";
 		return;
 	}

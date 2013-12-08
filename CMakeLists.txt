@@ -288,8 +288,175 @@ if(WIN32)
 	target_link_libraries(Common winmm)
 endif()
 
-if(BLACKBERRY)
-	set(LIBZIP z)
+if(NOT USING_GLES2)
+	include_directories(${OPENGL_INCLUDE_DIR})
+
+	add_definitions(-DGLEW_STATIC)
+	add_library(glew STATIC
+		native/ext/glew/GL/glew.h
+		native/ext/glew/GL/glxew.h
+		native/ext/glew/GL/wglew.h
+		native/ext/glew/glew.c)
+	target_link_libraries(glew ${OPENGL_LIBRARIES})
+	include_directories(native/ext/glew)
+	set(GLEW_LIBRARIES glew)
+endif()
+
+add_library(snappy STATIC
+	ext/snappy/snappy-c.cpp
+	ext/snappy/snappy-internal.h
+	ext/snappy/snappy-sinksource.h
+	ext/snappy/snappy-stubs-internal.h
+	ext/snappy/snappy-stubs-public.h
+	ext/snappy/snappy.cpp
+	ext/snappy/snappy.h
+)
+include_directories(ext/snappy)
+
+add_library(vjson STATIC
+	native/ext/vjson/json.cpp
+	native/ext/vjson/json.h
+	native/ext/vjson/block_allocator.cpp
+	native/ext/vjson/block_allocator.h
+)
+
+add_library(rg_etc1 STATIC
+	native/ext/rg_etc1/rg_etc1.cpp
+	native/ext/rg_etc1/rg_etc1.h)
+include_directories(native/ext/rg_etc1)
+
+add_library(stb_vorbis STATIC
+	native/ext/stb_vorbis/stb_vorbis.c
+	native/ext/stb_vorbis/stb_vorbis.h)
+include_directories(native/ext/stb_vorbis)
+
+if(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
+	if(BLACKBERRY)
+		set(PLATFORM_ARCH "blackberry/armv7")
+	elseif(IOS)
+		set(PLATFORM_ARCH "ios/universal")
+	elseif(MACOSX)
+		set(PLATFORM_ARCH "macosx/x86_64")
+	elseif(LINUX)
+		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+			set(PLATFORM_ARCH "linux/x86_64")
+		else()
+			set(PLATFORM_ARCH "linux/x86")
+		endif()
+	endif()
+	# Using static libraries
+	if (DEFINED PLATFORM_ARCH)
+		include_directories(ffmpeg/${PLATFORM_ARCH}/include)
+		link_directories(ffmpeg/${PLATFORM_ARCH}/lib)
+		set(FFMPEG_LIBRARIES libavformat.a libavcodec.a libavutil.a libswresample.a libswscale.a)
+	else()
+		# Manual definition of system library locations by the user.
+		if (DEFINED FFMPEG_INCLUDE_PATH)
+			include_directories(ffmpeg ${FFMPEG_INCLUDE_PATH})
+		endif()
+		if (DEFINED AVFORMAT_PATH)
+			add_library(libavformat STATIC IMPORTED)
+			set_target_properties(libavformat PROPERTIES IMPORTED_LOCATION ${AVFORMAT_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavformat)
+		endif()
+		if (DEFINED AVCODEC_PATH)
+			add_library(libavcodec STATIC IMPORTED)
+			set_target_properties(libavcodec PROPERTIES IMPORTED_LOCATION ${AVCODEC_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavcodec)
+		endif()
+		if (DEFINED AVUTIL_PATH)
+			add_library(libavutil STATIC IMPORTED)
+			set_target_properties(libavutil PROPERTIES IMPORTED_LOCATION ${AVUTIL_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavutil)
+		endif()
+		if (DEFINED SWRESAMPLE_PATH)
+			add_library(libswresample STATIC IMPORTED)
+			set_target_properties(libswresample PROPERTIES IMPORTED_LOCATION ${SWRESAMPLE_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libswresample)
+		endif()
+		if (DEFINED SWSCALE_PATH)
+			add_library(libswscale STATIC IMPORTED)
+			set_target_properties(libswscale PROPERTIES IMPORTED_LOCATION ${SWSCALE_PATH})
+			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libswscale)
+		endif()
+	endif(DEFINED PLATFORM_ARCH)
+endif(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
+
+if(USE_FFMPEG)
+	# Using shared libraries
+	if(DEFINED FFMPEG_BUILDDIR)
+		include_directories(ffmpeg ${FFMPEG_BUILDDIR})
+
+		add_library(libavformat STATIC IMPORTED)
+		set_target_properties(libavformat PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libavformat/libavformat.a)
+		add_library(libavcodec STATIC IMPORTED)
+		set_target_properties(libavcodec PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libavcodec/libavcodec.a)
+		add_library(libavutil STATIC IMPORTED)
+		set_target_properties(libavutil PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libavutil/libavutil.a)
+		add_library(libswresample STATIC IMPORTED)
+		set_target_properties(libswresample PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libswresample/libswresample.a)
+		add_library(libswscale STATIC IMPORTED)
+		set_target_properties(libswscale PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libswscale/libswscale.a)
+
+		SET (FFMPEG_LIBRARIES
+			libavformat
+			libavcodec
+			libavutil
+			libswresample
+			libswscale
+		)
+	endif()
+
+	if(IOS OR BLACKBERRY)
+		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} iconv)
+	endif()
+
+	if(APPLE)
+		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} bz2 "-framework CoreVideo")
+		if (NOT IOS)
+			set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} "-framework VideoDecodeAcceleration")
+		endif()
+	endif(APPLE)
+
+	set(LinkCommon ${LinkCommon} ${FFMPEG_LIBRARIES})
+	add_definitions(-DUSE_FFMPEG)
+endif(USE_FFMPEG)
+
+# Modification to show where we are pulling the ffmpeg libraries from.
+if(USE_FFMPEG AND DEFINED FFMPEG_LIBRARIES)
+	target_link_libraries(Common ${FFMPEG_LIBRARIES})
+	message(STATUS "FFMPEG library locations:")
+	if(DEFINED PLATFORM_ARCH)
+		set(TEMP ${CMAKE_SOURCE_DIR}/ffmpeg/${PLATFORM_ARCH}/lib)
+		message(STATUS "libavcodec location: ${TEMP}/libavcodec.a")
+		message(STATUS "libavformat location: ${TEMP}/libavformat.a")
+		message(STATUS "libavutil location: ${TEMP}/libavutil.a")
+		message(STATUS "libswresample location: ${TEMP}/libswresample.a")
+		message(STATUS "libswscale location: ${TEMP}/libswscale.a")
+	else()
+		get_target_property(TEMP libavcodec IMPORTED_LOCATION)
+		message(STATUS "libavcodec location: ${TEMP}")
+		get_target_property(TEMP libavformat IMPORTED_LOCATION)
+		message(STATUS "libavformat location: ${TEMP}")
+		get_target_property(TEMP libavutil IMPORTED_LOCATION)
+		message(STATUS "libavutil location: ${TEMP}")
+		get_target_property(TEMP libswresample IMPORTED_LOCATION)
+		message(STATUS "libswresample location: ${TEMP}")
+		get_target_property(TEMP libswscale IMPORTED_LOCATION)
+		message(STATUS "libswscale location: ${TEMP}")
+	endif(DEFINED PLATFORM_ARCH)
+else()
+	message(STATUS "ERROR: No FFMPEG library locations")
+endif()
+
+if(USE_FFMPEG AND NOT DEFINED FFMPEG_LIBRARIES)
+	message(WARNING "FFMPEG_BUILDDIR variable or manual path definition is required to enable FFmpeg. Disabling it.")
+	unset(USE_FFMPEG)
+endif()
+
+find_package(ZLIB)
+if(ZLIB_FOUND)
+	include_directories(${ZLIB_INCLUDE_DIR})
 else()
 	add_library(zlib STATIC
 		ext/zlib/adler32.c
@@ -321,118 +488,101 @@ else()
 		ext/zlib/zutil.h
 	)
 	include_directories(ext/zlib)
-	set(LIBZIP zlib)
+	set(ZLIB_LIBRARY zlib)
 endif()
 
-add_library(snappy STATIC
-	ext/snappy/snappy-c.cpp
-	ext/snappy/snappy-internal.h
-	ext/snappy/snappy-sinksource.h
-	ext/snappy/snappy-stubs-internal.h
-	ext/snappy/snappy-stubs-public.h
-	ext/snappy/snappy.cpp
-	ext/snappy/snappy.h
-)
-include_directories(ext/snappy)
 
-add_library(vjson STATIC
-	native/ext/vjson/json.cpp
-	native/ext/vjson/json.h
-	native/ext/vjson/block_allocator.cpp
-	native/ext/vjson/block_allocator.h
-)
+add_library(libzip STATIC
+	native/ext/libzip/zip.h
+	native/ext/libzip/mkstemp.c
+	native/ext/libzip/zip_add.c
+	native/ext/libzip/zip_add_dir.c
+	native/ext/libzip/zip_close.c
+	native/ext/libzip/zip_delete.c
+	native/ext/libzip/zip_dirent.c
+	native/ext/libzip/zip_entry_free.c
+	native/ext/libzip/zip_entry_new.c
+	native/ext/libzip/zip_err_str.c
+	native/ext/libzip/zip_error.c
+	native/ext/libzip/zip_error_clear.c
+	native/ext/libzip/zip_error_get.c
+	native/ext/libzip/zip_error_get_sys_type.c
+	native/ext/libzip/zip_error_strerror.c
+	native/ext/libzip/zip_error_to_str.c
+	native/ext/libzip/zip_fclose.c
+	native/ext/libzip/zip_file_error_clear.c
+	native/ext/libzip/zip_file_error_get.c
+	native/ext/libzip/zip_file_get_offset.c
+	native/ext/libzip/zip_file_strerror.c
+	native/ext/libzip/zip_filerange_crc.c
+	native/ext/libzip/zip_fopen.c
+	native/ext/libzip/zip_fopen_index.c
+	native/ext/libzip/zip_fread.c
+	native/ext/libzip/zip_free.c
+	native/ext/libzip/zip_get_archive_comment.c
+	native/ext/libzip/zip_get_archive_flag.c
+	native/ext/libzip/zip_get_file_comment.c
+	native/ext/libzip/zip_get_name.c
+	native/ext/libzip/zip_get_num_files.c
+	native/ext/libzip/zip_memdup.c
+	native/ext/libzip/zip_name_locate.c
+	native/ext/libzip/zip_new.c
+	native/ext/libzip/zip_open.c
+	native/ext/libzip/zip_rename.c
+	native/ext/libzip/zip_replace.c
+	native/ext/libzip/zip_set_archive_comment.c
+	native/ext/libzip/zip_set_archive_flag.c
+	native/ext/libzip/zip_set_file_comment.c
+	native/ext/libzip/zip_set_name.c
+	native/ext/libzip/zip_source_buffer.c
+	native/ext/libzip/zip_source_file.c
+	native/ext/libzip/zip_source_filep.c
+	native/ext/libzip/zip_source_free.c
+	native/ext/libzip/zip_source_function.c
+	native/ext/libzip/zip_source_zip.c
+	native/ext/libzip/zip_stat.c
+	native/ext/libzip/zip_stat_index.c
+	native/ext/libzip/zip_stat_init.c
+	native/ext/libzip/zip_strerror.c
+	native/ext/libzip/zip_unchange.c
+	native/ext/libzip/zip_unchange_all.c
+	native/ext/libzip/zip_unchange_archive.c
+	native/ext/libzip/zip_unchange_data.c)
+target_link_libraries(libzip ${ZLIB_LIBRARY})
+include_directories(native/ext/libzip)
+set(LIBZIP_LIBRARY libzip)
 
-add_library(rg_etc1 STATIC
-	native/ext/rg_etc1/rg_etc1.cpp
-	native/ext/rg_etc1/rg_etc1.h)
-include_directories(native/ext/rg_etc1)
-
-if(NOT USING_GLES2)
-	include_directories(${OPENGL_INCLUDE_DIR})
-
-	add_definitions(-DGLEW_STATIC)
-	add_library(glew STATIC
-		native/ext/glew/GL/glew.h
-		native/ext/glew/GL/glxew.h
-		native/ext/glew/GL/wglew.h
-		native/ext/glew/glew.c)
-	target_link_libraries(glew ${OPENGL_LIBRARIES})
-	include_directories(native/ext/glew)
-	set(GLEW_LIBRARIES glew)
+if (BLACKBERRY)
+	set(LIBPNG_LIBRARY png)
+else()
+	add_library(png16 STATIC
+		native/ext/libpng16/pngconf.h
+		native/ext/libpng16/pngdebug.h
+		native/ext/libpng16/png.c
+		native/ext/libpng16/png.h
+		native/ext/libpng16/pngerror.c
+		native/ext/libpng16/pngget.c
+		native/ext/libpng16/pnginfo.h
+		native/ext/libpng16/pnglibconf.h
+		native/ext/libpng16/pngmem.c
+		native/ext/libpng16/pngpread.c
+		native/ext/libpng16/pngpriv.h
+		native/ext/libpng16/pngread.c
+		native/ext/libpng16/pngrio.c
+		native/ext/libpng16/pngrtran.c
+		native/ext/libpng16/pngrutil.c
+		native/ext/libpng16/pngset.c
+		native/ext/libpng16/pngstruct.h
+		native/ext/libpng16/pngtest.c
+		native/ext/libpng16/pngtrans.c
+		native/ext/libpng16/pngwio.c
+		native/ext/libpng16/pngwrite.c
+		native/ext/libpng16/pngwtran.c
+		native/ext/libpng16/pngwutil.c)
+	set(LIBPNG_LIBRARY png16)
+	include_directories(native/ext/libpng16)
 endif()
-
-add_library(stb_image STATIC
-	native/ext/stb_image/stb_image.c
-	native/ext/stb_image/stb_image.h)
-include_directories(native/ext/stb_image)
-
-add_library(stb_vorbis STATIC
-	native/ext/stb_vorbis/stb_vorbis.c
-	native/ext/stb_vorbis/stb_vorbis.h)
-include_directories(native/ext/stb_vorbis)
-
-if(ANDROID)
-	add_library(libzip STATIC
-		native/ext/libzip/zip.h
-		native/ext/libzip/mkstemp.c
-		native/ext/libzip/zip_add.c
-		native/ext/libzip/zip_add_dir.c
-		native/ext/libzip/zip_close.c
-		native/ext/libzip/zip_delete.c
-		native/ext/libzip/zip_dirent.c
-		native/ext/libzip/zip_entry_free.c
-		native/ext/libzip/zip_entry_new.c
-		native/ext/libzip/zip_err_str.c
-		native/ext/libzip/zip_error.c
-		native/ext/libzip/zip_error_clear.c
-		native/ext/libzip/zip_error_get.c
-		native/ext/libzip/zip_error_get_sys_type.c
-		native/ext/libzip/zip_error_strerror.c
-		native/ext/libzip/zip_error_to_str.c
-		native/ext/libzip/zip_fclose.c
-		native/ext/libzip/zip_file_error_clear.c
-		native/ext/libzip/zip_file_error_get.c
-		native/ext/libzip/zip_file_get_offset.c
-		native/ext/libzip/zip_file_strerror.c
-		native/ext/libzip/zip_filerange_crc.c
-		native/ext/libzip/zip_fopen.c
-		native/ext/libzip/zip_fopen_index.c
-		native/ext/libzip/zip_fread.c
-		native/ext/libzip/zip_free.c
-		native/ext/libzip/zip_get_archive_comment.c
-		native/ext/libzip/zip_get_archive_flag.c
-		native/ext/libzip/zip_get_file_comment.c
-		native/ext/libzip/zip_get_name.c
-		native/ext/libzip/zip_get_num_files.c
-		native/ext/libzip/zip_memdup.c
-		native/ext/libzip/zip_name_locate.c
-		native/ext/libzip/zip_new.c
-		native/ext/libzip/zip_open.c
-		native/ext/libzip/zip_rename.c
-		native/ext/libzip/zip_replace.c
-		native/ext/libzip/zip_set_archive_comment.c
-		native/ext/libzip/zip_set_archive_flag.c
-		native/ext/libzip/zip_set_file_comment.c
-		native/ext/libzip/zip_set_name.c
-		native/ext/libzip/zip_source_buffer.c
-		native/ext/libzip/zip_source_file.c
-		native/ext/libzip/zip_source_filep.c
-		native/ext/libzip/zip_source_free.c
-		native/ext/libzip/zip_source_function.c
-		native/ext/libzip/zip_source_zip.c
-		native/ext/libzip/zip_stat.c
-		native/ext/libzip/zip_stat_index.c
-		native/ext/libzip/zip_stat_init.c
-		native/ext/libzip/zip_strerror.c
-		native/ext/libzip/zip_unchange.c
-		native/ext/libzip/zip_unchange_all.c
-		native/ext/libzip/zip_unchange_archive.c
-		native/ext/libzip/zip_unchange_data.c)
-	target_link_libraries(libzip zlib)
-	include_directories(native/ext/libzip)
-	set(LIBZIP libzip zlib)
-endif()
-
+	
 set(nativeExtra)
 set(nativeExtraLibs)
 if(ANDROID)
@@ -532,6 +682,10 @@ add_library(native STATIC
 	native/base/timeutil.h
 	native/data/compression.cpp
 	native/data/compression.h
+	native/ext/vjson/json.cpp
+	native/ext/vjson/json.h
+	native/ext/vjson/block_allocator.cpp
+	native/ext/vjson/block_allocator.h
 	native/file/chunk_file.cpp
 	native/file/chunk_file.h
 	native/file/dialog.cpp
@@ -655,7 +809,7 @@ add_library(native STATIC
 	native/ext/jpge/jpge.cpp
 	native/ext/jpge/jpge.h)
 include_directories(native)
-target_link_libraries(native ${LIBZIP} rg_etc1 vjson stb_image stb_vorbis snappy ${GLEW_LIBRARIES})
+target_link_libraries(native ${LIBZIP_LIBRARY} ${LIBPNG_LIBRARY} rg_etc1 vjson stb_vorbis snappy ${GLEW_LIBRARIES})
 
 if(ANDROID)
 	target_link_libraries(native log)
@@ -972,6 +1126,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/SaveState.h
 	Core/System.cpp
 	Core/System.h
+	Core/Util/GameManager.cpp
+	Core/Util/GameManager.h
 	Core/Util/BlockAllocator.cpp
 	Core/Util/BlockAllocator.h
 	Core/Util/PPGeDraw.cpp
@@ -1152,7 +1308,9 @@ set(NativeAppSource
 	UI/UIShader.cpp
 	UI/OnScreenDisplay.cpp
 	UI/ControlMappingScreen.cpp
+	UI/Store.cpp
 	UI/CwCheatScreen.cpp
+	UI/InstallZipScreen.cpp
 	UI/ui_atlas.cpp)
 if(ANDROID AND ARM)
 	set(NativeAppSource ${NativeAppSource} android/jni/ArmEmitterTest.cpp)
@@ -1161,129 +1319,10 @@ set(NativeAssets
 	android/assets/ui_atlas.zim
 	assets/shaders
 	assets/ppge_atlas.zim
-	assets/langregion.ini)
+	assets/langregion.ini
+	assets/unknown.png)
 set(LinkCommon ${CoreLibName} ${CMAKE_THREAD_LIBS_INIT} ${nativeExtraLibs})
 
-if(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
-	if(BLACKBERRY)
-		set(PLATFORM_ARCH "blackberry/armv7")
-	elseif(IOS)
-		set(PLATFORM_ARCH "ios/universal")
-	elseif(MACOSX)
-		set(PLATFORM_ARCH "macosx/x86_64")
-	elseif(LINUX)
-		if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-			set(PLATFORM_ARCH "linux/x86_64")
-		else()
-			set(PLATFORM_ARCH "linux/x86")
-		endif()
-	endif()
-	# Using static libraries
-	if (DEFINED PLATFORM_ARCH)
-		include_directories(ffmpeg/${PLATFORM_ARCH}/include)
-		link_directories(ffmpeg/${PLATFORM_ARCH}/lib)
-		set(FFMPEG_LIBRARIES libavformat.a libavcodec.a libavutil.a libswresample.a libswscale.a)
-	else()
-		# Manual definition of system library locations by the user.
-		if (DEFINED FFMPEG_INCLUDE_PATH)
-			include_directories(ffmpeg ${FFMPEG_INCLUDE_PATH})
-		endif()
-		if (DEFINED AVFORMAT_PATH)
-			add_library(libavformat STATIC IMPORTED)
-			set_target_properties(libavformat PROPERTIES IMPORTED_LOCATION ${AVFORMAT_PATH})
-			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavformat)
-		endif()
-		if (DEFINED AVCODEC_PATH)
-			add_library(libavcodec STATIC IMPORTED)
-			set_target_properties(libavcodec PROPERTIES IMPORTED_LOCATION ${AVCODEC_PATH})
-			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavcodec)
-		endif()
-		if (DEFINED AVUTIL_PATH)
-			add_library(libavutil STATIC IMPORTED)
-			set_target_properties(libavutil PROPERTIES IMPORTED_LOCATION ${AVUTIL_PATH})
-			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libavutil)
-		endif()
-		if (DEFINED SWRESAMPLE_PATH)
-			add_library(libswresample STATIC IMPORTED)
-			set_target_properties(libswresample PROPERTIES IMPORTED_LOCATION ${SWRESAMPLE_PATH})
-			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libswresample)
-		endif()
-		if (DEFINED SWSCALE_PATH)
-			add_library(libswscale STATIC IMPORTED)
-			set_target_properties(libswscale PROPERTIES IMPORTED_LOCATION ${SWSCALE_PATH})
-			SET (FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} libswscale)
-		endif()
-	endif(DEFINED PLATFORM_ARCH)
-endif(USE_FFMPEG AND NOT DEFINED FFMPEG_BUILDDIR)
-
-if(USE_FFMPEG)
-	# Using shared libraries
-	if(DEFINED FFMPEG_BUILDDIR)
-		include_directories(ffmpeg ${FFMPEG_BUILDDIR})
-
-		add_library(libavformat STATIC IMPORTED)
-		set_target_properties(libavformat PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libavformat/libavformat.a)
-		add_library(libavcodec STATIC IMPORTED)
-		set_target_properties(libavcodec PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libavcodec/libavcodec.a)
-		add_library(libavutil STATIC IMPORTED)
-		set_target_properties(libavutil PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libavutil/libavutil.a)
-		add_library(libswresample STATIC IMPORTED)
-		set_target_properties(libswresample PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libswresample/libswresample.a)
-		add_library(libswscale STATIC IMPORTED)
-		set_target_properties(libswscale PROPERTIES IMPORTED_LOCATION ${FFMPEG_BUILDDIR}/libswscale/libswscale.a)
-
-		SET (FFMPEG_LIBRARIES
-			libavformat
-			libavcodec
-			libavutil
-			libswresample
-			libswscale
-		)
-	endif()
-	
-	if(IOS OR BLACKBERRY)
-		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} iconv)
-	endif()
-
-	if(APPLE)
-		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} bz2 "-framework CoreVideo")
-		if (NOT IOS)
-    		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} "-framework VideoDecodeAcceleration")
-		endif()
-	endif(APPLE)
-	
-	set(LinkCommon ${LinkCommon} ${FFMPEG_LIBRARIES})
-	add_definitions(-DUSE_FFMPEG)
-endif(USE_FFMPEG)
-
-# Modification to show where we are pulling the ffmpeg libraries from.
-if(USE_FFMPEG AND DEFINED FFMPEG_LIBRARIES)
-	target_link_libraries(Common ${FFMPEG_LIBRARIES})
-	message(STATUS "FFMPEG library locations:")
-	if(DEFINED PLATFORM_ARCH)
-		set(TEMP ${CMAKE_SOURCE_DIR}/ffmpeg/${PLATFORM_ARCH}/lib)
-		message(STATUS "libavcodec location: ${TEMP}/libavcodec.a")
-		message(STATUS "libavformat location: ${TEMP}/libavformat.a")
-		message(STATUS "libavutil location: ${TEMP}/libavutil.a")
-		message(STATUS "libswresample location: ${TEMP}/libswresample.a")
-		message(STATUS "libswscale location: ${TEMP}/libswscale.a")
-	else()
-		get_target_property(TEMP libavcodec IMPORTED_LOCATION)
-		message(STATUS "libavcodec location: ${TEMP}")
-		get_target_property(TEMP libavformat IMPORTED_LOCATION)
-		message(STATUS "libavformat location: ${TEMP}")
-		get_target_property(TEMP libavutil IMPORTED_LOCATION)
-		message(STATUS "libavutil location: ${TEMP}")
-		get_target_property(TEMP libswresample IMPORTED_LOCATION)
-		message(STATUS "libswresample location: ${TEMP}")
-		get_target_property(TEMP libswscale IMPORTED_LOCATION)
-		message(STATUS "libswscale location: ${TEMP}")
-	endif(DEFINED PLATFORM_ARCH)
-endif()
-if(USE_FFMPEG AND NOT DEFINED FFMPEG_LIBRARIES)
-	message(WARNING "FFMPEG_BUILDDIR variable or manual path definition is required to enable FFmpeg. Disabling it.")
-	unset(USE_FFMPEG)
-endif()
 
 if(HEADLESS)
 	add_executable(PPSSPPHeadless
@@ -1308,7 +1347,7 @@ endif()
 
 # installs
 file(INSTALL ${NativeAssets} DESTINATION assets)
-file(INSTALL flash0 lang DESTINATION .)
+file(INSTALL flash0 lang DESTINATION assets)
 
 # Fix CMake some Xcode settings.
 if(APPLE)
@@ -1324,7 +1363,9 @@ if(APPLE)
 
 	# These can be fast even for debug.
 	set_target_properties(snappy PROPERTIES COMPILE_FLAGS "-O3")
-	set_target_properties(zlib PROPERTIES COMPILE_FLAGS "-O3")
+	if(NOT ZLIB_FOUND)
+		set_target_properties(zlib PROPERTIES COMPILE_FLAGS "-O3")
+	endif()
 endif()
 
 if(APPLE AND NOT IOS)
@@ -1337,10 +1378,6 @@ if(IOS)
 
 	file(GLOB IOSAssets ios/assets/*.png)
 	file(INSTALL ${IOSAssets} DESTINATION assets)
-	file(INSTALL assets/langregion.ini DESTINATION assets)
-	file(INSTALL assets/shaders DESTINATION assets)
-	file(INSTALL flash0 DESTINATION assets)
-	file(INSTALL lang DESTINATION assets)
 	if (IOS_DEBUG)
 		file(INSTALL pspautotests DESTINATION assets)
 	endif()

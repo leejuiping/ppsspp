@@ -71,6 +71,7 @@ void NativeRender() { }
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 void System_SendMessage(const char *command, const char *parameter) {}
+bool System_InputBoxGetWString(const wchar_t *title, const std::wstring &defaultvalue, std::wstring &outvalue) { return false; }
 
 #ifndef _WIN32
 InputState input_state;
@@ -146,7 +147,8 @@ bool RunAutoTest(HeadlessHost *headlessHost, CoreParameter &coreParameter, bool 
 	bool passed = true;
 	// TODO: We must have some kind of stack overflow or we're not following the ABI right.
 	// This gets trashed if it's not static.
-	static double deadline = time_now() + timeout;
+	static double deadline;
+	deadline = time_now() + timeout;
 
 	coreState = CORE_RUNNING;
 	while (coreState == CORE_RUNNING)

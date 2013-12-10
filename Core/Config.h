@@ -54,7 +54,7 @@ public:
 	int iNumWorkerThreads;
 	bool bScreenshotsAsPNG;
 	bool bEnableLogging;
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(USING_QT_UI)
 	bool bPauseOnLostFocus;
 	bool bTopMost;
 	std::string sFont;
@@ -148,6 +148,8 @@ public:
 
 	// Disable diagonals
 	bool bDisableDpadDiagonals;
+	// Control Style
+	int iTouchButtonStyle;
 	// Control Positions
 	int iTouchButtonOpacity;
 	//space between PSP buttons
@@ -236,7 +238,7 @@ public:
 
 	int iPSPModel;
 	// TODO: Make this work with your platform, too!
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(USING_QT_UI)
 	bool bBypassOSKWithKeyboard;
 #endif
 

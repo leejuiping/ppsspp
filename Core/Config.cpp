@@ -99,7 +99,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	general->Get("ReportingHost", &sReportHost, "default");
 	general->Get("Recent", recentIsos);
 	general->Get("AutoSaveSymbolMap", &bAutoSaveSymbolMap, false);
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(USING_QT_UI)
 	general->Get("TopMost", &bTopMost);
 	general->Get("WindowX", &iWindowX, -1); // -1 tells us to center the window.
 	general->Get("WindowY", &iWindowY, -1);
@@ -259,6 +259,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 
 #endif
 	control->Get("DisableDpadDiagonals", &bDisableDpadDiagonals, false);
+	control->Get("TouchButtonStyle", &iTouchButtonStyle, 0);
 	control->Get("TouchButtonOpacity", &iTouchButtonOpacity, 65);
 	//set these to -1 if not initialized. initializing these
 	//requires pixel coordinates which is not known right now.
@@ -316,10 +317,10 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	network->Get("EnableWlan", &bEnableWlan, false);
 
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
-#if !defined(ARM)
 	pspConfig->Get("PSPModel", &iPSPModel, PSP_MODEL_SLIM);
-#else
-	pspConfig->Get("PSPModel", &iPSPModel, PSP_MODEL_FAT);
+#if !defined(_M_X64) && !defined(_WIN32) && !defined(__SYMBIAN32__)
+	// 32-bit mmap cannot map more than 32MB contiguous
+	iPSPModel = PSP_MODEL_FAT;
 #endif
 	pspConfig->Get("NickName", &sNickName, "PPSSPP");
 	pspConfig->Get("proAdhocServer", &proAdhocServer, "localhost");
@@ -332,7 +333,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	pspConfig->Get("ButtonPreference", &iButtonPreference, PSP_SYSTEMPARAM_BUTTON_CROSS);
 	pspConfig->Get("LockParentalLevel", &iLockParentalLevel, 0);
 	pspConfig->Get("WlanAdhocChannel", &iWlanAdhocChannel, PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC);
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(USING_QT_UI)
 	pspConfig->Get("BypassOSKWithKeyboard", &bBypassOSKWithKeyboard, false);
 #endif
 	pspConfig->Get("WlanPowerSave", &bWlanPowerSave, PSP_SYSTEMPARAM_WLAN_POWERSAVE_OFF);
@@ -378,8 +379,9 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	// splash screen quickly), but then we'll just show the notification next time instead, we store the
 	// upgrade number in the ini.
 	if (iRunCount % 5 == 0) {
-		g_DownloadManager.StartDownloadWithCallback(
+		std::shared_ptr<http::Download> dl = g_DownloadManager.StartDownloadWithCallback(
 			"http://www.ppsspp.org/version.json", "", &DownloadCompletedCallback);
+		dl->SetHidden(true);
 	}
 
 	INFO_LOG(LOADER, "Loading controller config: %s", controllerIniFilename_.c_str());
@@ -419,7 +421,7 @@ void Config::Save() {
 		general->Set("ShowDebuggerOnLoad", bShowDebuggerOnLoad);
 		general->Set("ReportingHost", sReportHost);
 		general->Set("AutoSaveSymbolMap", bAutoSaveSymbolMap);
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(USING_QT_UI)
 		general->Set("TopMost", bTopMost);
 		general->Set("WindowX", iWindowX);
 		general->Set("WindowY", iWindowY);
@@ -522,7 +524,7 @@ void Config::Save() {
 		control->Set("DeadzoneRadius", fDeadzoneRadius);
 #endif
 		control->Set("DisableDpadDiagonals", bDisableDpadDiagonals);
-
+		control->Set("TouchButtonStyle", iTouchButtonStyle);
 		control->Set("TouchButtonOpacity", iTouchButtonOpacity);
 		control->Set("ActionButtonScale", fActionButtonScale);
 		control->Set("ActionButtonSpacing2", fActionButtonSpacing);
@@ -569,7 +571,7 @@ void Config::Save() {
 		pspConfig->Set("WlanAdhocChannel", iWlanAdhocChannel);
 		pspConfig->Set("WlanPowerSave", bWlanPowerSave);
 		pspConfig->Set("EncryptSave", bEncryptSave);
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(USING_QT_UI)
 		pspConfig->Set("BypassOSKWithKeyboard", bBypassOSKWithKeyboard);
 #endif
 

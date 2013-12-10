@@ -36,6 +36,7 @@
 // Currently known non working ones should have DISABLE.
 
 // #define CONDITIONAL_DISABLE { fpr.ReleaseSpillLocksAndDiscardTemps(); Comp_Generic(op); return; }
+
 #define CONDITIONAL_DISABLE ;
 #define DISABLE { fpr.ReleaseSpillLocksAndDiscardTemps(); Comp_Generic(op); return; }
 #define NEON_IF_AVAILABLE(func) { if (jo.useNEONVFPU) { func(op); return; } }
@@ -50,8 +51,6 @@
 #define _SIZE ((op>>11) & 0x1F)
 #define _IMM16 (signed short)(op & 0xFFFF)
 #define _IMM26 (op & 0x03FFFFFF)
-
-
 
 namespace MIPSComp
 {
@@ -604,6 +603,7 @@ namespace MIPSComp
 	}
 
 	void Jit::Comp_VDot(MIPSOpcode op) {
+		NEON_IF_AVAILABLE(CompNEON_VDot);
 		CONDITIONAL_DISABLE;
 		if (js.HasUnknownPrefix()) {
 			DISABLE;
@@ -1138,7 +1138,7 @@ namespace MIPSComp
 			} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc //currentMIPS->vfpuCtrl[imm - 128] = R(rt);
 				if (imm - 128 == VFPU_CTRL_CC) {
 					gpr.MapDirtyIn(MIPS_REG_VFPUCC, rt);
-					MOV(gpr.R(MIPS_REG_VFPUCC), rt);
+					MOV(gpr.R(MIPS_REG_VFPUCC), gpr.R(rt));
 				} else {
 					gpr.MapReg(rt);
 					STR(gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
@@ -1689,6 +1689,8 @@ namespace MIPSComp
 				SetCC(CC_AL);
 			}
 		}
+
+		ApplyPrefixD(dregs, sz);
 		fpr.ReleaseSpillLocksAndDiscardTemps();
 	}
 

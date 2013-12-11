@@ -67,7 +67,7 @@ bool MainScreen::showHomebrewTab = false;
 class GameButton : public UI::Clickable {
 public:
 	GameButton(const std::string &gamePath, bool gridStyle, UI::LayoutParams *layoutParams = 0) 
-		: UI::Clickable(layoutParams), gridStyle_(gridStyle), gamePath_(gamePath), holdFrameCount_(0) {}
+		: UI::Clickable(layoutParams), gridStyle_(gridStyle), gamePath_(gamePath), holdFrameCount_(0), holdEnabled_(true) {}
 
 	virtual void Draw(UIContext &dc);
 	virtual void GetContentDimensions(const UIContext &dc, float &w, float &h) const {
@@ -82,6 +82,9 @@ public:
 
 	const std::string &GamePath() const { return gamePath_; }
 
+	void SetHoldEnabled(bool hold) {
+		holdEnabled_ = hold;
+	}
 	virtual void Touch(const TouchInput &input) {
 		UI::Clickable::Touch(input);
 		if (input.flags & TOUCH_UP) {
@@ -90,7 +93,7 @@ public:
 	}
 
 	virtual void Update(const InputState &input_state) {
-		if (down_)
+		if (down_ && holdEnabled_)
 			holdFrameCount_++;
 		else
 			holdFrameCount_ = 0;
@@ -113,6 +116,7 @@ private:
 	std::string title_;
 
 	int holdFrameCount_;
+	bool holdEnabled_;
 };
 
 void GameButton::Draw(UIContext &dc) {
@@ -134,21 +138,21 @@ void GameButton::Draw(UIContext &dc) {
 		style = dc.theme->itemDownStyle;
 
 	if (!gridStyle_ || !texture) {
-		// w = 144 * 80 / 50;
 		h = 50;
 		if (HasFocus())
 			style = down_ ? dc.theme->itemDownStyle : dc.theme->itemFocusedStyle;
 
+		Drawable bg = style.background;
+
 		dc.Draw()->Flush();
 		dc.RebindTexture();
-		dc.FillRect(style.background, bounds_);
+		dc.FillRect(bg, bounds_);
 		dc.Draw()->Flush();
 	}
 
 	if (texture) {
 		color = whiteAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
 		shadowColor = blackAlpha(ease((time_now_d() - ginfo->timeIconWasLoaded) * 2));
-
 		float tw = texture->Width();
 		float th = texture->Height();
 
@@ -162,17 +166,23 @@ void GameButton::Draw(UIContext &dc) {
 	int txOffset = down_ ? 4 : 0;
 	if (!gridStyle_) txOffset = 0;
 
+	Bounds overlayBounds = bounds_;
+	u32 overlayColor = 0;
+	if (holdEnabled_)
+		overlayColor = whiteAlpha((holdFrameCount_ - 15) * 0.01f);
+
 	// Render button
 	int dropsize = 10;
 	if (texture) {
 		if (txOffset) {
 			dropsize = 3;
 			y += txOffset * 2;
+			overlayBounds.y += txOffset * 2;
 		}
 		if (HasFocus()) {
 			dc.Draw()->Flush();
 			dc.RebindTexture();
-			dc.Draw()->DrawImage4Grid(I_DROP_SHADOW, x - dropsize*1.5f, y - dropsize*1.5f, x+w + dropsize*1.5f, y+h+dropsize*1.5f, alphaMul(color, 1.0f), 1.0f);
+			dc.Draw()->DrawImage4Grid(dc.theme->dropShadow4Grid, x - dropsize*1.5f, y - dropsize*1.5f, x+w + dropsize*1.5f, y+h+dropsize*1.5f, alphaMul(color, 1.0f), 1.0f);
 			dc.Draw()->Flush();
 		} else {
 			dc.Draw()->Flush();
@@ -209,6 +219,7 @@ void GameButton::Draw(UIContext &dc) {
 		dc.PushScissor(bounds_);
 		if (title_.empty() && !ginfo->title.empty()) {
 			title_ = ReplaceAll(ginfo->title + discNumInfo, "&", "&&");
+			title_ = ReplaceAll(title_, "\n", " ");
 		}
 
 		dc.MeasureText(dc.GetFontStyle(), title_.c_str(), &tw, &th, 0);
@@ -239,6 +250,9 @@ void GameButton::Draw(UIContext &dc) {
 	} else {
 		dc.Draw()->Flush();
 	}
+	if (overlayColor) {
+		dc.FillRect(Drawable(overlayColor), overlayBounds);
+	}
 	dc.RebindTexture();
 }
 
@@ -246,6 +260,60 @@ enum GameBrowserFlags {
 	FLAG_HOMEBREWSTOREBUTTON = 1
 };
 
+
+class DirButton : public UI::Button {
+public:
+	DirButton(std::string path, UI::LayoutParams *layoutParams)
+		: UI::Button(path, layoutParams) {}
+
+	virtual void Draw(UIContext &dc);
+};
+
+void DirButton::Draw(UIContext &dc) {
+	Style style = dc.theme->buttonStyle;
+
+	if (HasFocus()) style = dc.theme->buttonFocusedStyle;
+	if (down_) style = dc.theme->buttonDownStyle;
+	if (!IsEnabled()) style = dc.theme->buttonDisabledStyle;
+
+	dc.FillRect(style.background, bounds_);
+
+	const std::string text = GetText();
+
+	int image = I_FOLDER;
+	if (text == "..") {
+		image = I_UP_DIRECTORY;
+	}
+	
+	float tw, th;
+	dc.MeasureText(dc.GetFontStyle(), text.c_str(), &tw, &th, 0);
+
+	bool compact = bounds_.w < 180;
+
+	if (compact) {
+		// No icon, except "up"
+		dc.PushScissor(bounds_);
+		if (image == I_FOLDER) {
+			dc.DrawText(text.c_str(), bounds_.x + 5, bounds_.centerY(), style.fgColor, ALIGN_VCENTER);
+		} else {
+			dc.Draw()->DrawImage(image, bounds_.centerX(), bounds_.centerY(), 1.0f, 0xFFFFFFFF, ALIGN_CENTER);
+		}
+		dc.PopScissor();
+	} else {
+		bool scissor = false;
+		if (tw + 150 > bounds_.w) {
+			dc.PushScissor(bounds_);
+			scissor = true;
+		}
+
+		dc.Draw()->DrawImage(image, bounds_.x + 72, bounds_.centerY(), .88f, 0xFFFFFFFF, ALIGN_CENTER);
+		dc.DrawText(text.c_str(), bounds_.x + 150, bounds_.centerY(), style.fgColor, ALIGN_VCENTER);
+
+		if (scissor) {
+			dc.PopScissor();
+		}
+	}
+}
 
 class GameBrowser : public UI::LinearLayout {
 public:
@@ -376,8 +444,9 @@ void GameBrowser::Refresh() {
 		for (size_t i = 0; i < fileInfo.size(); i++) {
 			if (fileInfo[i].isDirectory && (path_.GetPath().size() < 4 || !File::Exists(path_.GetPath() + fileInfo[i].name + "/EBOOT.PBP"))) {
 				// Check if eboot directory
-				if (allowBrowsing_)
-					dirButtons.push_back(new UI::Button(fileInfo[i].name.c_str(), new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)));
+				if (allowBrowsing_) {
+					dirButtons.push_back(new DirButton(fileInfo[i].name, new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)));
+				}
 			} else {
 				gameButtons.push_back(new GameButton(fileInfo[i].fullName, *gridStyle_, new UI::LinearLayoutParams(*gridStyle_ == true ? UI::WRAP_CONTENT : UI::FILL_PARENT, UI::WRAP_CONTENT)));
 			}
@@ -388,16 +457,23 @@ void GameBrowser::Refresh() {
 		if (allowBrowsing_) {
 			fileInfo.clear();
 			path_.GetListing(fileInfo, "zip:rar:r01:");
-			for (size_t i = 0; i < fileInfo.size(); i++) {
-				if (!fileInfo[i].isDirectory) {
-					gameButtons.push_back(new GameButton(fileInfo[i].fullName, *gridStyle_, new UI::LinearLayoutParams(*gridStyle_ == true ? UI::WRAP_CONTENT : UI::FILL_PARENT, UI::WRAP_CONTENT)));
+			if (!fileInfo.empty()) {
+				UI::LinearLayout *zl = new UI::LinearLayout(UI::ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
+				zl->SetSpacing(4.0f);
+				Add(zl);
+				for (size_t i = 0; i < fileInfo.size(); i++) {
+					if (!fileInfo[i].isDirectory) {
+						GameButton *b = zl->Add(new GameButton(fileInfo[i].fullName, false, new UI::LinearLayoutParams(UI::FILL_PARENT, UI::WRAP_CONTENT)));
+						b->OnClick.Handle(this, &GameBrowser::GameButtonClick);
+						b->SetHoldEnabled(false);
+					}
 				}
 			}
 		}
 	}
 
 	if (allowBrowsing_) {
-		gameList_->Add(new UI::Button("..", new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)))->
+		gameList_->Add(new DirButton("..", new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)))->
 			OnClick.Handle(this, &GameBrowser::NavigateClick);
 	}
 

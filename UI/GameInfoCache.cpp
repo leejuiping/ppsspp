@@ -65,6 +65,12 @@ bool GameInfo::DeleteGame() {
 			g_Config.CleanRecent();
 			return true;
 		}
+	case FILETYPE_PSP_ELF:
+		{
+			const char *fileToRemove = fileInfo.fullName.c_str();
+			deleteFile(fileToRemove);
+			return true;
+		}
 
 	default:
 		return false;
@@ -236,7 +242,10 @@ public:
 			return;
 
 		std::string filename = gamePath_;
+		info_->path = gamePath_;
 		info_->fileType = Identify_File(filename);
+		// Fallback title
+		info_->title = getFilename(info_->path);
 
 		switch (info_->fileType) {
 		case FILETYPE_PSP_PBP:
@@ -247,8 +256,13 @@ public:
 					pbpFile += "/EBOOT.PBP";
 
 				PBPReader pbp(pbpFile.c_str());
-				if (!pbp.IsValid())
+				if (!pbp.IsValid()) {
+					if (pbp.IsELF()) {
+						goto handleELF;
+					}
+					ERROR_LOG(LOADER, "invalid pbp %s\n", pbpFile.c_str());
 					return;
+				}
 
 				// First, PARAM.SFO.
 				size_t sfoSize;
@@ -288,12 +302,12 @@ public:
 			break;
 
 		case FILETYPE_PSP_ELF:
+handleELF:
 			// An elf on its own has no usable information, no icons, no nothing.
 			info_->title = getFilename(filename);
 			info_->id = "ELF000000";
 			info_->id_version = "ELF000000_1.00";
 			info_->paramSFOLoaded = true;
-
 			{
 				// Read standard icon
 				size_t sz;
@@ -305,7 +319,6 @@ public:
 				}
 				delete [] contents;
 			}
-
 			break;
 
 		case FILETYPE_PSP_DISC_DIRECTORY:
@@ -348,31 +361,66 @@ public:
 					lock_guard lock(info_->lock);
 					info_->paramSFO.ReadSFO((const u8 *)paramSFOcontents.data(), paramSFOcontents.size());
 					info_->ParseParamSFO();
+
+					ReadFileToString(&umd, "/PSP_GAME/ICON0.PNG", &info_->iconTextureData, &info_->lock);
+					if (info_->wantBG) {
+						ReadFileToString(&umd, "/PSP_GAME/PIC0.PNG", &info_->pic0TextureData, &info_->lock);
+					}
+					ReadFileToString(&umd, "/PSP_GAME/PIC1.PNG", &info_->pic1TextureData, &info_->lock);
 				} else {
 					// Fall back to the filename for title if ISO is broken
 					info_->title = gamePath_;
+					// Fall back to unknown icon if ISO is broken, override is allowed though
+					size_t sz;
+					uint8_t *contents = VFSReadFile("unknown.png", &sz);
+					DEBUG_LOG(LOADER, "Loading unknown.png because no icon was found");
+					if (contents) {
+						lock_guard lock(info_->lock);
+						info_->iconTextureData = std::string((const char *)contents, sz);
+					}
+					delete [] contents;
 				}
-
-				ReadFileToString(&umd, "/PSP_GAME/ICON0.PNG", &info_->iconTextureData, &info_->lock);
-				if (info_->wantBG) {
-					ReadFileToString(&umd, "/PSP_GAME/PIC0.PNG", &info_->pic0TextureData, &info_->lock);
-				}
-				ReadFileToString(&umd, "/PSP_GAME/PIC1.PNG", &info_->pic1TextureData, &info_->lock);
 				break;
 			}
+
+			case FILETYPE_ARCHIVE_ZIP:
+				info_->title = getFilename(filename);
+				info_->paramSFOLoaded = true;
+				info_->wantBG = false;
+				{
+					// Read standard icon
+					size_t sz;
+					uint8_t *contents = VFSReadFile("zip.png", &sz);
+					if (contents) {
+						lock_guard lock(info_->lock);
+						info_->iconTextureData = std::string((const char *)contents, sz);
+					}
+					delete [] contents;
+				}
+				break;
+
+			case FILETYPE_ARCHIVE_RAR:
+				info_->title = getFilename(filename);
+				info_->paramSFOLoaded = true;
+				info_->wantBG = false;
+				{
+					// Read standard icon
+					size_t sz;
+					uint8_t *contents = VFSReadFile("rargray.png", &sz);
+					if (contents) {
+						lock_guard lock(info_->lock);
+						info_->iconTextureData = std::string((const char *)contents, sz);
+					}
+					delete [] contents;
+				}
+				break;
 
 			case FILETYPE_NORMAL_DIRECTORY:
-				info_->title = gamePath_;
-				break;
-
 			default:
-			{
-				std::string fn, ext;
-				SplitPath(gamePath_, 0, &fn, &ext);
-				// ext includes the dot
-				info_->title = fn + ext;
-			}
-			break;
+				info_->title = getFilename(gamePath_);
+				info_->paramSFOLoaded = true;
+				info_->wantBG = false;
+				break;
 		}
 		// probably only want these when we ask for the background image...
 		// should maybe flip the flag to "onlyIcon"
@@ -422,7 +470,6 @@ void GameInfoCache::Decimate() {
 }
 
 void GameInfoCache::Clear() {
-	ILOG("Wiping GameInfoCache: %i items", info_.size());
 	if (gameInfoWQ_)
 		gameInfoWQ_->Flush();
 	for (auto iter = info_.begin(); iter != info_.end(); iter++) {
@@ -473,10 +520,6 @@ void GameInfoCache::FlushBGs() {
 	}
 }
 
-void GameInfoCache::Add(const std::string &key, GameInfo *info_) {
-
-}
-
 // This may run off-main-thread and we thus can't use the global
 // pspFileSystem (well, we could with synchronization but there might not
 // even be a game running).
@@ -492,9 +535,8 @@ GameInfo *GameInfoCache::GetInfo(const std::string &gamePath, bool wantBG, bool 
 		{
 			lock_guard lock(info->lock);
 			if (info->iconTextureData.size()) {
-				info->iconTexture = new Texture();
-				// TODO: We could actually do the PNG decoding as well on the async thread.
 				// We'd have to split up Texture->LoadPNG though, creating some intermediate Image class maybe.
+				info->iconTexture = new Texture();
 				if (info->iconTexture->LoadPNG((const u8 *)info->iconTextureData.data(), info->iconTextureData.size(), false)) {
 					info->timeIconWasLoaded = time_now_d();
 				} else {

@@ -67,6 +67,7 @@ public:
 	recursive_mutex lock;
 
 	FileInfo fileInfo;
+	std::string path;
 	std::string title;  // for easy access, also available in paramSFO.
 	std::string id;
 	std::string id_version;
@@ -121,8 +122,6 @@ public:
 	// TODO - save cache between sessions
 	void Save();
 	void Load();
-
-	void Add(const std::string &key, GameInfo *info_);
 
 private:
 	// Maps ISO path to info.

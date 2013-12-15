@@ -29,6 +29,7 @@ extern const char *PPSSPP_GIT_VERSION;
 const int MAX_CONFIG_VOLUME = 8;
 const int PSP_MODEL_FAT = 0;
 const int PSP_MODEL_SLIM = 1;
+const int PSP_DEFAULT_FIRMWARE = 150;
 
 namespace http {
 	class Download;
@@ -63,6 +64,8 @@ public:
 	bool bIgnoreBadMemAccess;
 	bool bFastMemory;
 	bool bJit;
+	bool bCheckForNewVersion;
+
 	// Definitely cannot be changed while game is running.
 	bool bSeparateCPUThread;
 	bool bSeparateIOThread;
@@ -237,6 +240,7 @@ public:
 	bool bWlanPowerSave;
 
 	int iPSPModel;
+	int iFirmwareVersion;
 	// TODO: Make this work with your platform, too!
 #if defined(_WIN32) && !defined(USING_QT_UI)
 	bool bBypassOSKWithKeyboard;
@@ -289,6 +293,8 @@ public:
 
 	static void DownloadCompletedCallback(http::Download &download);
 	void DismissUpgrade();
+
+	void ResetControlLayout();
 
 private:
 	std::string iniFilename_;

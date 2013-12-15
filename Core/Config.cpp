@@ -72,6 +72,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	general->Get("CurrentDirectory", &currentDirectory, "");
 	general->Get("ShowDebuggerOnLoad", &bShowDebuggerOnLoad, false);
 	general->Get("HomebrewStore", &bHomebrewStore, false);
+	general->Get("CheckForNewVersion", &bCheckForNewVersion, true);
 
 	if (!File::Exists(currentDirectory))
 		currentDirectory = "";
@@ -271,26 +272,34 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	control->Get("ActionButtonScale", &fActionButtonScale, defaultScale);
 	control->Get("DPadX", &fDpadX, -1.0);
 	control->Get("DPadY", &fDpadY, -1.0);
-	control->Get("DPadScale", &fDpadScale, defaultScale);
-	control->Get("DPadSpacing", &fDpadSpacing, 1.0f);
-	control->Get("StartKeyX", &fStartKeyX, -1.0);
-	control->Get("StartKeyY", &fStartKeyY, -1.0);
-	control->Get("StartKeyScale", &fStartKeyScale, defaultScale);
-	control->Get("SelectKeyX", &fSelectKeyX, -1.0);
-	control->Get("SelectKeyY", &fSelectKeyY, -1.0);
-	control->Get("SelectKeyScale", &fSelectKeyScale, defaultScale);
-	control->Get("UnthrottleKeyX", &fUnthrottleKeyX, -1.0);
-	control->Get("UnthrottleKeyY", &fUnthrottleKeyY, -1.0);
-	control->Get("UnthrottleKeyScale", &fUnthrottleKeyScale, defaultScale);
-	control->Get("LKeyX", &fLKeyX, -1.0);
-	control->Get("LKeyY", &fLKeyY, -1.0);
-	control->Get("LKeyScale", &fLKeyScale, defaultScale);
-	control->Get("RKeyX", &fRKeyX, -1.0);
-	control->Get("RKeyY", &fRKeyY, -1.0);
-	control->Get("RKeyScale", &fRKeyScale, defaultScale);
-	control->Get("AnalogStickX", &fAnalogStickX, -1.0);
-	control->Get("AnalogStickY", &fAnalogStickY, -1.0);
-	control->Get("AnalogStickScale", &fAnalogStickScale, defaultScale);
+
+	// Check for an old dpad setting
+	float f;
+	control->Get("DPadRadius", &f, 0.0f);
+	if (f > 0.0f) {
+		ResetControlLayout();
+	} else {
+		control->Get("DPadScale", &fDpadScale, defaultScale);
+		control->Get("DPadSpacing", &fDpadSpacing, 1.0f);
+		control->Get("StartKeyX", &fStartKeyX, -1.0);
+		control->Get("StartKeyY", &fStartKeyY, -1.0);
+		control->Get("StartKeyScale", &fStartKeyScale, defaultScale);
+		control->Get("SelectKeyX", &fSelectKeyX, -1.0);
+		control->Get("SelectKeyY", &fSelectKeyY, -1.0);
+		control->Get("SelectKeyScale", &fSelectKeyScale, defaultScale);
+		control->Get("UnthrottleKeyX", &fUnthrottleKeyX, -1.0);
+		control->Get("UnthrottleKeyY", &fUnthrottleKeyY, -1.0);
+		control->Get("UnthrottleKeyScale", &fUnthrottleKeyScale, defaultScale);
+		control->Get("LKeyX", &fLKeyX, -1.0);
+		control->Get("LKeyY", &fLKeyY, -1.0);
+		control->Get("LKeyScale", &fLKeyScale, defaultScale);
+		control->Get("RKeyX", &fRKeyX, -1.0);
+		control->Get("RKeyY", &fRKeyY, -1.0);
+		control->Get("RKeyScale", &fRKeyScale, defaultScale);
+		control->Get("AnalogStickX", &fAnalogStickX, -1.0);
+		control->Get("AnalogStickY", &fAnalogStickY, -1.0);
+		control->Get("AnalogStickScale", &fAnalogStickScale, defaultScale);
+	}
 
 	// MIGRATION: For users who had the old static touch layout, aren't I nice?
 	if (fDpadX > 1.0 || fDpadY > 1.0) // Likely the rest are too!
@@ -318,6 +327,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 	pspConfig->Get("PSPModel", &iPSPModel, PSP_MODEL_SLIM);
+	pspConfig->Get("PSPFirmwareVersion", &iFirmwareVersion, PSP_DEFAULT_FIRMWARE);
 #if !defined(_M_X64) && !defined(_WIN32) && !defined(__SYMBIAN32__)
 	// 32-bit mmap cannot map more than 32MB contiguous
 	iPSPModel = PSP_MODEL_FAT;
@@ -378,7 +388,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	// Sometimes the download may not be finished when the main screen shows (if the user dismisses the
 	// splash screen quickly), but then we'll just show the notification next time instead, we store the
 	// upgrade number in the ini.
-	if (iRunCount % 5 == 0) {
+	if (iRunCount % 10 == 0 && bCheckForNewVersion) {
 		std::shared_ptr<http::Download> dl = g_DownloadManager.StartDownloadWithCallback(
 			"http://www.ppsspp.org/version.json", "", &DownloadCompletedCallback);
 		dl->SetHidden(true);
@@ -439,6 +449,7 @@ void Config::Save() {
 		general->Set("GridView1", bGridView1);
 		general->Set("GridView2", bGridView2);
 		general->Set("GridView3", bGridView3);
+		general->Set("CheckForNewVersion", bCheckForNewVersion);
 
 		IniFile::Section *recent = iniFile.GetOrCreateSection("Recent");
 		recent->Set("MaxRecent", iMaxRecent);
@@ -552,12 +563,14 @@ void Config::Save() {
 		control->Set("AnalogStickX", fAnalogStickX);
 		control->Set("AnalogStickY", fAnalogStickY);
 		control->Set("AnalogStickScale", fAnalogStickScale);
+		control->Delete("DPadRadius");
 
 		IniFile::Section *network = iniFile.GetOrCreateSection("Network");
 		network->Set("EnableWlan", bEnableWlan);
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("PSPModel", iPSPModel);
+		pspConfig->Set("PSPFirmwareVersion", iFirmwareVersion);
 		pspConfig->Set("NickName", sNickName.c_str());
 		pspConfig->Set("proAdhocServer", proAdhocServer.c_str());
 		pspConfig->Set("MacAddress", localMacAddress.c_str());
@@ -761,4 +774,34 @@ void Config::RestoreDefaults() {
 	recentIsos.clear();
 	currentDirectory = "";
 	Load();
+}
+
+void Config::ResetControlLayout() {
+	float defaultScale = 1.15f;
+	g_Config.fActionButtonScale = defaultScale;
+	g_Config.fActionButtonSpacing = 1.0f;
+	g_Config.fActionButtonCenterX = -1.0;
+	g_Config.fActionButtonCenterY = -1.0;
+	g_Config.fDpadScale = defaultScale;
+	g_Config.fDpadSpacing = 1.0f;
+	g_Config.fDpadX = -1.0;
+	g_Config.fDpadY = -1.0;
+	g_Config.fStartKeyX = -1.0;
+	g_Config.fStartKeyY = -1.0;
+	g_Config.fStartKeyScale = defaultScale; 
+	g_Config.fSelectKeyX = -1.0;
+	g_Config.fSelectKeyY = -1.0;
+	g_Config.fSelectKeyScale = defaultScale; 
+	g_Config.fUnthrottleKeyX = -1.0;
+	g_Config.fUnthrottleKeyY = -1.0;
+	g_Config.fUnthrottleKeyScale = defaultScale; 
+	g_Config.fLKeyX = -1.0;
+	g_Config.fLKeyY = -1.0;
+	g_Config.fLKeyScale = defaultScale; 
+	g_Config.fRKeyX = -1.0;
+	g_Config.fRKeyY = -1.0;
+	g_Config.fRKeyScale = defaultScale; 
+	g_Config.fAnalogStickX = -1.0;
+	g_Config.fAnalogStickY = -1.0;
+	g_Config.fAnalogStickScale = defaultScale;
 }

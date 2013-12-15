@@ -570,7 +570,7 @@ static void EstimateDrawingSize(int &drawing_width, int &drawing_height) {
 	int region_height = gstate.getRegionY2() + 1;
 	int scissor_width = gstate.getScissorX2() + 1;
 	int scissor_height = gstate.getScissorY2() + 1;
-	int fb_stride = gstate.fbwidth & 0x3C0;
+	int fb_stride = gstate.FrameBufStride();
 
 	DEBUG_LOG(SCEGE,"viewport : %ix%i, region : %ix%i , scissor: %ix%i, stride: %i, %i", viewport_width,viewport_height, region_width, region_height, scissor_width, scissor_height, fb_stride, gstate.isModeThrough());
 
@@ -662,10 +662,10 @@ void FramebufferManager::SetRenderFrameBuffer() {
 
 	// Get parameters
 	u32 fb_address = gstate.getFrameBufRawAddress();
-	int fb_stride = gstate.fbwidth & 0x3C0;
+	int fb_stride = gstate.FrameBufStride();
 
 	u32 z_address = gstate.getDepthBufRawAddress();
-	int z_stride = gstate.zbwidth & 0x3C0;
+	int z_stride = gstate.DepthBufStride();
 
 	// Yeah this is not completely right. but it'll do for now.
 	//int drawing_width = ((gstate.region2) & 0x3FF) + 1;
@@ -751,6 +751,7 @@ void FramebufferManager::SetRenderFrameBuffer() {
 			vfb->fbo = fbo_create(vfb->renderWidth, vfb->renderHeight, 1, true, vfb->colorDepth);
 			if (vfb->fbo) {
 				fbo_bind_as_render_target(vfb->fbo);
+				glstate.viewport.restore();
 			} else {
 				ERROR_LOG(SCEGE, "Error creating FBO! %i x %i", vfb->renderWidth, vfb->renderHeight);
 			}
@@ -946,6 +947,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 		} else if (usePostShader_ && extraFBOs_.size() == 1 && !postShaderAtOutputResolution_) {
 			// An additional pass, post-processing shader to the extra FBO.
 			fbo_bind_as_render_target(extraFBOs_[0]);
+			glstate.viewport.restore();
 			int fbo_w, fbo_h;
 			fbo_get_dimensions(extraFBOs_[0], &fbo_w, &fbo_h);
 			glstate.viewport.set(0, 0, fbo_w, fbo_h);
@@ -1045,6 +1047,7 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 			nvfb->last_frame_render = gpuStats.numFlips;
 			bvfbs_.push_back(nvfb);
 			fbo_bind_as_render_target(nvfb->fbo);
+			glstate.viewport.restore();
 			ClearBuffer();
 			glEnable(GL_DITHER);
 		} else {
@@ -1056,6 +1059,7 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 #ifdef USING_GLES2
 			if (nvfb->fbo) {
 				fbo_bind_as_render_target(nvfb->fbo);
+				glstate.viewport.restore();
 			}
 
 			// Some tiled mobile GPUs benefit IMMENSELY from clearing an FBO before rendering
@@ -1088,6 +1092,7 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *src, VirtualFramebuffer *dst, bool flip, float upscale, float vscale) {
 	if (dst->fbo) {
 		fbo_bind_as_render_target(dst->fbo);
+		glstate.viewport.restore();
 	} else {
 		ERROR_LOG_REPORT_ONCE(dstfbozero, SCEGE, "BlitFramebuffer_: dst->fbo == 0");
 		fbo_unbind();
@@ -1465,7 +1470,7 @@ void FramebufferManager::DecimateFBOs() {
 		VirtualFramebuffer *vfb = vfbs_[i];
 		int age = frameLastFramebufUsed - std::max(vfb->last_frame_render, vfb->last_frame_used);
 
-		if (updateVram && age == 0 && !vfb->memoryUpdated && vfb == displayFramebuf_) 
+		if (updateVram && age == 0 && !vfb->memoryUpdated) 
 				ReadFramebufferToMemory(vfb);
 
 		if (vfb == displayFramebuf_ || vfb == prevDisplayFramebuf_ || vfb == prevPrevDisplayFramebuf_) {
@@ -1530,6 +1535,7 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 					DisableState();
 					glstate.viewport.set(0, 0, vfb->renderWidth, vfb->renderHeight);
 					fbo_bind_as_render_target(vfb->fbo);
+					glstate.viewport.restore();
 					needUnbind = true;
 					DrawPixels(Memory::GetPointer(addr | 0x04000000), vfb->format, vfb->fb_stride);
 				} else {
@@ -1551,7 +1557,7 @@ void FramebufferManager::Resized() {
 
 bool FramebufferManager::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
 	u32 fb_address = gstate.getFrameBufRawAddress();
-	int fb_stride = gstate.fbwidth & 0x3C0;
+	int fb_stride = gstate.FrameBufStride();
 
 	VirtualFramebuffer *vfb = currentRenderVfb_;
 	if (!vfb) {
@@ -1578,10 +1584,10 @@ bool FramebufferManager::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
 
 bool FramebufferManager::GetCurrentDepthbuffer(GPUDebugBuffer &buffer) {
 	u32 fb_address = gstate.getFrameBufRawAddress();
-	int fb_stride = gstate.fbwidth & 0x3C0;
+	int fb_stride = gstate.FrameBufStride();
 
 	u32 z_address = gstate.getDepthBufRawAddress();
-	int z_stride = gstate.zbwidth & 0x3C0;
+	int z_stride = gstate.DepthBufStride();
 
 	VirtualFramebuffer *vfb = currentRenderVfb_;
 	if (!vfb) {
@@ -1611,7 +1617,7 @@ bool FramebufferManager::GetCurrentDepthbuffer(GPUDebugBuffer &buffer) {
 
 bool FramebufferManager::GetCurrentStencilbuffer(GPUDebugBuffer &buffer) {
 	u32 fb_address = gstate.getFrameBufRawAddress();
-	int fb_stride = gstate.fbwidth & 0x3C0;
+	int fb_stride = gstate.FrameBufStride();
 
 	VirtualFramebuffer *vfb = currentRenderVfb_;
 	if (!vfb) {

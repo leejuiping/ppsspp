@@ -24,6 +24,7 @@
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/MIPS/MIPSInt.h"
 #include "Core/MIPS/MIPSTables.h"
+#include "Core/HLE/ReplaceTables.h"
 
 #include "ArmRegCache.h"
 #include "ArmJit.h"
@@ -338,6 +339,56 @@ void Jit::Comp_RunBlock(MIPSOpcode op)
 	ERROR_LOG(JIT, "Comp_RunBlock should never be reached!");
 }
 
+void Jit::Comp_ReplacementFunc(MIPSOpcode op)
+{
+	// We get here if we execute the first instruction of a replaced function. This means
+	// that we do need to return to RA.
+
+	// Inlined function calls (caught in jal) are handled differently.
+
+	int index = op.encoding & MIPS_EMUHACK_VALUE_MASK;
+
+	const ReplacementTableEntry *entry = GetReplacementFunc(index);
+	if (!entry) {
+		ERROR_LOG(HLE, "Invalid replacement op %08x", op.encoding);
+		return;
+	}
+
+	// JIT goes first.
+	if (entry->jitReplaceFunc) {
+		MIPSReplaceFunc repl = entry->jitReplaceFunc;
+		int cycles = (this->*repl)();
+		FlushAll();
+		LDR(R1, CTXREG, MIPS_REG_RA * 4);
+		js.downcountAmount = cycles;
+		WriteExitDestInR(R1);
+	} else if (entry->replaceFunc) {
+		FlushAll();
+		// Standard function call, nothing fancy.
+		// The function returns the number of cycles it took in EAX.
+		if (BLInRange((const void *)(entry->replaceFunc))) {
+			BL((const void *)(entry->replaceFunc));
+		} else {
+			MOVI2R(R0, (u32)entry->replaceFunc);
+			BL(R0);
+		}
+		// Alternatively, we could inline it here, instead of calling out, if it's a function
+		// we can emit.
+
+		LDR(R1, CTXREG, MIPS_REG_RA * 4);
+		WriteDownCountR(R0);
+		js.downcountAmount = 0;  // we just subtracted most of it
+		WriteExitDestInR(R1);
+	} else {
+		ERROR_LOG(HLE, "Replacement function has neither jit nor regular impl");
+	}
+
+	js.compiling = false;
+
+	// We could even do this in the jal that is branching to the function
+	// but having the op is necessary for the interpreter anyway.
+}
+
 void Jit::Comp_Generic(MIPSOpcode op)
 {
 	FlushAll();
@@ -405,6 +456,18 @@ void Jit::WriteDownCount(int offset)
 			SUBS(R1, R1, R2);
 		}
 		STR(R1, CTXREG, offsetof(MIPSState, downcount));
+	}
+}
+
+// Abuses R1
+void Jit::WriteDownCountR(ARMReg reg)
+{
+	if (jo.downcountInRegister) {
+		SUBS(DOWNCOUNTREG, DOWNCOUNTREG, reg);
+	} else {
+		LDR(R2, CTXREG, offsetof(MIPSState, downcount));
+		SUBS(R2, R2, reg);
+		STR(R2, CTXREG, offsetof(MIPSState, downcount));
 	}
 }
 

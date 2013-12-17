@@ -170,6 +170,7 @@ namespace MIPSComp
 
 		void EatInstruction(MIPSOpcode op);
 		void Comp_RunBlock(MIPSOpcode op);
+		void Comp_ReplacementFunc(MIPSOpcode op);
 
 		// TODO: Eat VFPU prefixes here.
 		void EatPrefix() { js.EatPrefix(); }
@@ -239,6 +240,7 @@ namespace MIPSComp
 		void Comp_Vsgn(MIPSOpcode op);
 		void Comp_Vocp(MIPSOpcode op);
 
+		int Replace_fabsf();
 
 		// Utility compilation functions
 		void BranchFPFlag(MIPSOpcode op, PpcGen::FixupBranchType cc, bool likely);
@@ -324,6 +326,7 @@ namespace MIPSComp
 	};
 	
 	typedef void (Jit::*MIPSCompileFunc)(MIPSOpcode opcode);
+	typedef int (Jit::*MIPSReplaceFunc)();
 
 }	// namespace MIPSComp
 

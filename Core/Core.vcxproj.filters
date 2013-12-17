@@ -505,6 +505,18 @@
     <ClCompile Include="Util\GameManager.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\ReplaceTables.cpp">
+      <Filter>HLE</Filter>
+    </ClCompile>
+    <ClCompile Include="MIPS\x86\CompReplace.cpp">
+      <Filter>MIPS\x86</Filter>
+    </ClCompile>
+    <ClCompile Include="MIPS\ARM\ArmCompReplace.cpp">
+      <Filter>MIPS\ARM</Filter>
+    </ClCompile>
+    <ClCompile Include="MIPS\PPC\PpcCompReplace.cpp">
+      <Filter>MIPS\PPC</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -935,6 +947,9 @@
     </ClInclude>
     <ClInclude Include="Util\GameManager.h">
       <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\ReplaceTables.h">
+      <Filter>HLE</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

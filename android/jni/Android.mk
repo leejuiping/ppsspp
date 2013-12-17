@@ -39,6 +39,7 @@ ARCH_FILES := \
   $(SRC)/Core/MIPS/x86/CompFPU.cpp \
   $(SRC)/Core/MIPS/x86/CompLoadStore.cpp \
   $(SRC)/Core/MIPS/x86/CompVFPU.cpp \
+  $(SRC)/Core/MIPS/x86/CompReplace.cpp \
   $(SRC)/Core/MIPS/x86/Asm.cpp \
   $(SRC)/Core/MIPS/x86/Jit.cpp \
   $(SRC)/Core/MIPS/x86/RegCache.cpp \
@@ -58,6 +59,7 @@ ARCH_FILES := \
   $(SRC)/Core/MIPS/ARM/ArmCompLoadStore.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompVFPU.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompVFPUNEON.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmCompReplace.cpp \
   $(SRC)/Core/MIPS/ARM/ArmAsm.cpp \
   $(SRC)/Core/MIPS/ARM/ArmJit.cpp \
   $(SRC)/Core/MIPS/ARM/ArmRegCache.cpp \
@@ -77,6 +79,7 @@ ARCH_FILES := \
   $(SRC)/Core/MIPS/ARM/ArmCompLoadStore.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompVFPU.cpp \
   $(SRC)/Core/MIPS/ARM/ArmCompVFPUNEON.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmCompReplace.cpp \
   $(SRC)/Core/MIPS/ARM/ArmAsm.cpp \
   $(SRC)/Core/MIPS/ARM/ArmJit.cpp \
   $(SRC)/Core/MIPS/ARM/ArmRegCache.cpp \
@@ -190,6 +193,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Dialog/SavedataParam.cpp \
   $(SRC)/Core/Font/PGF.cpp \
   $(SRC)/Core/HLE/HLETables.cpp \
+  $(SRC)/Core/HLE/ReplaceTables.cpp \
   $(SRC)/Core/HLE/HLE.cpp \
   $(SRC)/Core/HLE/sceAtrac.cpp \
   $(SRC)/Core/HLE/__sceAudio.cpp.arm \

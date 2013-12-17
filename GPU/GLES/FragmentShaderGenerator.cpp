@@ -123,19 +123,24 @@ const bool nonAlphaDestFactors[16] = {
 	true,  // GE_DSTBLEND_FIXB,
 };
 
-bool CanReplaceAlphaWithStencil() {
+ReplaceAlphaType ReplaceAlphaWithStencil() {
 	if (!gstate.isStencilTestEnabled()) {
-		return false;
-	}
-
-	if (gl_extensions.ARB_blend_func_extended) {
-		return true;
+		return REPLACE_ALPHA_NO;
 	}
 
 	if (gstate.isAlphaBlendEnabled()) {
-		return nonAlphaSrcFactors[gstate.getBlendFuncA()] && nonAlphaDestFactors[gstate.getBlendFuncB()];
+		if (nonAlphaSrcFactors[gstate.getBlendFuncA()] && nonAlphaDestFactors[gstate.getBlendFuncB()]) {
+			return REPLACE_ALPHA_YES;
+		} else {
+			if (gl_extensions.ARB_blend_func_extended) {
+				return REPLACE_ALPHA_DUALSOURCE;
+			} else {
+				return REPLACE_ALPHA_NO;
+			}
+		}
 	}
-	return true;
+
+	return REPLACE_ALPHA_YES;
 }
 
 StencilValueType ReplaceAlphaWithStencilType() {
@@ -257,7 +262,7 @@ void ComputeFragmentShaderID(FragmentShaderID *id) {
 		bool enableAlphaDoubling = CanDoubleSrcBlendMode();
 		bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 		bool doTextureAlpha = gstate.isTextureAlphaUsed();
-		bool stencilToAlpha = CanReplaceAlphaWithStencil();
+		ReplaceAlphaType stencilToAlpha = ReplaceAlphaWithStencil();
 
 		// All texfuncs except replace are the same for RGB as for RGBA with full alpha.
 		if (gstate_c.textureFullAlpha && gstate.getTextureFunction() != GE_TEXFUNC_REPLACE)
@@ -281,9 +286,11 @@ void ComputeFragmentShaderID(FragmentShaderID *id) {
 		id->d[0] |= (doTextureProjection & 1) << 16;
 		id->d[0] |= (enableColorDoubling & 1) << 17;
 		id->d[0] |= (enableAlphaDoubling & 1) << 18;
-		if (stencilToAlpha) {
+		id->d[0] |= (stencilToAlpha) << 19;
+	
+		if (stencilToAlpha != REPLACE_ALPHA_NO) {
 			// 3 bits
-			id->d[0] |= ReplaceAlphaWithStencilType() << 19;
+			id->d[0] |= ReplaceAlphaWithStencilType() << 21;
 		}
 		if (enableAlphaTest)
 			gpuStats.numAlphaTestedDraws++;
@@ -299,13 +306,17 @@ void GenerateFragmentShader(char *buffer) {
 	// In GLSL ES 3.0, you use "in" variables instead of varying.
 	bool glslES30 = false;
 	const char *varying = "varying";
+	const char *fragColor0 = "gl_FragColor";
+	const char *texture = "texture2D";
 	bool highpFog = false;
 
 #if defined(USING_GLES2)
 	// Let's wait until we have a real use for this.
 	// ES doesn't support dual source alpha :(
-	if (false && gl_extensions.GLES3) {
+	if (gl_extensions.GLES3) {
 		WRITE(p, "#version 300 es\n");  // GLSL ES 1.0
+		fragColor0 = "fragColor0";
+		texture = "texture";
 		glslES30 = true;
 	} else {
 		WRITE(p, "#version 100\n");  // GLSL ES 1.0
@@ -317,9 +328,12 @@ void GenerateFragmentShader(char *buffer) {
 	highpFog = gl_extensions.gpuVendor == GPU_VENDOR_POWERVR;
 #elif !defined(FORCE_OPENGL_2_0)
 	if (gl_extensions.VersionGEThan(3, 3, 0)) {
+		fragColor0 = "fragColor0";
+		texture = "texture";
 		glslES30 = true;
 		WRITE(p, "#version 330\n");
 	} else if (gl_extensions.VersionGEThan(3, 0, 0)) {
+		fragColor0 = "fragColor0";
 		WRITE(p, "#version 130\n");
 		// Remove lowp/mediump in non-mobile non-glsl 3 implementations
 		WRITE(p, "#define lowp\n");
@@ -353,7 +367,13 @@ void GenerateFragmentShader(char *buffer) {
 	bool enableAlphaDoubling = CanDoubleSrcBlendMode();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doTextureAlpha = gstate.isTextureAlphaUsed();
-	bool stencilToAlpha = !gstate.isModeClear() && CanReplaceAlphaWithStencil();
+
+	ReplaceAlphaType stencilToAlpha;
+	if (gstate.isModeClear()) {
+		stencilToAlpha = REPLACE_ALPHA_NO;
+	} else {
+		stencilToAlpha = ReplaceAlphaWithStencil();
+	}
 
 	if (gstate_c.textureFullAlpha && gstate.getTextureFunction() != GE_TEXFUNC_REPLACE)
 		doTextureAlpha = false;
@@ -396,9 +416,12 @@ void GenerateFragmentShader(char *buffer) {
 		else
 			WRITE(p, "vec3 roundAndScaleTo255v(in vec3 x) { return floor(x * 255.0 + 0.5); }\n");
 	}
-	if (gl_extensions.ARB_blend_func_extended) {
+
+	if (stencilToAlpha == REPLACE_ALPHA_DUALSOURCE) {
 		WRITE(p, "out vec4 fragColor0;\n");
 		WRITE(p, "out vec4 fragColor1;\n");
+	} else if (gl_extensions.VersionGEThan(3, 0, 0)) {
+		WRITE(p, "out vec4 fragColor0;\n");
 	}
 
 	WRITE(p, "void main() {\n");
@@ -418,9 +441,9 @@ void GenerateFragmentShader(char *buffer) {
 
 		if (gstate.isTextureMapEnabled()) {
 			if (doTextureProjection) {
-				WRITE(p, "  vec4 t = texture2DProj(tex, v_texcoord);\n");
+				WRITE(p, "  vec4 t = %sProj(tex, v_texcoord);\n", texture);
 			} else {
-				WRITE(p, "  vec4 t = texture2D(tex, v_texcoord);\n");
+				WRITE(p, "  vec4 t = %s(tex, v_texcoord);\n", texture);
 			}
 			WRITE(p, "  vec4 p = v_color0;\n");
 
@@ -509,33 +532,33 @@ void GenerateFragmentShader(char *buffer) {
 		}
 	}
 
-	const char *fragColor = "gl_FragColor";
-	if (gl_extensions.ARB_blend_func_extended) {
+	if (stencilToAlpha == REPLACE_ALPHA_DUALSOURCE) {
 		WRITE(p, "  fragColor0 = vec4(v.rgb, 0.0);\n");
 		WRITE(p, "  fragColor1 = vec4(0.0, 0.0, 0.0, v.a);\n");
-		fragColor = "fragColor0";
-	} else {
-		WRITE(p, "  gl_FragColor = v;\n");
+	} else if (stencilToAlpha == REPLACE_ALPHA_YES) {
+		WRITE(p, "  %s = vec4(v.rgb, 0.0);\n", fragColor0);
+	} else {  // stencilToAlpha == REPLACE_ALPHA_NO
+		WRITE(p, "  %s = v;\n", fragColor0);
 	}
 
-	if (stencilToAlpha) {
+	if (stencilToAlpha != REPLACE_ALPHA_NO) {
 		switch (ReplaceAlphaWithStencilType()) {
 		case STENCIL_VALUE_UNIFORM:
-			WRITE(p, "  %s.a = u_stencilReplaceValue;\n", fragColor);
+			WRITE(p, "  %s.a = u_stencilReplaceValue;\n", fragColor0);
 			break;
 
 		case STENCIL_VALUE_ZERO:
-			WRITE(p, "  %s.a = 0.0;\n", fragColor);
+			WRITE(p, "  %s.a = 0.0;\n", fragColor0);
 			break;
 
 		case STENCIL_VALUE_ONE:
-			WRITE(p, "  %s.a = 1.0;\n", fragColor);
+			WRITE(p, "  %s.a = 1.0;\n", fragColor0);
 			break;
 
 		case STENCIL_VALUE_UNKNOWN:
 			// Maybe we should even mask away alpha using glColorMask and not change it at all? We do get here
 			// if the stencil mode is KEEP for example.
-			WRITE(p, "  %s.a = 0.0;\n", fragColor);
+			WRITE(p, "  %s.a = 0.0;\n", fragColor0);
 			break;
 
 		case STENCIL_VALUE_KEEP:
@@ -545,10 +568,10 @@ void GenerateFragmentShader(char *buffer) {
 	}
 #ifdef DEBUG_SHADER
 	if (doTexture) {
-		WRITE(p, "  gl_FragColor = texture2D(tex, v_texcoord.xy);\n");
-		WRITE(p, "  gl_FragColor += vec4(0.3,0,0.3,0.3);\n");
+		WRITE(p, "  %s = texture2D(tex, v_texcoord.xy);\n", fragColor0);
+		WRITE(p, "  %s += vec4(0.3,0,0.3,0.3);\n", fragColor0);
 	} else {
-		WRITE(p, "  gl_FragColor = vec4(1,0,1,1);\n");
+		WRITE(p, "  %s = vec4(1,0,1,1);\n", fragColor0);
 	}
 #endif
 	WRITE(p, "}\n");

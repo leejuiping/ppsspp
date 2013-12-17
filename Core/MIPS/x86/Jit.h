@@ -78,6 +78,7 @@ public:
 	}
 
 	void Comp_RunBlock(MIPSOpcode op);
+	void Comp_ReplacementFunc(MIPSOpcode op);
 
 	// Ops
 	void Comp_ITypeMem(MIPSOpcode op);
@@ -144,6 +145,8 @@ public:
 
 	void Comp_DoNothing(MIPSOpcode op);
 
+	int Replace_fabsf();
+
 	void ApplyPrefixST(u8 *vregs, u32 prefix, VectorSize sz);
 	void ApplyPrefixD(const u8 *vregs, VectorSize sz);
 	void GetVectorRegsPrefixS(u8 *regs, VectorSize sz, int vectorReg) {
@@ -179,7 +182,9 @@ private:
 	void EatInstruction(MIPSOpcode op);
 
 	void WriteExit(u32 destination, int exit_num);
-	void WriteExitDestInEAX();
+	void WriteExitDestInReg(X64Reg reg);
+	void WriteExitDestInEAX() { WriteExitDestInReg(EAX); }
+
 //	void WriteRfiExitDestInEAX();
 	void WriteSyscallExit();
 	bool CheckJitBreakpoint(u32 addr, int downcountOffset);
@@ -292,6 +297,7 @@ private:
 };
 
 typedef void (Jit::*MIPSCompileFunc)(MIPSOpcode opcode);
+typedef int (Jit::*MIPSReplaceFunc)();
 
 }	// namespace MIPSComp
 

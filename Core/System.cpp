@@ -30,11 +30,13 @@
 #include "Core/MemMap.h"
 
 #include "Core/MIPS/MIPS.h"
+#include "Core/MIPS/MIPSAnalyst.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
 
 #include "Core/System.h"
 #include "Core/PSPMixer.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HLE/ReplaceTables.h"
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/HLE/sceAudio.h"
@@ -165,6 +167,9 @@ void CPU_Init() {
 	std::string filename = coreParameter.fileToStart;
 	IdentifiedFileType type = Identify_File(filename);
 
+	MIPSAnalyst::Reset();
+	Replacement_Init();
+
 	switch (type) {
 	case FILETYPE_PSP_ISO:
 	case FILETYPE_PSP_ISO_NP:
@@ -211,6 +216,8 @@ void CPU_Shutdown() {
 	if (g_Config.bAutoSaveSymbolMap) {
 		host->SaveSymbolMap();
 	}
+
+	Replacement_Shutdown();
 
 	CoreTiming::Shutdown();
 	__KernelShutdown();
@@ -319,6 +326,12 @@ bool PSP_IsInited() {
 }
 
 void PSP_Shutdown() {
+#ifndef USING_GLES2
+	if (g_Config.bFuncHashMap) {
+		MIPSAnalyst::StoreHashMap();
+	}
+#endif
+
 	if (coreState == CORE_RUNNING)
 		Core_UpdateState(CORE_ERROR);
 	Core_NotifyShutdown();

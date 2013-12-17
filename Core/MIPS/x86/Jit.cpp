@@ -30,6 +30,7 @@
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/MIPS/MIPSInt.h"
 #include "Core/MIPS/MIPSTables.h"
+#include "Core/HLE/ReplaceTables.h"
 
 #include "RegCache.h"
 #include "Jit.h"
@@ -371,6 +372,49 @@ void Jit::Comp_RunBlock(MIPSOpcode op)
 	ERROR_LOG(JIT, "Comp_RunBlock");
 }
 
+void Jit::Comp_ReplacementFunc(MIPSOpcode op)
+{
+	// We get here if we execute the first instruction of a replaced function. This means
+	// that we do need to return to RA.
+
+	// Inlined function calls (caught in jal) are handled differently.
+
+	int index = op.encoding & MIPS_EMUHACK_VALUE_MASK;
+		
+	const ReplacementTableEntry *entry = GetReplacementFunc(index);
+	if (!entry) {
+		ERROR_LOG(HLE, "Invalid replacement op %08x", op.encoding);
+		return;
+	}
+
+	// JIT goes first.
+	if (entry->jitReplaceFunc) {
+		MIPSReplaceFunc repl = entry->jitReplaceFunc;
+		int cycles = (this->*repl)();
+		FlushAll();
+		MOV(32, R(ECX), M(&currentMIPS->r[MIPS_REG_RA]));
+		js.downcountAmount = cycles;
+		WriteExitDestInReg(ECX);
+		js.compiling = false;
+	} else if (entry->replaceFunc) {
+		FlushAll();
+		// Standard function call, nothing fancy.
+		// The function returns the number of cycles it took in EAX.
+		CALL((const void *)entry->replaceFunc);
+		// Alternatively, we could inline it here, instead of calling out, if it's a function
+		// we can emit.
+
+		MOV(32, R(ECX), M(&currentMIPS->r[MIPS_REG_RA]));
+		SUB(32, M(&currentMIPS->downcount - 1), R(EAX));
+		js.downcountAmount = 1;  // we just subtracted most of it
+		WriteExitDestInReg(ECX);
+
+		js.compiling = false;
+	} else {
+		ERROR_LOG(HLE, "Replacement function has neither jit nor regular impl");
+	}
+}
+
 void Jit::Comp_Generic(MIPSOpcode op)
 {
 	FlushAll();
@@ -437,10 +481,10 @@ void Jit::WriteExit(u32 destination, int exit_num)
 	}
 }
 
-void Jit::WriteExitDestInEAX()
+void Jit::WriteExitDestInReg(X64Reg reg)
 {
 	// TODO: Some wasted potential, dispatcher will always read this back into EAX.
-	MOV(32, M(&mips_->pc), R(EAX));
+	MOV(32, M(&mips_->pc), R(reg));
 
 	// If we need to verify coreState and rewind, we may not jump yet.
 	if (js.afterOp & (JitState::AFTER_CORE_STATE | JitState::AFTER_REWIND_PC_BAD_STATE))
@@ -460,9 +504,9 @@ void Jit::WriteExitDestInEAX()
 	// Validate the jump to avoid a crash?
 	if (!g_Config.bFastMemory)
 	{
-		CMP(32, R(EAX), Imm32(PSP_GetKernelMemoryBase()));
+		CMP(32, R(reg), Imm32(PSP_GetKernelMemoryBase()));
 		FixupBranch tooLow = J_CC(CC_B);
-		CMP(32, R(EAX), Imm32(PSP_GetUserMemoryEnd()));
+		CMP(32, R(reg), Imm32(PSP_GetUserMemoryEnd()));
 		FixupBranch tooHigh = J_CC(CC_AE);
 
 		// Need to set neg flag again if necessary.
@@ -472,8 +516,8 @@ void Jit::WriteExitDestInEAX()
 		SetJumpTarget(tooLow);
 		SetJumpTarget(tooHigh);
 
-		CallProtectedFunction((void *) Memory::GetPointer, R(EAX));
-		CMP(32, R(EAX), Imm32(0));
+		CallProtectedFunction((void *) Memory::GetPointer, R(reg));
+		CMP(32, R(reg), Imm32(0));
 		FixupBranch skip = J_CC(CC_NE);
 
 		// TODO: "Ignore" this so other threads can continue?

@@ -869,6 +869,7 @@ if(ARM)
 		Core/MIPS/ARM/ArmCompLoadStore.cpp
 		Core/MIPS/ARM/ArmCompVFPU.cpp
 		Core/MIPS/ARM/ArmCompVFPUNEON.cpp
+		Core/MIPS/ARM/ArmCompReplace.cpp
 		Core/MIPS/ARM/ArmJit.cpp
 		Core/MIPS/ARM/ArmJit.h
 		Core/MIPS/ARM/ArmRegCache.cpp
@@ -887,6 +888,7 @@ elseif(X86)
 		Core/MIPS/x86/CompFPU.cpp
 		Core/MIPS/x86/CompLoadStore.cpp
 		Core/MIPS/x86/CompVFPU.cpp
+		Core/MIPS/x86/CompReplace.cpp
 		Core/MIPS/x86/Jit.cpp
 		Core/MIPS/x86/Jit.h
 		Core/MIPS/x86/RegCache.cpp
@@ -968,6 +970,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/FunctionWrappers.h
 	Core/HLE/HLE.cpp
 	Core/HLE/HLE.h
+	Core/HLE/ReplaceTables.cpp
+	Core/HLE/ReplaceTables.h
 	Core/HLE/HLETables.cpp
 	Core/HLE/HLETables.h
 	Core/HLE/KernelWaitHelpers.h

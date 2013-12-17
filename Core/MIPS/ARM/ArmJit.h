@@ -73,6 +73,7 @@ public:
 	void CompileDelaySlot(int flags);
 	void EatInstruction(MIPSOpcode op);
 	void Comp_RunBlock(MIPSOpcode op);
+	void Comp_ReplacementFunc(MIPSOpcode op);
 
 	// Ops
 	void Comp_ITypeMem(MIPSOpcode op);
@@ -176,6 +177,7 @@ public:
 	void CompNEON_Vsgn(MIPSOpcode op);
 	void CompNEON_Vocp(MIPSOpcode op);
 
+	int Replace_fabsf();
 
 	JitBlockCache *GetBlockCache() { return &blocks; }
 
@@ -190,6 +192,7 @@ private:
 	void FlushPrefixV();
 
 	void WriteDownCount(int offset = 0);
+	void WriteDownCountR(ARMReg reg);
 	void MovFromPC(ARMReg r);
 	void MovToPC(ARMReg r);
 
@@ -259,6 +262,7 @@ public:
 };
 
 typedef void (Jit::*MIPSCompileFunc)(MIPSOpcode opcode);
+typedef int (Jit::*MIPSReplaceFunc)();
 
 }	// namespace MIPSComp
 

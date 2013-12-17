@@ -74,12 +74,43 @@ namespace MIPSAnalyst
 
 	AnalysisResults Analyze(u32 address);
 
+	bool IsRegisterUsed(MIPSGPReg reg, u32 addr);
+
+	struct AnalyzedFunction {
+		u32 start;
+		u32 end;
+		u64 hash;
+		u32 size;
+		bool isStraightLeaf;
+		bool hasHash;
+		bool usesVFPU;
+		char name[64];
+	};
+
+	struct ReplacementTableEntry;
+
+	void Reset();
 
 	bool IsRegisterUsed(u32 reg, u32 addr);
-	void ScanForFunctions(u32 startAddr, u32 endAddr);
+	// This will not only create a database of "AnalyzedFunction" structs, it also
+	// will insert all the functions it finds into the symbol map, if insertSymbols is true.
+
+	// If we have loaded symbols from the elf, we'll register functions as they are touched
+	// so that we don't just dump them all in the cache.
+	void AnalyzeFunction(u32 startAddr, u32 size, const char *name);
+	void ScanForFunctions(u32 startAddr, u32 endAddr, bool insertSymbols);
+	void ForgetFunctions(u32 startAddr, u32 endAddr);
 	void CompileLeafs();
-	void LoadHashMap(const std::string &filename);
-	void StoreHashMap(const std::string &filename);
+
+	void SetHashMapFilename(std::string filename = "");
+	void LoadHashMap(std::string filename);
+	void StoreHashMap(std::string filename = "");
+
+	const char *LookupHash(u64 hash, int funcSize);
+	void ReplaceFunctions(const ReplacementTableEntry *e, int numEntries);
+
+	void UpdateHashMap();
+	void ApplyHashMap();
 
 	std::vector<MIPSGPReg> GetInputRegs(MIPSOpcode op);
 	std::vector<MIPSGPReg> GetOutputRegs(MIPSOpcode op);
@@ -93,8 +124,7 @@ namespace MIPSAnalyst
 
 	void Shutdown();
 	
-	typedef struct
-	{
+	typedef struct {
 		DebugInterface* cpu;
 		u32 opcodeAddress;
 		MIPSOpcode encodedOpcode;

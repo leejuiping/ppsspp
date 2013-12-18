@@ -23,17 +23,18 @@
 #include "ChunkFile.h"
 
 #include "MemMap.h"
-#include "Core.h"
 #include "MIPS/MIPS.h"
 #include "MIPS/JitCommon/JitCommon.h"
 #include "HLE/HLE.h"
-#include "CPU.h"
+
+#include "Core/CPU.h"
+#include "Core/Core.h"
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/Debugger/Breakpoints.h"
 #include "Core/Config.h"
+#include "Core/HLE/ReplaceTables.h"
 
-namespace Memory
-{
+namespace Memory {
 
 // The base pointer to the auto-mirrored arena.
 u8*	base = NULL;
@@ -170,20 +171,32 @@ void Clear()
 		memset(m_pVRAM, 0, VRAM_SIZE);
 }
 
+
+
 Opcode Read_Instruction(u32 address)
 {
 	Opcode inst = Opcode(Read_U32(address));
-	if (MIPS_IS_RUNBLOCK(inst) && MIPSComp::jit)
-	{
+	if (MIPS_IS_RUNBLOCK(inst.encoding) && MIPSComp::jit) {
 		JitBlockCache *bc = MIPSComp::jit->GetBlockCache();
 		int block_num = bc->GetBlockNumberFromEmuHackOp(inst, true);
 		if (block_num >= 0) {
-			return bc->GetOriginalFirstOp(block_num);
+			inst = bc->GetOriginalFirstOp(block_num);
+			/*
+			u32 op;
+			if (GetReplacedOpAt(address, &op)) {
+				return Opcode(op);
+			}*/
+			return inst;
 		} else {
 			return inst;
 		}
-	} else if (MIPS_IS_REPLACEMENT(inst)) {
-		return inst;
+	} else if (MIPS_IS_REPLACEMENT(inst.encoding)) {
+		u32 op;
+		if (GetReplacedOpAt(address, &op)) {
+			return Opcode(op);
+		} else {
+			return inst;
+		}
 	} else {
 		return inst;
 	}
@@ -191,7 +204,18 @@ Opcode Read_Instruction(u32 address)
 
 Opcode Read_Opcode_JIT(u32 address)
 {
-	return Read_Instruction(address);
+	Opcode inst = Opcode(Read_U32(address));
+	if (MIPS_IS_RUNBLOCK(inst.encoding) && MIPSComp::jit) {
+		JitBlockCache *bc = MIPSComp::jit->GetBlockCache();
+		int block_num = bc->GetBlockNumberFromEmuHackOp(inst, true);
+		if (block_num >= 0) {
+			return bc->GetOriginalFirstOp(block_num);
+		} else {
+			return inst;
+		}
+	} else {
+		return inst;
+	}
 }
 
 // WARNING! No checks!
@@ -204,9 +228,8 @@ void Write_Opcode_JIT(const u32 _Address, const Opcode _Value)
 void Memset(const u32 _Address, const u8 _iValue, const u32 _iLength)
 {	
 	u8 *ptr = GetPointer(_Address);
-	if (ptr != NULL)
-	{
-		memset(ptr,_iValue,_iLength);
+	if (ptr != NULL) {
+		memset(ptr, _iValue, _iLength);
 	}
 	else
 	{

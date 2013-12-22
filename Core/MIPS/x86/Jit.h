@@ -73,9 +73,7 @@ public:
 	void Compile(u32 em_address);	// Compiles a block at current MIPS PC
 	const u8 *DoJit(u32 em_address, JitBlock *b);
 
-	bool IsInDispatch(const u8 *p) {
-		return asm_.IsInSpace(p);
-	}
+	bool DescribeCodePtr(const u8 *ptr, std::string &name);
 
 	void Comp_RunBlock(MIPSOpcode op);
 	void Comp_ReplacementFunc(MIPSOpcode op);
@@ -146,6 +144,7 @@ public:
 	void Comp_DoNothing(MIPSOpcode op);
 
 	int Replace_fabsf();
+	int Replace_dl_write_matrix();
 
 	void ApplyPrefixST(u8 *vregs, u32 prefix, VectorSize sz);
 	void ApplyPrefixD(const u8 *vregs, VectorSize sz);
@@ -175,7 +174,6 @@ private:
 	void FlushPrefixV();
 	void WriteDowncount(int offset = 0);
 	bool ReplaceJalTo(u32 dest);
-
 	// See CompileDelaySlotFlags for flags.
 	void CompileDelaySlot(int flags, RegCacheState *state = NULL);
 	void CompileDelaySlot(int flags, RegCacheState &state) {

@@ -33,6 +33,7 @@
 #include "UI/TouchControlLayoutScreen.h"
 #include "UI/TouchControlVisibilityScreen.h"
 #include "UI/TiltAnalogSettingsScreen.h"
+#include "UI/TiltEventProcessor.h"
 
 #include "Core/Config.h"
 #include "Core/Host.h"
@@ -41,6 +42,7 @@
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "android/jni/TestRunner.h"
 #include "GPU/GPUInterface.h"
+#include "GPU/GLES/Framebuffer.h"
 #include "Common/KeyMap.h"
 
 #ifdef _WIN32
@@ -119,7 +121,7 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
 	postProcChoice_ = graphicsSettings->Add(new Choice(gs->T("Postprocessing Shader")));
 	postProcChoice_->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
-	postProcChoice_->SetEnabled(g_Config.iRenderingMode != 0);
+	postProcChoice_->SetEnabled(g_Config.iRenderingMode != FB_NON_BUFFERED_MODE);
 
 #if defined(_WIN32) || defined(USING_QT_UI)
 	graphicsSettings->Add(new CheckBox(&g_Config.bFullScreen, gs->T("FullScreen")))->OnClick.Handle(this, &GameSettingsScreen::OnFullscreenChange);
@@ -138,7 +140,7 @@ void GameSettingsScreen::CreateViews() {
 #endif
 	resolutionChoice_ = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iInternalResolution, gs->T("Rendering Resolution"), internalResolutions, 0, ARRAY_SIZE(internalResolutions), gs, screenManager()));
 	resolutionChoice_->OnClick.Handle(this, &GameSettingsScreen::OnResolutionChange);
-	resolutionChoice_->SetEnabled(g_Config.iRenderingMode != 0);
+	resolutionChoice_->SetEnabled(g_Config.iRenderingMode != FB_NON_BUFFERED_MODE);
 #ifdef _WIN32
 	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
 #endif
@@ -232,10 +234,12 @@ void GameSettingsScreen::CreateViews() {
 
 #if defined(USING_GLES2)
 	controlsSettings->Add(new CheckBox(&g_Config.bHapticFeedback, c->T("HapticFeedback", "Haptic Feedback (vibration)")));
-	controlsSettings->Add(new CheckBox(&g_Config.bAccelerometerToAnalogHoriz, c->T("Tilt", "Tilt to Analog (horizontal)")));
-	Choice *tiltAnalog = controlsSettings->Add(new Choice(c->T("Customize tilt")));
-	tiltAnalog->OnClick.Handle(this, &GameSettingsScreen::OnTiltAnalogSettings);
-	tiltAnalog->SetEnabledPtr(&g_Config.bAccelerometerToAnalogHoriz);
+	static const char *tiltTypes[] = { "None (Disabled)", "Analog Stick", "D-PAD", "PSP Action Buttons"};
+	controlsSettings->Add(new PopupMultiChoice(&g_Config.iTiltInputType, c->T("Tilt Input Type"), tiltTypes, 0, ARRAY_SIZE(tiltTypes), c, screenManager()))->OnClick.Handle(this, &GameSettingsScreen::OnTiltTypeChange);
+
+	Choice *customizeTilt = controlsSettings->Add(new Choice(c->T("Customize tilt")));
+	customizeTilt->OnClick.Handle(this, &GameSettingsScreen::OnTiltCuztomize);
+	customizeTilt->SetEnabledPtr((bool *)&g_Config.iTiltInputType); //<- dirty int-to-bool cast
 #endif
 	controlsSettings->Add(new ItemHeader(c->T("OnScreen", "On-Screen Touch Controls")));
 	controlsSettings->Add(new CheckBox(&g_Config.bShowTouchControls, c->T("OnScreen", "On-Screen Touch Controls")));
@@ -321,8 +325,8 @@ UI::EventReturn GameSettingsScreen::OnRenderingMode(UI::EventParams &e) {
 	enableReports_ = Reporting::IsEnabled();
 	enableReportsCheckbox_->SetEnabled(Reporting::IsSupported());
 
-	postProcChoice_->SetEnabled(g_Config.iRenderingMode != 0);
-	resolutionChoice_->SetEnabled(g_Config.iRenderingMode != 0);
+	postProcChoice_->SetEnabled(g_Config.iRenderingMode != FB_NON_BUFFERED_MODE);
+	resolutionChoice_->SetEnabled(g_Config.iRenderingMode != FB_NON_BUFFERED_MODE);
 	return UI::EVENT_DONE;
 }
 
@@ -500,7 +504,14 @@ UI::EventReturn GameSettingsScreen::OnTouchControlLayout(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 };
 
-UI::EventReturn GameSettingsScreen::OnTiltAnalogSettings(UI::EventParams &e){
+//when the tilt event type is modified, we need to reset all tilt settings.
+//refer to the ResetTiltEvents() function for a detailed explanation.
+UI::EventReturn GameSettingsScreen::OnTiltTypeChange(UI::EventParams &e){
+	TiltEventProcessor::ResetTiltEvents();
+	return UI::EVENT_DONE;
+};
+
+UI::EventReturn GameSettingsScreen::OnTiltCuztomize(UI::EventParams &e){
 	screenManager()->push(new TiltAnalogSettingsScreen());
 	return UI::EVENT_DONE;
 };

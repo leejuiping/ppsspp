@@ -38,6 +38,7 @@
 #include "Core/System.h"
 #include "GPU/GPUState.h"
 #include "GPU/GPUInterface.h"
+#include "GPU/GLES/Framebuffer.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceDisplay.h"
 #include "Core/Debugger/SymbolMap.h"
@@ -505,6 +506,7 @@ void EmuScreen::update(InputState &input) {
 	// Apply tilt to left stick
 	// TODO: Make into an axis
 #ifdef USING_GLES2
+	/*
 	if (g_Config.bAccelerometerToAnalogHoriz) {
 		// Get the "base" coordinate system which is setup by the calibration system
 		float base_x = g_Config.fTiltBaseX;
@@ -537,6 +539,7 @@ void EmuScreen::update(InputState &input) {
 		leftstick_y += clamp1(delta_y);
 		__CtrlSetAnalogY(clamp1(leftstick_y), CTRL_STICK_LEFT);
 	}
+	*/
 #endif
 
 	// Make sure fpsLimit starts at 0
@@ -590,7 +593,7 @@ void EmuScreen::render() {
 	if (invalid_)
 		return;
 
-	bool useBufferedRendering = g_Config.iRenderingMode != 0 ? 1 : 0;
+	bool useBufferedRendering = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE;
 	if (useBufferedRendering)
 		fbo_unbind();
 

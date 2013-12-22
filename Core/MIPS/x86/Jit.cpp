@@ -59,9 +59,8 @@ const bool USE_JIT_MISSMAP = false;
 static std::map<std::string, u32> notJitOps;
 
 template<typename A, typename B>
-std::pair<B,A> flip_pair(const std::pair<A,B> &p)
-{
-    return std::pair<B, A>(p.second, p.first);
+std::pair<B,A> flip_pair(const std::pair<A,B> &p) {
+	return std::pair<B, A>(p.second, p.first);
 }
 
 u32 JitBreakpoint()
@@ -286,9 +285,7 @@ void Jit::Compile(u32 em_address)
 
 void Jit::RunLoopUntil(u64 globalticks)
 {
-	// TODO: copy globalticks somewhere
 	((void (*)())asm_.enterCode)();
-	// NOTICE_LOG(JIT, "Exited jitted code at %i, corestate=%i, dc=%i", CoreTiming::GetTicks() / 1000, (int)coreState, CoreTiming::downcount);
 }
 
 const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
@@ -366,6 +363,37 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 	return b->normalEntry;
 }
 
+bool Jit::DescribeCodePtr(const u8 *ptr, std::string &name)
+{
+	u32 jitAddr = blocks.GetAddressFromBlockPtr(ptr);
+
+	// Returns 0 when it's valid, but unknown.
+	if (jitAddr == 0)
+		name = "UnknownOrDeletedBlock";
+	else if (jitAddr != (u32)-1)
+	{
+		char temp[1024];
+		const char *label = symbolMap.GetDescription(jitAddr);
+		if (label != NULL)
+			snprintf(temp, sizeof(temp), "%08x_%s", jitAddr, label);
+		else
+			snprintf(temp, sizeof(temp), "%08x", jitAddr);
+		name = temp;
+	}
+	else if (asm_.IsInSpace(ptr))
+		name = "RunLoopUntil";
+	else if (thunks.IsInSpace(ptr))
+		name = "Thunk";
+	else if (IsInSpace(ptr))
+		name = "Unknown";
+	// Not anywhere in jit, then.
+	else
+		return false;
+
+	// If we got here, one of the above cases matched.
+	return true;
+}
+
 void Jit::Comp_RunBlock(MIPSOpcode op)
 {
 	// This shouldn't be necessary, the dispatcher should catch us before we get here.
@@ -394,11 +422,12 @@ bool Jit::ReplaceJalTo(u32 dest) {
 		MIPSReplaceFunc repl = entry->jitReplaceFunc;
 		int cycles = (this->*repl)();
 		js.downcountAmount += cycles;
+		js.compilerPC += 4;
 		// No writing exits, keep going!
 
 		// Add a trigger so that if the inlined code changes, we invalidate this block.
 		// TODO: Correctly determine the size of this block.
-		blocks.CreateProxyBlock(js.blockStart, dest, 4, GetCodePtr());
+		blocks.ProxyBlock(js.blockStart, dest, 4, GetCodePtr());
 		return true;
 	} else {
 		return false;
@@ -413,7 +442,7 @@ void Jit::Comp_ReplacementFunc(MIPSOpcode op)
 	// Inlined function calls (caught in jal) are handled differently.
 
 	int index = op.encoding & MIPS_EMUHACK_VALUE_MASK;
-		
+
 	const ReplacementTableEntry *entry = GetReplacementFunc(index);
 	if (!entry) {
 		ERROR_LOG(HLE, "Invalid replacement op %08x", op.encoding);

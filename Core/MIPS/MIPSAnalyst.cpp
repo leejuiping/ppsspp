@@ -228,7 +228,12 @@ namespace MIPSAnalyst {
 			size_t pos = 0;
 			for (u32 addr = f.start; addr <= f.end; addr += 4) {
 				u32 validbits = 0xFFFFFFFF;
-				MIPSOpcode instr = Memory::Read_Instruction(addr);
+				MIPSOpcode instr = Memory::Read_Instruction(addr, true);
+				if (MIPS_IS_EMUHACK(instr)) {
+					f.hasHash = false;
+					goto skip;
+				}
+				
 				MIPSInfo flags = MIPSGetInfo(instr);
 				if (flags & IN_IMM16)
 					validbits &= ~0xFFFF;
@@ -239,6 +244,8 @@ namespace MIPSAnalyst {
 
 			f.hash = CityHash64((const char *) &buffer[0], buffer.size() * sizeof(u32));
 			f.hasHash = true;
+skip:
+			;
 		}
 	}
 
@@ -446,7 +453,7 @@ namespace MIPSAnalyst {
 		}
 	}
 
-	void AnalyzeFunction(u32 startAddr, u32 size, const char *name) {
+	void RegisterFunction(u32 startAddr, u32 size, const char *name) {
 		// Check if we have this already
 		for (auto iter = functions.begin(); iter != functions.end(); iter++) {
 			if (iter->start == startAddr) {
@@ -478,8 +485,6 @@ namespace MIPSAnalyst {
 	}
 
 	void ForgetFunctions(u32 startAddr, u32 endAddr) {
-		StoreHashMap(GetSysDirectory(DIRECTORY_SYSTEM) + "knownfuncs.ini");
-
 		// It makes sense to forget functions as modules are unloaded but it breaks
 		// the easy way of saving a hashmap by unloading and loading a game. I added
 		// an alternative way.
@@ -507,7 +512,7 @@ namespace MIPSAnalyst {
 		for (auto it = functions.begin(), end = functions.end(); it != end; ++it) {
 			const AnalyzedFunction &f = *it;
 			// Small functions aren't very interesting.
-			if (!f.hasHash || f.size < 12) {
+			if (!f.hasHash || f.size <= 16) {
 				continue;
 			}
 			// Functions with default names aren't very interesting either.

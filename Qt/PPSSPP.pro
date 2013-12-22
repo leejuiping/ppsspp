@@ -53,7 +53,7 @@ win32 {
 	else: LIBS += $$files($$P/dx9sdk/Lib/x86/*.lib)
 }
 linux {
-	LIBS += -ldl
+	LIBS += -ldl -lrt
 	PRE_TARGETDEPS += $$CONFIG_DIR/libCommon.a $$CONFIG_DIR/libCore.a $$CONFIG_DIR/libNative.a
 	packagesExist(sdl) {
 		DEFINES += QT_HAS_SDL
@@ -83,6 +83,7 @@ SOURCES += $$P/UI/*Screen.cpp \
 	$$P/UI/GamepadEmu.cpp \
 	$$P/UI/GameInfoCache.cpp \
 	$$P/UI/OnScreenDisplay.cpp \
+	$$P/UI/TiltEventProcessor.cpp \
 	$$P/UI/UIShader.cpp \
 	$$P/UI/ui_atlas_lowmem.cpp \
 	$$P/android/jni/TestRunner.cpp

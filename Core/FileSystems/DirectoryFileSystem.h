@@ -86,6 +86,8 @@ public:
 	DirectoryFileSystem(IHandleAllocator *_hAlloc, std::string _basePath);
 	~DirectoryFileSystem();
 
+	void CloseAll();
+
 	void DoState(PointerWrap &p);
 	std::vector<PSPFileInfo> GetDirListing(std::string path);
 	u32      OpenFile(std::string filename, FileAccess access, const char *devicename=NULL);
@@ -95,6 +97,8 @@ public:
 	size_t   SeekFile(u32 handle, s32 position, FileMove type);
 	PSPFileInfo GetFileInfo(std::string filename);
 	bool     OwnsHandle(u32 handle);
+	int      Ioctl(u32 handle, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 outlen, int &usec);
+	int      DevType(u32 handle);
 
 	bool MkDir(const std::string &dirname);
 	bool RmDir(const std::string &dirname);
@@ -105,6 +109,8 @@ public:
 private:
 	struct OpenFileEntry {
 		DirectoryFileHandle hFile;
+		std::string guestFilename;
+		FileAccess access;
 	};
 
 	typedef std::map<u32, OpenFileEntry> EntryMap;
@@ -132,6 +138,8 @@ public:
 	size_t   SeekFile(u32 handle, s32 position, FileMove type);
 	PSPFileInfo GetFileInfo(std::string filename);
 	bool     OwnsHandle(u32 handle);
+	int      Ioctl(u32 handle, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 outlen, int &usec);
+	int      DevType(u32 handle);
 
 	bool MkDir(const std::string &dirname);
 	bool RmDir(const std::string &dirname);

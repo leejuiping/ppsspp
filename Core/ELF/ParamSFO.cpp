@@ -15,9 +15,12 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include <stdio.h>
-#include <string.h>
-#include "ParamSFO.h"
+#include <cstdio>
+#include <cstring>
+
+#include "Common/CommonTypes.h"
+#include "Common/Log.h"
+#include "Core/ELF/ParamSFO.h"
 
 struct Header
 {
@@ -243,5 +246,20 @@ bool ParamSFOData::WriteSFO(u8 **paramsfo, size_t *size)
 	return true;
 
 
+}
+
+void ParamSFOData::ValueData::SetData(const u8* data, int size)
+{
+	if(u_value)
+	{
+		delete[] u_value;
+		u_value = 0;
+	}
+	if(size > 0)
+	{
+		u_value = new u8[size];
+		memcpy(u_value, data, size);
+	}
+	u_size = size;
 }
 

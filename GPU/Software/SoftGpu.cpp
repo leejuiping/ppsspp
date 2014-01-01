@@ -21,6 +21,7 @@
 #include "GPU/Common/TextureDecoder.h"
 #include "Core/Config.h"
 #include "Core/Debugger/Breakpoints.h"
+#include "Core/Host.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/sceKernelInterrupt.h"
 #include "Core/HLE/sceGe.h"
@@ -168,6 +169,13 @@ SoftGPU::~SoftGPU()
 {
 	glDeleteProgram(program);
 	glDeleteTextures(1, &temp_texture);
+}
+
+void SoftGPU::SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {
+	displayFramebuf_ = framebuf;
+	displayStride_ = stride;
+	displayFormat_ = format;
+	host->GPUNotifyDisplay(framebuf, stride, format);
 }
 
 // Copies RGBA8 data from RAM to the currently bound render target.
@@ -865,17 +873,35 @@ bool SoftGPU::FramebufferDirty() {
 
 bool SoftGPU::GetCurrentFramebuffer(GPUDebugBuffer &buffer)
 {
-	// We don't know the height, so just use 512, which should be the max (hopefully?)
-	// TODO: Could check clipping and such, though...?
-	buffer = GPUDebugBuffer(fb.data, gstate.FrameBufStride(), 512, gstate.FrameBufFormat());
+	const int w = gstate.getRegionX2() - gstate.getRegionX1() + 1;
+	const int h = gstate.getRegionY2() - gstate.getRegionY1() + 1;
+	buffer.Allocate(w, h, gstate.FrameBufFormat());
+
+	const int depth = gstate.FrameBufFormat() == GE_FORMAT_8888 ? 4 : 2;
+	const u8 *src = fb.data + gstate.FrameBufStride() * depth * gstate.getRegionY1();
+	u8 *dst = buffer.GetData();
+	for (int y = gstate.getRegionY1(); y <= gstate.getRegionY2(); ++y) {
+		memcpy(dst, src + gstate.getRegionX1(), (gstate.getRegionX2() + 1) * depth);
+		dst += w * depth;
+		src += gstate.FrameBufStride() * depth;
+	}
 	return true;
 }
 
 bool SoftGPU::GetCurrentDepthbuffer(GPUDebugBuffer &buffer)
 {
-	// We don't know the height, so just use 512, which should be the max (hopefully?)
-	// TODO: Could check clipping and such, though...?
-	buffer = GPUDebugBuffer(depthbuf.data, gstate.DepthBufStride(), 512, GPU_DBG_FORMAT_16BIT);
+	const int w = gstate.getRegionX2() - gstate.getRegionX1() + 1;
+	const int h = gstate.getRegionY2() - gstate.getRegionY1() + 1;
+	buffer.Allocate(w, h, GPU_DBG_FORMAT_16BIT);
+
+	const int depth = 2;
+	const u8 *src = depthbuf.data + gstate.DepthBufStride() * depth * gstate.getRegionY1();
+	u8 *dst = buffer.GetData();
+	for (int y = gstate.getRegionY1(); y <= gstate.getRegionY2(); ++y) {
+		memcpy(dst, src + gstate.getRegionX1(), (gstate.getRegionX2() + 1) * depth);
+		dst += w * depth;
+		src += gstate.DepthBufStride() * depth;
+	}
 	return true;
 }
 
@@ -887,4 +913,9 @@ bool SoftGPU::GetCurrentStencilbuffer(GPUDebugBuffer &buffer)
 bool SoftGPU::GetCurrentTexture(GPUDebugBuffer &buffer)
 {
 	return Rasterizer::GetCurrentTexture(buffer);
+}
+
+bool SoftGPU::GetCurrentSimpleVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices)
+{
+	return TransformUnit::GetCurrentSimpleVertices(count, vertices, indices);
 }

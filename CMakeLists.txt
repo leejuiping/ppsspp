@@ -916,8 +916,6 @@ endif()
 # SHARED on ANDROID, STATIC everywhere else
 add_library(${CoreLibName} ${CoreLinkType}
 	${CoreExtra}
-	Core/CPU.cpp
-	Core/CPU.h
 	Core/Config.cpp
 	Core/Config.h
 	Core/Core.cpp
@@ -935,6 +933,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Debugger/DebugInterface.h
 	Core/Debugger/SymbolMap.cpp
 	Core/Debugger/SymbolMap.h
+	Core/Debugger/DisassemblyManager.cpp
+	Core/Debugger/DisassemblyManager.h
 	Core/Dialog/PSPDialog.cpp
 	Core/Dialog/PSPDialog.h
 	Core/Dialog/PSPGamedataInstallDialog.cpp
@@ -966,6 +966,7 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/FileSystems/DirectoryFileSystem.cpp
 	Core/FileSystems/DirectoryFileSystem.h
 	Core/FileSystems/FileSystem.h
+	Core/FileSystems/FileSystem.cpp
 	Core/FileSystems/ISOFileSystem.cpp
 	Core/FileSystems/ISOFileSystem.h
 	Core/FileSystems/MetaFileSystem.cpp

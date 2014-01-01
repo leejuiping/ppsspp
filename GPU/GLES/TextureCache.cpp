@@ -17,7 +17,9 @@
 
 #include <map>
 #include <algorithm>
+#include <cstring>
 
+#include "Core/Host.h"
 #include "Core/MemMap.h"
 #include "Core/Reporting.h"
 #include "GPU/ge_constants.h"
@@ -26,6 +28,7 @@
 #include "GPU/GLES/Framebuffer.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "Core/Config.h"
+#include "Core/Host.h"
 
 #include "ext/xxhash.h"
 #include "math/math_util.h"
@@ -1124,9 +1127,8 @@ void TextureCache::SetTexture(bool force) {
 	// If GLES3 is available, we can preallocate the storage, which makes texture loading more efficient.
 	GLenum dstFmt = GetDestFormat(format, gstate.getClutPaletteFormat());
 
-#if 0   // Needs more testing
-#ifdef MAY_HAVE_GLES3
-	if (gl_extensions.GLES3) {
+#if defined(MAY_HAVE_GLES3)
+	if (gl_extensions.GLES3 && maxLevel > 0) {
 		// glTexStorage2D requires the use of sized formats.
 		GLenum storageFmt = GL_RGBA8;
 		switch (dstFmt) {
@@ -1138,11 +1140,11 @@ void TextureCache::SetTexture(bool force) {
 			ERROR_LOG(G3D, "Unknown dstfmt %i", (int)dstFmt);
 			break;
 		}
+		// TODO: This may cause bugs, since it hard-sets the texture w/h, and we might try to reuse it later with a different size.
 		glTexStorage2D(GL_TEXTURE_2D, maxLevel + 1, storageFmt, w, h);
 		// Make sure we don't use glTexImage2D after glTexStorage2D.
 		replaceImages = true;
 	}
-#endif
 #endif
 
 	// GLES2 doesn't have support for a "Max lod" which is critical as PSP games often
@@ -1150,25 +1152,26 @@ void TextureCache::SetTexture(bool force) {
 	// the bottom few levels or rely on OpenGL's autogen mipmaps instead, which might not
 	// be as good quality as the game's own (might even be better in some cases though).
 
-	// For now, I choose to use autogen mips on GLES2 and the game's own on other platforms.
-	// As is usual, GLES3 will solve this problem nicely but wide distribution of that is
-	// years away.
-	//
-	// Actually, seems we reverted to autogen mipmaps on all platforms.
+	// Always load base level texture here 
 	LoadTextureLevel(*entry, 0, replaceImages, dstFmt);
-	if (maxLevel > 0) {
-		glGenerateMipmap(GL_TEXTURE_2D);
-		/*
-		for (int i = 0; i <= maxLevel; i++) {
-			LoadTextureLevel(*entry, i, replaceImages);
-		}
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, (float)maxLevel);
-		*/
+	
+	// Mipmapping only enable when texture scaling disable
+	if (g_Config.bMipMap && g_Config.iTexScalingLevel == 1 && maxLevel > 0) {
+#ifndef USING_GLES2
+			for (int i = 1; i <= maxLevel; i++) {
+				LoadTextureLevel(*entry, i, replaceImages, dstFmt);
+			}
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, (float)maxLevel);
+#else 
+			glGenerateMipmap(GL_TEXTURE_2D);
+#endif
 	} else {
-		// TODO: This is supported on GLES3
-#if !defined(USING_GLES2)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+#ifndef USING_GLES2
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, 0);
+#elif defined(MAY_HAVE_GLES3)
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 #endif
 	}
 

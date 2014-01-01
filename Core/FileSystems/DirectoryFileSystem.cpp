@@ -303,10 +303,16 @@ DirectoryFileSystem::DirectoryFileSystem(IHandleAllocator *_hAlloc, std::string 
 	hAlloc = _hAlloc;
 }
 
-DirectoryFileSystem::~DirectoryFileSystem() {
+void DirectoryFileSystem::CloseAll() {
 	for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
 		iter->second.hFile.Close();
 	}
+
+	entries.clear();
+}
+
+DirectoryFileSystem::~DirectoryFileSystem() {
+	CloseAll();
 }
 
 std::string DirectoryFileSystem::GetLocalPath(std::string localpath) {
@@ -466,6 +472,10 @@ u32 DirectoryFileSystem::OpenFile(std::string filename, FileAccess access, const
 #endif
 
 		u32 newHandle = hAlloc->GetNewHandle();
+
+		entry.guestFilename = filename;
+		entry.access = access;
+
 		entries[newHandle] = entry;
 
 		return newHandle;
@@ -487,6 +497,14 @@ void DirectoryFileSystem::CloseFile(u32 handle) {
 bool DirectoryFileSystem::OwnsHandle(u32 handle) {
 	EntryMap::iterator iter = entries.find(handle);
 	return (iter != entries.end());
+}
+
+int DirectoryFileSystem::Ioctl(u32 handle, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 outlen, int &usec) {
+	return SCE_KERNEL_ERROR_ERRNO_FUNCTION_NOT_SUPPORTED;
+}
+
+int DirectoryFileSystem::DevType(u32 handle) {
+	return PSP_DEV_TYPE_FILE;
 }
 
 size_t DirectoryFileSystem::ReadFile(u32 handle, u8 *pointer, s64 size) {
@@ -664,9 +682,50 @@ std::vector<PSPFileInfo> DirectoryFileSystem::GetDirListing(std::string path) {
 }
 
 void DirectoryFileSystem::DoState(PointerWrap &p) {
-	if (!entries.empty()) {
-		p.SetError(p.ERROR_WARNING);
-		ERROR_LOG(FILESYS, "FIXME: Open files during savestate, could go badly.");
+	auto s = p.Section("DirectoryFileSystem", 0, 1);
+	if (!s)
+		return;
+
+	// Savestate layout:
+	// u32: number of entries
+	// per-entry:
+	//     u32:              handle number
+	//     std::string       filename (in guest's terms, untranslated)
+	//     enum FileAccess   file access mode
+	//     u32               seek position
+
+	u32 num = (u32) entries.size();
+	p.Do(num);
+
+	if (p.mode == p.MODE_READ) {
+		CloseAll();
+		u32 key;
+		OpenFileEntry entry;
+		for (u32 i = 0; i < num; i++) {
+			p.Do(key);
+			p.Do(entry.guestFilename);
+			p.Do(entry.access);
+			if (! entry.hFile.Open(basePath,entry.guestFilename,entry.access)) {
+				ERROR_LOG(FILESYS, "Failed to reopen file while loading state: %s", entry.guestFilename.c_str());
+				continue;
+			}
+			u32 position;
+			p.Do(position);
+			if (position != entry.hFile.Seek(position, FILEMOVE_BEGIN)) {
+				ERROR_LOG(FILESYS, "Failed to restore seek position while loading state: %s", entry.guestFilename.c_str());
+				continue;
+			}
+			entries[key] = entry;
+		}
+	} else {
+		for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+			u32 key = iter->first;
+			p.Do(key);
+			p.Do(iter->second.guestFilename);
+			p.Do(iter->second.access);
+			u32 position = (u32)iter->second.hFile.Seek(0, FILEMOVE_CURRENT);
+			p.Do(position);
+		}
 	}
 }
 
@@ -765,6 +824,14 @@ void VFSFileSystem::CloseFile(u32 handle) {
 bool VFSFileSystem::OwnsHandle(u32 handle) {
 	EntryMap::iterator iter = entries.find(handle);
 	return (iter != entries.end());
+}
+
+int VFSFileSystem::Ioctl(u32 handle, u32 cmd, u32 indataPtr, u32 inlen, u32 outdataPtr, u32 outlen, int &usec) {
+	return SCE_KERNEL_ERROR_ERRNO_FUNCTION_NOT_SUPPORTED;
+}
+
+int VFSFileSystem::DevType(u32 handle) {
+	return PSP_DEV_TYPE_FILE;
 }
 
 size_t VFSFileSystem::ReadFile(u32 handle, u8 *pointer, s64 size) {

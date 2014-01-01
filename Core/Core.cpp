@@ -16,19 +16,20 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <set>
+
 #include "base/NativeApp.h"
 #include "base/display.h"
 #include "base/mutex.h"
 #include "base/timeutil.h"
 #include "input/input_state.h"
 
-#include "Globals.h"
 #include "Core/Core.h"
 #include "Core/Config.h"
 #include "Core/MemMap.h"
 #include "Core/SaveState.h"
 #include "Core/System.h"
 #include "Core/MIPS/MIPS.h"
+
 #ifdef _WIN32
 #include "Windows/OpenGLBase.h"
 #include "Windows/InputDevice.h"
@@ -258,7 +259,6 @@ reswitch:
 				goto reswitch;
 			}
 
-			currentCPU = &mipsr4k;
 			Core_SingleStep();
 			// update disasm dialog
 #if defined(USING_QT_UI) || defined(_DEBUG)

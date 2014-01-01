@@ -33,6 +33,7 @@
 #include "Core/MIPS/MIPSAnalyst.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
 
+#include "Core/Host.h"
 #include "Core/System.h"
 #include "Core/PSPMixer.h"
 #include "Core/HLE/HLE.h"
@@ -80,6 +81,14 @@ volatile CoreState coreState = CORE_STEPPING;
 // Note: intentionally not used for CORE_NEXTFRAME.
 volatile bool coreStatePending = false;
 static volatile CPUThreadState cpuThreadState = CPU_THREAD_NOT_RUNNING;
+
+void UpdateUIState(GlobalUIState newState) {
+	// Never leave the EXIT state.
+	if (globalUIState != newState && globalUIState != UISTATE_EXIT) {
+		globalUIState = newState;
+		host->UpdateDisassembly();
+	}
+}
 
 bool IsAudioInitialised() {
 	return mixer != NULL;
@@ -150,8 +159,7 @@ void CPU_Shutdown();
 
 void CPU_Init() {
 	coreState = CORE_POWERUP;
-	currentCPU = &mipsr4k;
-	numCPUs = 1;
+	currentMIPS = &mipsr4k;
 
 	// Default memory settings
 	// Seems to be the safest place currently..
@@ -228,7 +236,6 @@ void CPU_Shutdown() {
 	}
 	pspFileSystem.Shutdown();
 	Memory::Shutdown();
-	currentCPU = 0;
 }
 
 void CPU_RunLoop() {
@@ -293,6 +300,8 @@ void System_Wake() {
 	}
 }
 
+static bool pspIsInited = false;
+
 bool PSP_Init(const CoreParameter &coreParam, std::string *error_string) {
 	INFO_LOG(BOOT, "PPSSPP %s", PPSSPP_GIT_VERSION);
 
@@ -318,11 +327,12 @@ bool PSP_Init(const CoreParameter &coreParam, std::string *error_string) {
 			*error_string = "Unable to initialize rendering engine.";
 		}
 	}
+	pspIsInited = success;
 	return success;
 }
 
 bool PSP_IsInited() {
-	return currentCPU != 0;
+	return pspIsInited;
 }
 
 void PSP_Shutdown() {
@@ -345,6 +355,8 @@ void PSP_Shutdown() {
 	}
 	GPU_Shutdown();
 	host->SetWindowTitle(0);
+	currentMIPS = 0;
+	pspIsInited = false;
 }
 
 void PSP_RunLoopUntil(u64 globalticks) {

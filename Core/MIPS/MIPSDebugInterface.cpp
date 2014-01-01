@@ -15,16 +15,17 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "../Debugger/Breakpoints.h"
-#include "../Debugger/SymbolMap.h"
-#include "../Debugger/DebugInterface.h"
+#include <string>
 
-#include "MIPSDebugInterface.h"
-#include "../Globals.h"
-#include "../MemMap.h"	
-#include "../MIPS/MIPSTables.h"	
-#include "../MIPS/MIPS.h"
-#include "../System.h"
+#include "Core/Debugger/Breakpoints.h"
+#include "Core/Debugger/SymbolMap.h"
+#include "Core/Debugger/DebugInterface.h"
+#include "Core/MIPS/MIPSDebugInterface.h"
+
+#include "Core/MemMap.h"
+#include "Core/MIPS/MIPSTables.h"
+#include "Core/MIPS/MIPS.h"
+#include "Core/System.h"
 
 enum ReferenceIndexType {
 	REF_INDEX_PC = 32,
@@ -175,19 +176,16 @@ private:
 
 
 
-const char *MIPSDebugInterface::disasm(unsigned int address, unsigned int align) 
+const char *MIPSDebugInterface::disasm(unsigned int address, unsigned int align)
 {
-	MIPSState *x = currentCPU;
-	currentCPU = cpu;
-	
-	static char mojs[256]; 
+	static char mojs[256];
 	if (Memory::IsValidAddress(address))
 		MIPSDisAsm(Memory::Read_Opcode_JIT(address), address, mojs);
 	else
 		strcpy(mojs, "-");
-	currentCPU = x;
 	return mojs;
 }
+
 unsigned int MIPSDebugInterface::readMemory(unsigned int address)
 {
 	return Memory::Read_Instruction(address).encoding;

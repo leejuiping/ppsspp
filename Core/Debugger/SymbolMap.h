@@ -17,11 +17,14 @@
 
 #pragma once
 
-#include "Globals.h"
-#include "native/base/mutex.h"
 #include <vector>
 #include <set>
 #include <map>
+#include <string>
+
+#include "native/base/mutex.h"
+
+#include "Common/CommonTypes.h"
 
 enum SymbolType {
 	ST_NONE     = 0,

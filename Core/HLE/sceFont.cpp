@@ -7,10 +7,11 @@
 #include <map>
 #include <algorithm>
 
-#include "HLE.h"
-#include "../MIPS/MIPS.h"
-#include "ChunkFile.h"
+#include "Common/ChunkFile.h"
+#include "Core/HLE/HLE.h"
+#include "Core/MIPS/MIPS.h"
 #include "Core/FileSystems/FileSystem.h"
+#include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/Reporting.h"
 #include "Core/System.h"
 #include "Core/HLE/sceKernel.h"
@@ -848,9 +849,9 @@ int sceFontGetCharImageRect(u32 fontHandle, u32 charCode, u32 charRectPtr) {
 	
 	PGFCharInfo charInfo;
 	LoadedFont *font = GetLoadedFont(fontHandle, false);
-	auto fontLib = font->GetFontLib();
-	int altCharCode = fontLib == NULL ? -1 : fontLib->GetAltCharCode();
 	if (font) {
+		auto fontLib = font->GetFontLib();
+		int altCharCode = fontLib == NULL ? -1 : fontLib->GetAltCharCode();
 		font->GetPGF()->GetCharInfo(charCode, &charInfo, altCharCode);
 		Memory::Write_U16(charInfo.bitmapWidth, charRectPtr);      // character bitmap width in pixels
 		Memory::Write_U16(charInfo.bitmapHeight, charRectPtr + 2);  // character bitmap height in pixels

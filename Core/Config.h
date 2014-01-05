@@ -18,6 +18,7 @@
 #pragma once
 
 #include <string>
+#include <map>
 #include <vector>
 
 #include "CommonTypes.h"
@@ -97,6 +98,8 @@ public:
 	int iWindowHeight;
 
 	bool bVertexCache;
+	bool bTextureBackoffCache;
+	bool bTextureSecondaryCache;
 	bool bVertexDecoderJit;
 	bool bFullScreen;
 	int iInternalResolution;  // 0 = Auto (native), 1 = 1x (480x272), 2 = 2x, 3 = 3x, 4 = 4x and so on.
@@ -305,6 +308,8 @@ private:
 	std::vector<std::string> searchPath_;
 	std::string defaultPath_;
 };
+
+std::map<std::string, std::pair<std::string, int>> GetLangValuesMapping();
 
 // TODO: Find a better place for this.
 extern http::Downloader g_DownloadManager;

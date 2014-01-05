@@ -21,7 +21,7 @@ else: QT += multimedia
 
 greaterThan(QT_MAJOR_VERSION,4): QT += widgets
 
-mobile_platform {
+!maemo5:mobile_platform {
 	CONFIG += mobility
 	MOBILITY += sensors
 	symbian: MOBILITY += systeminfo feedback
@@ -129,7 +129,7 @@ symbian {
 	TARGET.EPOCSTACKSIZE = 0x10000
 }
 
-contains(MEEGO_EDITION,harmattan) {
+maemo {
 	target.path = /opt/PPSSPP/bin
 	desktopfile.files = PPSSPP.desktop
 	desktopfile.path = /usr/share/applications

@@ -47,6 +47,44 @@ extern bool iosCanUseJit;
 Config::Config() { }
 Config::~Config() { }
 
+std::map<std::string, std::pair<std::string, int>> GetLangValuesMapping() {
+	std::map<std::string, std::pair<std::string, int>> langValuesMapping;
+	IniFile mapping;
+	mapping.LoadFromVFS("langregion.ini");
+	std::vector<std::string> keys;
+	mapping.GetKeys("LangRegionNames", keys);
+
+
+	std::map<std::string, int> langCodeMapping;
+	langCodeMapping["JAPANESE"] = PSP_SYSTEMPARAM_LANGUAGE_JAPANESE;
+	langCodeMapping["ENGLISH"] = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
+	langCodeMapping["FRENCH"] = PSP_SYSTEMPARAM_LANGUAGE_FRENCH;
+	langCodeMapping["SPANISH"] = PSP_SYSTEMPARAM_LANGUAGE_SPANISH;
+	langCodeMapping["GERMAN"] = PSP_SYSTEMPARAM_LANGUAGE_GERMAN;
+	langCodeMapping["ITALIAN"] = PSP_SYSTEMPARAM_LANGUAGE_ITALIAN;
+	langCodeMapping["DUTCH"] = PSP_SYSTEMPARAM_LANGUAGE_DUTCH;
+	langCodeMapping["PORTUGUESE"] = PSP_SYSTEMPARAM_LANGUAGE_PORTUGUESE;
+	langCodeMapping["RUSSIAN"] = PSP_SYSTEMPARAM_LANGUAGE_RUSSIAN;
+	langCodeMapping["KOREAN"] = PSP_SYSTEMPARAM_LANGUAGE_KOREAN;
+	langCodeMapping["CHINESE_TRADITIONAL"] = PSP_SYSTEMPARAM_LANGUAGE_CHINESE_TRADITIONAL;
+	langCodeMapping["CHINESE_SIMPLIFIED"] = PSP_SYSTEMPARAM_LANGUAGE_CHINESE_SIMPLIFIED;
+
+	IniFile::Section *langRegionNames = mapping.GetOrCreateSection("LangRegionNames");
+	IniFile::Section *systemLanguage = mapping.GetOrCreateSection("SystemLanguage");
+
+	for (size_t i = 0; i < keys.size(); i++) {
+		std::string langName;
+		langRegionNames->Get(keys[i].c_str(), &langName, "ERROR");
+		std::string langCode;
+		systemLanguage->Get(keys[i].c_str(), &langCode, "ENGLISH");
+		int iLangCode = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
+		if (langCodeMapping.find(langCode) != langCodeMapping.end())
+			iLangCode = langCodeMapping[langCode];
+		langValuesMapping[keys[i]] = std::make_pair(langName, iLangCode);
+	}
+	return langValuesMapping;
+}
+
 void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	iniFilename_ = FindConfigFile(iniFileName != NULL ? iniFileName : "ppsspp.ini");
 	controllerIniFilename_ = FindConfigFile(controllerIniFilename != NULL ? controllerIniFilename : "controls.ini");
@@ -77,12 +115,19 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	if (!File::Exists(currentDirectory))
 		currentDirectory = "";
 
+	int defaultLang = PSP_SYSTEMPARAM_LANGUAGE_ENGLISH;
 	std::string defaultLangRegion = "en_US";
 	if (bFirstRun) {
 		std::string langRegion = System_GetProperty(SYSPROP_LANGREGION);
 		if (i18nrepo.IniExists(langRegion))
 			defaultLangRegion = langRegion;
 		// TODO: Be smart about same language, different country
+		auto langValuesMapping = GetLangValuesMapping();
+		if (!defaultLangRegion.empty()) {
+			if (langValuesMapping.find(defaultLangRegion) != langValuesMapping.end()) {
+				defaultLang = langValuesMapping[defaultLangRegion].second;
+			}
+		}
 	}
 
 	general->Get("Language", &sLanguageIni, defaultLangRegion.c_str());
@@ -187,6 +232,8 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 		iAnisotropyLevel = 4;
 	}
 	graphics->Get("VertexCache", &bVertexCache, true);
+	graphics->Get("TextureBackoffCache", &bTextureBackoffCache, false);
+	graphics->Get("TextureSecondaryCache", &bTextureSecondaryCache, false);
 #ifdef IOS
 	graphics->Get("VertexDecJit", &bVertexDecoderJit, iosCanUseJit);
 #else
@@ -340,7 +387,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	pspConfig->Get("NickName", &sNickName, "PPSSPP");
 	pspConfig->Get("proAdhocServer", &proAdhocServer, "localhost");
 	pspConfig->Get("MacAddress", &localMacAddress, "01:02:03:04:05:06");
-	pspConfig->Get("Language", &iLanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+	pspConfig->Get("Language", &iLanguage, defaultLang);
 	pspConfig->Get("TimeFormat", &iTimeFormat, PSP_SYSTEMPARAM_TIME_FORMAT_24HR);
 	pspConfig->Get("DateFormat", &iDateFormat, PSP_SYSTEMPARAM_DATE_FORMAT_YYYYMMDD);
 	pspConfig->Get("TimeZone", &iTimeZone, 0);
@@ -499,6 +546,8 @@ void Config::Save() {
 		graphics->Set("ForceMaxEmulatedFPS", iForceMaxEmulatedFPS);
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("VertexCache", bVertexCache);
+		graphics->Set("TextureBackoffCache", bTextureBackoffCache);
+		graphics->Set("TextureSecondaryCache", bTextureSecondaryCache);
 #ifdef _WIN32
 		graphics->Set("FullScreen", bFullScreen);
 #endif

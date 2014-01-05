@@ -142,6 +142,7 @@ MediaEngine::MediaEngine(): m_pdata(0) {
 	m_noAudioData = false;
 	m_bufSize = 0x2000;
 	m_mpegheaderReadPos = 0;
+	m_decodingsize = 0;
 	g_iNumVideos++;
 }
 
@@ -151,34 +152,11 @@ MediaEngine::~MediaEngine() {
 }
 
 void MediaEngine::closeMedia() {
-#ifdef USE_FFMPEG
-	if (m_buffer)
-		av_free(m_buffer);
-	if (m_pFrameRGB)
-		av_free(m_pFrameRGB);
-	if (m_pFrame)
-		av_free(m_pFrame);
-	if (m_pIOContext && m_pIOContext->buffer)
-		av_free(m_pIOContext->buffer);
-	if (m_pIOContext)
-		av_free(m_pIOContext);
-	if (m_pCodecCtx)
-		avcodec_close(m_pCodecCtx);
-	if (m_pFormatCtx)
-		avformat_close_input(&m_pFormatCtx);
-#endif // USE_FFMPEG
+	closeContext();
 	if (m_pdata)
 		delete m_pdata;
 	if (m_demux)
 		delete m_demux;
-	m_buffer = 0;
-#ifdef USE_FFMPEG
-	m_pFrame = 0;
-	m_pFrameRGB = 0;
-	m_pIOContext = 0;
-	m_pCodecCtx = 0;
-	m_pFormatCtx = 0;
-#endif
 	m_pdata = 0;
 	m_demux = 0;
 	AT3Close(&m_audioContext);
@@ -187,7 +165,7 @@ void MediaEngine::closeMedia() {
 }
 
 void MediaEngine::DoState(PointerWrap &p){
-	auto s = p.Section("MediaEngine", 1);
+	auto s = p.Section("MediaEngine", 1, 2);
 	if (!s)
 		return;
 
@@ -217,6 +195,11 @@ void MediaEngine::DoState(PointerWrap &p){
 
 	p.Do(m_videopts);
 	p.Do(m_audiopts);
+
+	if (s >= 2) {
+		p.Do(m_firstTimeStamp);
+		p.Do(m_lastTimeStamp);
+	}
 
 	p.Do(m_isVideoEnd);
 	p.Do(m_noAudioData);
@@ -261,8 +244,10 @@ bool MediaEngine::openContext() {
 	if (avformat_open_input((AVFormatContext**)&m_pFormatCtx, NULL, NULL, NULL) != 0)
 		return false;
 
-	if (avformat_find_stream_info(m_pFormatCtx, NULL) < 0)
+	if (avformat_find_stream_info(m_pFormatCtx, NULL) < 0) {
+		closeContext();
 		return false;
+	}
 
 	if (m_videoStream >= (int)m_pFormatCtx->nb_streams) {
 		WARN_LOG_REPORT(ME, "Bad video stream %d", m_videoStream);
@@ -281,18 +266,8 @@ bool MediaEngine::openContext() {
 			return false;
 	}
 
-	// Get a pointer to the codec context for the video stream
-	m_pCodecCtx = m_pFormatCtx->streams[m_videoStream]->codec;
-
-	// Find the decoder for the video stream
-	AVCodec *pCodec = avcodec_find_decoder(m_pCodecCtx->codec_id);
-	if(pCodec == NULL)
+	if (!setVideoStream(m_videoStream, true))
 		return false;
-
-	// Open codec
-	AVDictionary *optionsDict = 0;
-	if(avcodec_open2(m_pCodecCtx, pCodec, &optionsDict)<0)
-		return false; // Could not open codec
 
 	setVideoDim();
 	m_audioContext = AT3Create();
@@ -302,6 +277,32 @@ bool MediaEngine::openContext() {
 	av_seek_frame(m_pFormatCtx, m_videoStream, 0, 0);
 #endif // USE_FFMPEG
 	return true;
+}
+
+void MediaEngine::closeContext()
+{
+#ifdef USE_FFMPEG
+	if (m_buffer)
+		av_free(m_buffer);
+	if (m_pFrameRGB)
+		av_free(m_pFrameRGB);
+	if (m_pFrame)
+		av_free(m_pFrame);
+	if (m_pIOContext && m_pIOContext->buffer)
+		av_free(m_pIOContext->buffer);
+	if (m_pIOContext)
+		av_free(m_pIOContext);
+	if (m_pCodecCtx)
+		avcodec_close(m_pCodecCtx);
+	if (m_pFormatCtx)
+		avformat_close_input(&m_pFormatCtx);
+	m_pFrame = 0;
+	m_pFrameRGB = 0;
+	m_pIOContext = 0;
+	m_pCodecCtx = 0;
+	m_pFormatCtx = 0;
+#endif
+	m_buffer = 0;
 }
 
 bool MediaEngine::loadStream(u8* buffer, int readSize, int RingbufferSize)
@@ -330,10 +331,9 @@ int MediaEngine::addStreamData(u8* buffer, int addSize) {
 			size  = 0;
 		if (m_demux) {
 			m_demux->addStreamData(buffer, addSize);
-			m_demux->demux(m_audioStream);
 		}
 #ifdef USE_FFMPEG
-		if (!m_pFormatCtx && m_pdata->getQueueSize() >= 2048 * 5) {
+		if (!m_pFormatCtx && m_pdata->getQueueSize() >= 2048) {
 			m_pdata->get_front(m_mpegheader, sizeof(m_mpegheader));
 			int mpegoffset = bswap32(*(int*)(m_mpegheader + 8));
 			m_pdata->pop_front(0, mpegoffset);
@@ -345,6 +345,39 @@ int MediaEngine::addStreamData(u8* buffer, int addSize) {
 		m_isVideoEnd = false;
 	}
 	return size;
+}
+
+bool MediaEngine::setVideoStream(int streamNum, bool force) {
+	if (m_videoStream == streamNum && !force) {
+		// Yay, nothing to do.
+		return true;
+	}
+
+	m_videoStream = streamNum;
+#ifdef USE_FFMPEG
+	if (m_pFormatCtx) {
+		if (m_pCodecCtx) {
+			avcodec_close(m_pCodecCtx);
+		}
+
+		// Get a pointer to the codec context for the video stream
+		m_pCodecCtx = m_pFormatCtx->streams[m_videoStream]->codec;
+
+		// Find the decoder for the video stream
+		AVCodec *pCodec = avcodec_find_decoder(m_pCodecCtx->codec_id);
+		if (pCodec == NULL) {
+			return false;
+		}
+
+		// Open codec
+		AVDictionary *optionsDict = 0;
+		if (avcodec_open2(m_pCodecCtx, pCodec, &optionsDict) < 0) {
+			return false; // Could not open codec
+		}
+	}
+#endif
+
+	return true;
 }
 
 bool MediaEngine::setVideoDim(int width, int height)
@@ -650,6 +683,15 @@ int MediaEngine::getRemainSize() {
 	return std::max(m_pdata->getRemainSize() - m_decodingsize - 2048, 0);
 }
 
+int MediaEngine::getAudioRemainSize() {
+	if (!m_demux) {
+		// No audio, so it can't be full, return video instead.
+		return getRemainSize();
+	}
+
+	return m_demux->getRemainSize();
+}
+
 int MediaEngine::getAudioSamples(u32 bufferPtr) {
 	if (!Memory::IsValidAddress(bufferPtr)) {
 		ERROR_LOG_REPORT(ME, "Ignoring bad audio decode address %08x during video playback", bufferPtr);
@@ -659,6 +701,10 @@ int MediaEngine::getAudioSamples(u32 bufferPtr) {
 	if (!m_demux) {
 		return 0;
 	}
+
+	// Demux now (rather than on add data) so that we select the right stream.
+	m_demux->demux(m_audioStream);
+
 	u8 *audioFrame = 0;
 	int headerCode1, headerCode2;
 	int frameSize = m_demux->getNextaudioFrame(&audioFrame, &headerCode1, &headerCode2);

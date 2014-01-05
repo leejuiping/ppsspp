@@ -157,6 +157,11 @@ static void ClearBuffer() {
 	glstate.stencilFunc.set(GL_ALWAYS, 0xFF, 0xFF);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClearStencil(0xFF);
+#ifdef USING_GLES2
+	glClearDepthf(1.0f);
+#else
+	glClearDepth(1.0);
+#endif
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
@@ -757,7 +762,8 @@ void FramebufferManager::SetRenderFrameBuffer() {
 			vfb->fbo = fbo_create(vfb->renderWidth, vfb->renderHeight, 1, true, vfb->colorDepth);
 			if (vfb->fbo) {
 				fbo_bind_as_render_target(vfb->fbo);
-				glstate.viewport.restore();
+				if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+					glstate.viewport.restore();
 			} else {
 				ERROR_LOG(SCEGE, "Error creating FBO! %i x %i", vfb->renderWidth, vfb->renderHeight);
 			}
@@ -823,8 +829,9 @@ void FramebufferManager::SetRenderFrameBuffer() {
 		if (useBufferedRendering_) {
 			if (vfb->fbo) {
 				fbo_bind_as_render_target(vfb->fbo);
-				// adreno needs us to reset the viewport after switching render targets.
-				glstate.viewport.restore();
+				// Adreno/Mali needs us to reset the viewport after switching render targets.
+				if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+					glstate.viewport.restore();
 			} else {
 				// wtf? This should only happen very briefly when toggling bBufferedRendering
 				fbo_unbind();
@@ -856,6 +863,21 @@ void FramebufferManager::SetRenderFrameBuffer() {
 			ClearBuffer();
 		}
 #endif
+
+#ifndef USING_GLES2
+		if (gl_extensions.FBO_ARB && currentRenderVfb_ != NULL &&
+				currentRenderVfb_->fbo != NULL &&
+				MaskedEqual(currentRenderVfb_->z_address, vfb->z_address) &&
+				currentRenderVfb_->renderWidth == vfb->renderWidth &&
+				currentRenderVfb_->renderHeight == vfb->renderHeight) {
+			// Let's only do this if not clearing.
+			if (!gstate.isModeClear() || !gstate.isClearModeDepthMask()) {
+				fbo_bind_for_read(currentRenderVfb_->fbo);
+				glBlitFramebuffer(0, 0, currentRenderVfb_->renderWidth, currentRenderVfb_->renderHeight, 0, 0, vfb->renderWidth, vfb->renderHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+			}
+		}
+#endif
+
 		currentRenderVfb_ = vfb;
 	} else {
 		vfb->last_frame_render = gpuStats.numFlips;
@@ -953,7 +975,8 @@ void FramebufferManager::CopyDisplayToOutput() {
 		} else if (usePostShader_ && extraFBOs_.size() == 1 && !postShaderAtOutputResolution_) {
 			// An additional pass, post-processing shader to the extra FBO.
 			fbo_bind_as_render_target(extraFBOs_[0]);
-			glstate.viewport.restore();
+			if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+				glstate.viewport.restore();
 			int fbo_w, fbo_h;
 			fbo_get_dimensions(extraFBOs_[0], &fbo_w, &fbo_h);
 			glstate.viewport.set(0, 0, fbo_w, fbo_h);
@@ -1053,7 +1076,8 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 			nvfb->last_frame_render = gpuStats.numFlips;
 			bvfbs_.push_back(nvfb);
 			fbo_bind_as_render_target(nvfb->fbo);
-			glstate.viewport.restore();
+			if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+				glstate.viewport.restore();
 			ClearBuffer();
 			glEnable(GL_DITHER);
 		} else {
@@ -1065,7 +1089,8 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 #ifdef USING_GLES2
 			if (nvfb->fbo) {
 				fbo_bind_as_render_target(nvfb->fbo);
-				glstate.viewport.restore();
+				if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+					glstate.viewport.restore();
 			}
 
 			// Some tiled mobile GPUs benefit IMMENSELY from clearing an FBO before rendering
@@ -1084,7 +1109,7 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 #ifdef USING_GLES2
 		PackFramebufferSync_(nvfb); // synchronous glReadPixels
 #else
-		if (gl_extensions.PBO_ARB || !gl_extensions.ATIClampBug) {
+		if (gl_extensions.PBO_ARB && gl_extensions.OES_texture_npot) {
 			if (!sync) {
 				PackFramebufferAsync_(nvfb); // asynchronous glReadPixels using PBOs
 			} else {
@@ -1098,7 +1123,8 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *src, VirtualFramebuffer *dst, bool flip, float upscale, float vscale) {
 	if (dst->fbo) {
 		fbo_bind_as_render_target(dst->fbo);
-		glstate.viewport.restore();
+		if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+			glstate.viewport.restore();
 	} else {
 		ERROR_LOG_REPORT_ONCE(dstfbozero, SCEGE, "BlitFramebuffer_: dst->fbo == 0");
 		fbo_unbind();
@@ -1108,6 +1134,9 @@ void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *src, VirtualFrameb
 	if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 		ERROR_LOG(SCEGE, "Incomplete target framebuffer, aborting blit");
 		fbo_unbind();
+		if (gl_extensions.FBO_ARB) {
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		}
 		return;
 	}
 
@@ -1260,6 +1289,7 @@ void FramebufferManager::PackFramebufferAsync_(VirtualFramebuffer *vfb) {
 		if (vfb->fbo) {
 			fbo_bind_for_read(vfb->fbo);
 		} else {
+			ERROR_LOG_REPORT_ONCE(vfbfbozero, SCEGE, "PackFramebufferAsync_: vfb->fbo == 0");
 			fbo_unbind();
 			if (gl_extensions.FBO_ARB) {
 				glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -1354,6 +1384,9 @@ void FramebufferManager::PackFramebufferSync_(VirtualFramebuffer *vfb) {
 	} else {
 		ERROR_LOG_REPORT_ONCE(vfbfbozero, SCEGE, "PackFramebufferSync_: vfb->fbo == 0");
 		fbo_unbind();
+		if (gl_extensions.FBO_ARB) {
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		}
 		return;
 	}
 
@@ -1541,7 +1574,8 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 					DisableState();
 					glstate.viewport.set(0, 0, vfb->renderWidth, vfb->renderHeight);
 					fbo_bind_as_render_target(vfb->fbo);
-					glstate.viewport.restore();
+					if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+						glstate.viewport.restore();
 					needUnbind = true;
 					DrawPixels(Memory::GetPointer(addr | 0x04000000), vfb->format, vfb->fb_stride);
 				} else {

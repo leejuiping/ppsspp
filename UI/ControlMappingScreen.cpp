@@ -264,6 +264,24 @@ void KeyMappingNewKeyDialog::key(const KeyInput &key) {
 }
 
 void KeyMappingNewKeyDialog::axis(const AxisInput &axis) {
+	switch (axis.axisId) {
+	// Ignore the accelerometer for mapping for now.
+	case JOYSTICK_AXIS_ACCELEROMETER_X:
+	case JOYSTICK_AXIS_ACCELEROMETER_Y:
+	case JOYSTICK_AXIS_ACCELEROMETER_Z:
+		return;
+
+	// Also ignore some weird axis events we get on Ouya.
+	case JOYSTICK_AXIS_OUYA_UNKNOWN1:
+	case JOYSTICK_AXIS_OUYA_UNKNOWN2:
+	case JOYSTICK_AXIS_OUYA_UNKNOWN3:
+	case JOYSTICK_AXIS_OUYA_UNKNOWN4:
+		return;
+
+	default:
+		;
+	}
+
 	if (axis.value > AXIS_BIND_THRESHOLD) {
 		KeyDef kdf(axis.deviceId, KeyMap::TranslateKeyCodeFromAxis(axis.axisId, 1));
 		screenManager()->finishDialog(this, DR_OK);

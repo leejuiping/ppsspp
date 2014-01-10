@@ -202,7 +202,7 @@ public:
 		this->channel = channel;
 	}
 
-	void readMPEGVideoStreamParams(u32 addr, Psmf *psmf) {
+	void readMPEGVideoStreamParams(u32 addr, u32 data, Psmf *psmf) {
 		int streamId = Memory::Read_U8(addr);
 		int privateStreamId = Memory::Read_U8(addr + 1);
 		// two unknowns here
@@ -214,12 +214,12 @@ public:
 		const u32 EP_MAP_STRIDE = 1 + 1 + 4 + 4;
 		psmf->EPMap.clear();
 		for (u32 i = 0; i < psmf->EPMapEntriesNum; i++) {
-			const u32 entryAddr = addr + psmf->EPMapOffset + EP_MAP_STRIDE * i;
+			const u32 entryAddr = data + psmf->EPMapOffset + EP_MAP_STRIDE * i;
 			PsmfEntry entry;
 			entry.EPIndex = Memory::Read_U8(entryAddr + 0);
 			entry.EPPicOffset = Memory::Read_U8(entryAddr + 1);
-			entry.EPPts = Memory::Read_U32(entryAddr + 2);
-			entry.EPOffset = Memory::Read_U32(entryAddr + 6);
+			entry.EPPts = *(u32_be*) Memory::GetPointer(entryAddr + 2);
+			entry.EPOffset = *(u32_be*) Memory::GetPointer(entryAddr + 6);
 			psmf->EPMap.push_back(entry);
 		}
 
@@ -275,7 +275,7 @@ Psmf::Psmf(u32 data) {
 		int streamId = Memory::Read_U8(currentStreamAddr);
 		if ((streamId & PSMF_VIDEO_STREAM_ID) == PSMF_VIDEO_STREAM_ID) {
 			stream = new PsmfStream(PSMF_AVC_STREAM, ++currentVideoStreamNum);
-			stream->readMPEGVideoStreamParams(currentStreamAddr, this);
+			stream->readMPEGVideoStreamParams(currentStreamAddr, data, this);
 		} else if ((streamId & PSMF_AUDIO_STREAM_ID) == PSMF_AUDIO_STREAM_ID) {
 			stream = new PsmfStream(PSMF_ATRAC_STREAM, ++currentAudioStreamNum);
 			stream->readPrivateAudioStreamParams(currentStreamAddr, this);
@@ -750,10 +750,16 @@ u32 scePsmfGetCurrentStreamNumber(u32 psmfStruct)
 	return psmf->currentStreamNum;
 }
 
-u32 scePsmfCheckEPMap(u32 psmfPlayer) 
+u32 scePsmfCheckEPMap(u32 psmfStruct) 
 {
-	INFO_LOG(ME, "scePsmfCheckEPMap(%08x)", psmfPlayer);
-	return 0;  // Should be okay according to JPCSP
+	Psmf *psmf = getPsmf(psmfStruct);
+	if (!psmf) {
+		ERROR_LOG(ME, "scePsmfCheckEPMap(%08x): invalid psmf", psmfStruct);
+		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	DEBUG_LOG(ME, "scePsmfCheckEPMap(%08x)", psmfStruct);
+	return psmf->EPMap.empty() ? ERROR_PSMF_NOT_FOUND : 0;
 }
 
 u32 scePsmfGetEPWithId(u32 psmfStruct, int epid, u32 entryAddr)
@@ -810,6 +816,11 @@ u32 scePsmfGetEPidWithTimestamp(u32 psmfStruct, u32 ts)
 	}
 	DEBUG_LOG(ME, "scePsmfGetEPidWithTimestamp(%08x, %i)", psmfStruct, ts);
 
+	if (psmf->EPMap.empty()) {
+		ERROR_LOG(ME, "scePsmfGetEPidWithTimestamp(%08x): EPMap is empty", psmfStruct);
+		return ERROR_PSMF_NOT_FOUND;
+	}
+
 	if (ts < psmf->presentationStartTime) {
 		ERROR_LOG(ME, "scePsmfGetEPidWithTimestamp(%08x, %i): invalid timestamp", psmfStruct, ts);
 		return ERROR_PSMF_INVALID_TIMESTAMP;
@@ -820,6 +831,7 @@ u32 scePsmfGetEPidWithTimestamp(u32 psmfStruct, u32 ts)
 		ERROR_LOG(ME, "scePsmfGetEPidWithTimestamp(%08x, %i): invalid id", psmfStruct, epid);
 		return ERROR_PSMF_INVALID_ID;
 	}
+
 	return epid;
 }
 

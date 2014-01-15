@@ -877,6 +877,14 @@ void TextureCache::SetTexture(bool force) {
 		return;
 	}
 
+	int w = gstate.getTextureWidth(0);
+	int h = gstate.getTextureHeight(0);
+
+	u32 fb_addr = gstate.getFrameBufRawAddress() | 0x04000000;
+	if (fb_addr == gstate.getTextureAddress(0)) {
+		WARN_LOG_REPORT(HLE, "Render to self texture (%08x : %ix%i)", fb_addr, w, h);
+	}
+
 	GETextureFormat format = gstate.getTextureFormat();
 	if (format >= 11) {
 		ERROR_LOG_REPORT(G3D, "Unknown texture format %i", format);
@@ -899,8 +907,6 @@ void TextureCache::SetTexture(bool force) {
 	}
 
 	int bufw = GetTextureBufw(0, texaddr, format);
-	int w = gstate.getTextureWidth(0);
-	int h = gstate.getTextureHeight(0);
 	int maxLevel = ((gstate.texmode >> 16) & 0x7);
 
 	u32 texhash = MiniHash((const u32 *)Memory::GetPointer(texaddr));

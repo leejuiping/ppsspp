@@ -63,14 +63,29 @@ EmuScreen::EmuScreen(const std::string &filename)
 }
 
 void EmuScreen::bootGame(const std::string &filename) {
-	booted_ = true;
-	std::string fileToStart = filename;
+	if (PSP_IsIniting()) {
+		std::string error_string;
+		booted_ = PSP_InitUpdate(&error_string);
+		if (booted_) {
+			invalid_ = !PSP_IsInited();
+			if (invalid_) {
+				errorMessage_ = error_string;
+				ERROR_LOG(BOOT, "%s", errorMessage_.c_str());
+				System_SendMessage("event", "failstartgame");
+				return;
+			}
+			bootComplete();
+		}
+		return;
+	}
+
+	invalid_ = true;
 
 	CoreParameter coreParam;
 	coreParam.cpuCore = g_Config.bJit ? CPU_JIT : CPU_INTERPRETER;
 	coreParam.gpuCore = g_Config.bSoftwareRendering ? GPU_SOFTWARE : GPU_GLES;
 	coreParam.enableSound = g_Config.bEnableSound;
-	coreParam.fileToStart = fileToStart;
+	coreParam.fileToStart = filename;
 	coreParam.mountIso = "";
 	coreParam.startPaused = false;
 	coreParam.printfEmuLog = false;
@@ -92,23 +107,24 @@ void EmuScreen::bootGame(const std::string &filename) {
 	coreParam.pixelHeight = pixel_yres;
 
 	std::string error_string;
-	if (PSP_Init(coreParam, &error_string)) {
-		invalid_ = false;
-	} else {
+	if (!PSP_InitStart(coreParam, &error_string)) {
+		booted_ = true;
 		invalid_ = true;
 		errorMessage_ = error_string;
 		ERROR_LOG(BOOT, "%s", errorMessage_.c_str());
 		System_SendMessage("event", "failstartgame");
 		return;
 	}
+}
 
+void EmuScreen::bootComplete() {
 	globalUIState = UISTATE_INGAME;
 	host->BootDone();
 	host->UpdateDisassembly();
 
 	g_gameInfoCache.FlushBGs();
 
-	NOTICE_LOG(BOOT, "Loading %s...", fileToStart.c_str());
+	NOTICE_LOG(BOOT, "Loading %s...", PSP_CoreParameter().fileToStart.c_str());
 	autoLoad();
 
 	I18NCategory *s = GetI18NCategory("Screen"); 
@@ -435,23 +451,6 @@ void EmuScreen::processAxis(const AxisInput &axis, int direction) {
 	}
 }
 
-
-// TODO: Get rid of this.
-static const struct { int from, to; } legacy_touch_mapping[12] = {
-	{PAD_BUTTON_A, CTRL_CROSS},
-	{PAD_BUTTON_B, CTRL_CIRCLE},
-	{PAD_BUTTON_X, CTRL_SQUARE},
-	{PAD_BUTTON_Y, CTRL_TRIANGLE},
-	{PAD_BUTTON_START, CTRL_START},
-	{PAD_BUTTON_SELECT, CTRL_SELECT},
-	{PAD_BUTTON_LBUMPER, CTRL_LTRIGGER},
-	{PAD_BUTTON_RBUMPER, CTRL_RTRIGGER},
-	{PAD_BUTTON_UP, CTRL_UP},
-	{PAD_BUTTON_RIGHT, CTRL_RIGHT},
-	{PAD_BUTTON_DOWN, CTRL_DOWN},
-	{PAD_BUTTON_LEFT, CTRL_LEFT},
-};
-
 void EmuScreen::CreateViews() {
 	InitPadLayout();
 	root_ = CreatePadLayout(&pauseTrigger_);
@@ -500,11 +499,6 @@ void EmuScreen::update(InputState &input) {
 
 	if (invalid_)
 		return;
-
-	float leftstick_x = 0.0f;
-	float leftstick_y = 0.0f;
-	float rightstick_x = 0.0f;
-	float rightstick_y = 0.0f;
 
 	// Virtual keys.
 	__CtrlSetRapidFire(virtKeys[VIRTKEY_RAPID_FIRE - VIRTKEY_FIRST]);
@@ -611,8 +605,6 @@ void EmuScreen::render() {
 	glstate.viewport.restore();
 
 	ui_draw2d.Begin(UIShader_Get(), DBMODE_NORMAL);
-
-	float touchOpacity = g_Config.iTouchButtonOpacity / 100.0f;
 
 	if (root_) {
 		UI::LayoutViewHierarchy(*screenManager()->getUIContext(), root_);

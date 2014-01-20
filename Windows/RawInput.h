@@ -1,4 +1,4 @@
-// Copyright (c) 2013- PPSSPP Project.
+// Copyright (c) 2014- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,21 +15,11 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "Core/MemMap.h"
-#include "Core/MIPS/JitCommon/JitCommon.h"
-#include "Core/MIPS/x86/RegCache.h"
+#include "Common/CommonWindows.h"
 
-static const u64 MEMORY_ALIGNED16(ssNoSignMask[2]) = {0x7FFFFFFF7FFFFFFFULL, 0x7FFFFFFF7FFFFFFFULL};
-
-namespace MIPSComp {
-
-int Jit::Replace_fabsf() {
-	fpr.SpillLock(0, 12);
-	fpr.MapReg(0, MAP_DIRTY | MAP_NOINIT);
-	MOVSS(fpr.RX(0), fpr.R(12));
-	ANDPS(fpr.RX(0), M(&ssNoSignMask));
-	fpr.ReleaseSpillLocks();
-	return 4;  // Number of instructions in the MIPS function
-}
-
-}
+namespace WindowsRawInput {
+	void Init();
+	LRESULT Process(HWND hWnd, WPARAM wParam, LPARAM lParam);
+	void LoseFocus();
+	void Shutdown();
+};

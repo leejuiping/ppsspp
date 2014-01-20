@@ -816,6 +816,7 @@ u32 sceMpegAvcDecodeStopYCbCr(u32 mpeg, u32 bufferAddr, u32 statusAddr)
 	}
 
 	ERROR_LOG(ME, "UNIMPL sceMpegAvcDecodeStopYCbCr(%08x, %08x, %08x)", mpeg, bufferAddr, statusAddr);
+	Memory::Write_U32(0, statusAddr);
 	return 0;
 }
 
@@ -1088,6 +1089,12 @@ int sceMpegGetAvcAu(u32 mpeg, u32 streamId, u32 auAddr, u32 attrAddr)
 		mpegRingbuffer.packetsFree = mpegRingbuffer.packets;
 		Memory::WriteStruct(ctx->mpegRingbufferAddr, &mpegRingbuffer);
 
+		result = PSP_ERROR_MPEG_NO_DATA;
+	}
+
+	if (ctx->avc.avcDecodeResult == 0) {
+		INFO_LOG(ME, "Video decode completed");
+		ctx->avc.avcDecodeResult = MPEG_AVC_DECODE_SUCCESS;
 		result = PSP_ERROR_MPEG_NO_DATA;
 	}
 

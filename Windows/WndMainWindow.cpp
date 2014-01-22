@@ -64,6 +64,7 @@
 #include "Windows/RawInput.h"
 #include "GPU/GPUInterface.h"
 #include "GPU/GPUState.h"
+#include "gfx_es2/gpu_features.h"
 #include "GPU/GLES/TextureScaler.h"
 #include "GPU/GLES/TextureCache.h"
 #include "GPU/GLES/Framebuffer.h"
@@ -126,6 +127,8 @@ namespace MainWindow
 	static std::map<int, std::string> initialMenuKeys;
 	static std::vector<std::string> countryCodes;
 	static std::vector<std::string> availableShaders;
+	static W32Util::AsyncBrowseDialog *browseDialog;
+	static bool browsePauseAfter;
 #define MAX_LOADSTRING 100
 	const TCHAR *szTitle = TEXT("PPSSPP");
 	const TCHAR *szWindowClass = TEXT("PPSSPPWnd");
@@ -809,59 +812,58 @@ namespace MainWindow
 	}
 
 	void BrowseAndBoot(std::string defaultPath, bool browseDirectory) {
-		std::string fn;
-		std::string filter = "All supported file types (*.iso *.cso *.pbp *.elf *.prx *.zip)|*.pbp;*.elf;*.iso;*.cso;*.prx;*.zip|PSP ROMs (*.iso *.cso *.pbp *.elf *.prx)|*.pbp;*.elf;*.iso;*.cso;*.prx|Homebrew/Demos installers (*.zip)|*.zip|All files (*.*)|*.*||";
-		
-		for (int i=0; i<(int)filter.length(); i++) {
+		static std::wstring filter = L"All supported file types (*.iso *.cso *.pbp *.elf *.prx *.zip)|*.pbp;*.elf;*.iso;*.cso;*.prx;*.zip|PSP ROMs (*.iso *.cso *.pbp *.elf *.prx)|*.pbp;*.elf;*.iso;*.cso;*.prx|Homebrew/Demos installers (*.zip)|*.zip|All files (*.*)|*.*||";
+		for (int i = 0; i < (int)filter.length(); i++) {
 			if (filter[i] == '|')
 				filter[i] = '\0';
 		}
 
-		// Pause if a game is being played.
-		bool isPaused = false;
+		browsePauseAfter = false;
 		if (globalUIState == UISTATE_INGAME) {
-			isPaused = Core_IsStepping();
-			if (!isPaused)
+			browsePauseAfter = Core_IsStepping();
+			if (!browsePauseAfter)
 				Core_EnableStepping(true);
 		}
 
+		W32Util::MakeTopMost(GetHWND(), false);
 		if (browseDirectory) {
-			std::string dir = W32Util::BrowseForFolder(GetHWND(), "Choose directory");
-			if (dir == "") {
-				if (!isPaused)
-					Core_EnableStepping(false);
-			}
-			else {
-				if (globalUIState == UISTATE_INGAME || globalUIState == UISTATE_PAUSEMENU) {
-					Core_EnableStepping(false);
-				}
-				
-				dir = ReplaceAll(dir, "\\", "/");
-				NativeMessageReceived("boot", dir.c_str());
-			}
+			browseDialog = new W32Util::AsyncBrowseDialog(GetHWND(), WM_USER_BROWSE_BOOT_DONE, L"Choose directory");
+		} else {
+			browseDialog = new W32Util::AsyncBrowseDialog(W32Util::AsyncBrowseDialog::OPEN, GetHWND(), WM_USER_BROWSE_BOOT_DONE, L"LoadFile", ConvertUTF8ToWString(defaultPath), filter, L"*.pbp;*.elf;*.iso;*.cso;");
 		}
-		else if (W32Util::BrowseForFileName(true, GetHWND(), L"Load File", defaultPath.size() ? ConvertUTF8ToWString(defaultPath).c_str() : 0, ConvertUTF8ToWString(filter).c_str(), L"*.pbp;*.elf;*.iso;*.cso;",fn))
-		{
+	}
+
+	void BrowseAndBootDone() {
+		std::string filename;
+		if (!browseDialog->GetResult(filename)) {
+			if (!browsePauseAfter) {
+				Core_EnableStepping(false);
+			}
+		} else {
 			if (globalUIState == UISTATE_INGAME || globalUIState == UISTATE_PAUSEMENU) {
 				Core_EnableStepping(false);
 			}
 
-			// Decode the filename with fullpath.
-			std::string fullpath = fn;
-			char drive[MAX_PATH];
-			char dir[MAX_PATH];
-			char fname[MAX_PATH];
-			char ext[MAX_PATH];
-			_splitpath(fullpath.c_str(), drive, dir, fname, ext);
+			// TODO: What is this for / what does it fix?
+			if (browseDialog->GetType() != W32Util::AsyncBrowseDialog::DIR) {
+				// Decode the filename with fullpath.
+				char drive[MAX_PATH];
+				char dir[MAX_PATH];
+				char fname[MAX_PATH];
+				char ext[MAX_PATH];
+				_splitpath(filename.c_str(), drive, dir, fname, ext);
 
-			std::string executable = std::string(drive) + std::string(dir) + std::string(fname) + std::string(ext);
-			executable = ReplaceAll(executable, "\\", "/");
-			NativeMessageReceived("boot", executable.c_str());
+				filename = std::string(drive) + std::string(dir) + std::string(fname) + std::string(ext);
+			}
+
+			filename = ReplaceAll(filename, "\\", "/");
+			NativeMessageReceived("boot", filename.c_str());
 		}
-		else {
-			if (!isPaused)
-				Core_EnableStepping(false);
-		}
+
+		W32Util::MakeTopMost(GetHWND(), g_Config.bTopMost);
+
+		delete browseDialog;
+		browseDialog = 0;
 	}
 
 	void UmdSwitchAction() {
@@ -1574,10 +1576,15 @@ namespace MainWindow
 			UpdateWindowTitle();
 			break;
 
+		case WM_USER_BROWSE_BOOT_DONE:
+			BrowseAndBootDone();
+			break;
+
 		case WM_MENUSELECT:
 			// Unfortunately, accelerate keys (hotkeys) shares the same enabled/disabled states
 			// with corresponding menu items.
 			UpdateMenus();
+			WindowsRawInput::NotifyMenu();
 			break;
 
 		// Turn off the screensaver.
@@ -1673,6 +1680,14 @@ namespace MainWindow
 
 		for (int i = 0; i < ARRAY_SIZE(texscalingitems); i++) {
 			CheckMenuItem(menu, texscalingitems[i], MF_BYCOMMAND | ((i == g_Config.iTexScalingLevel) ? MF_CHECKED : MF_UNCHECKED));
+		}
+
+		if (!gl_extensions.OES_texture_npot) {
+			EnableMenuItem(menu, ID_TEXTURESCALING_3X, MF_GRAYED);
+			EnableMenuItem(menu, ID_TEXTURESCALING_5X, MF_GRAYED);
+		} else {
+			EnableMenuItem(menu, ID_TEXTURESCALING_3X, MF_ENABLED);
+			EnableMenuItem(menu, ID_TEXTURESCALING_5X, MF_ENABLED);
 		}
 
 		static const int texscalingtypeitems[] = {

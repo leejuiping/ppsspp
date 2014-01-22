@@ -331,6 +331,10 @@ FramebufferManager::~FramebufferManager() {
 	}
 	SetNumExtraFBOs(0);
 
+	for (auto it = renderCopies_.begin(), end = renderCopies_.end(); it != end; ++it) {
+		fbo_destroy(it->second);
+	}
+
 #ifndef USING_GLES2
 	delete [] pixelBufObj_;
 #endif
@@ -868,28 +872,8 @@ void FramebufferManager::SetRenderFrameBuffer() {
 		}
 #endif
 
-		bool doDepthCopy = 
-			currentRenderVfb_ != NULL &&
-			currentRenderVfb_->fbo != NULL &&
-			MaskedEqual(currentRenderVfb_->z_address, vfb->z_address) &&
-			currentRenderVfb_->renderWidth == vfb->renderWidth &&
-			currentRenderVfb_->renderHeight == vfb->renderHeight;
-
-#ifndef USING_GLES2
-		if (doDepthCopy && gl_extensions.FBO_ARB) {
-#else
-		if (doDepthCopy && gl_extensions.GLES3) {
-#endif
-
-#ifdef MAY_HAVE_GLES3
-			// Let's only do this if not clearing.
-			if (!gstate.isModeClear() || !gstate.isClearModeDepthMask()) {
-				fbo_bind_for_read(currentRenderVfb_->fbo);
-				glBlitFramebuffer(0, 0, currentRenderVfb_->renderWidth, currentRenderVfb_->renderHeight, 0, 0, vfb->renderWidth, vfb->renderHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-			}
-#endif
-		}
-
+		// Copy depth pixel value from the read framebuffer to the draw framebuffer
+		BindFramebufferDepth(currentRenderVfb_,vfb);
 		currentRenderVfb_ = vfb;
 	} else {
 		vfb->last_frame_render = gpuStats.numFlips;
@@ -917,6 +901,79 @@ void FramebufferManager::SetLineWidth() {
 		glPointSize((float)g_Config.iInternalResolution);
 	}
 #endif
+}
+
+void FramebufferManager::BindFramebufferDepth(VirtualFramebuffer *sourceframebuffer, VirtualFramebuffer *targetframebuffer) {
+	if (!sourceframebuffer || !targetframebuffer->fbo || !useBufferedRendering_) {
+		return;
+	}
+	
+	if (MaskedEqual(sourceframebuffer->z_address, targetframebuffer->z_address) && 
+		sourceframebuffer->renderWidth == targetframebuffer->renderWidth &&
+		sourceframebuffer->renderHeight == targetframebuffer->renderHeight) {
+		
+#ifndef USING_GLES2
+		if (gl_extensions.FBO_ARB) {
+#else
+		if (gl_extensions.GLES3) {
+#endif
+
+#ifdef MAY_HAVE_GLES3
+			// Let's only do this if not clearing.
+			if (!gstate.isModeClear() || !gstate.isClearModeDepthMask()) {
+				fbo_bind_for_read(sourceframebuffer->fbo);
+				glBlitFramebuffer(0, 0, sourceframebuffer->renderWidth, sourceframebuffer->renderHeight, 0, 0, targetframebuffer->renderWidth, targetframebuffer->renderHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+			}
+#endif
+		}
+	}
+}
+
+void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer) {
+	if (!framebuffer->fbo || !useBufferedRendering_) {
+		glBindTexture(GL_TEXTURE_2D, 0);
+		gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
+		return;
+	}
+
+	if (MaskedEqual(framebuffer->fb_address, gstate.getFrameBufRawAddress())) {
+#ifndef USING_GLES2
+		if (gl_extensions.FBO_ARB) {
+#else
+		if (gl_extensions.GLES3) {
+#endif
+#ifdef MAY_HAVE_GLES3
+
+			// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
+			FBO *renderCopy = NULL;
+			std::pair<int, int> copySize = std::make_pair((int)framebuffer->renderWidth, (int)framebuffer->renderHeight);
+			for (auto it = renderCopies_.begin(), end = renderCopies_.end(); it != end; ++it) {
+				if (it->first == copySize) {
+					renderCopy = it->second;
+					break;
+				}
+			}
+			if (!renderCopy) {
+				renderCopy = fbo_create(framebuffer->renderWidth, framebuffer->renderHeight, 1, true, framebuffer->colorDepth);
+				renderCopies_[copySize] = renderCopy;
+			}
+
+			fbo_bind_as_render_target(renderCopy);
+			glViewport(0, 0, framebuffer->renderWidth, framebuffer->renderHeight);
+			fbo_bind_for_read(framebuffer->fbo);
+			glBlitFramebuffer(0, 0, framebuffer->renderWidth, framebuffer->renderHeight, 0, 0, framebuffer->renderWidth, framebuffer->renderHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+			fbo_bind_as_render_target(currentRenderVfb_->fbo);
+			if (gl_extensions.gpuVendor != GPU_VENDOR_POWERVR)
+				glstate.viewport.restore();
+			fbo_bind_color_as_texture(renderCopy, 0);
+#endif
+		} else {
+			fbo_bind_color_as_texture(framebuffer->fbo, 0);
+		}
+	} else {
+		fbo_bind_color_as_texture(framebuffer->fbo, 0);
+	}
 }
 
 void FramebufferManager::CopyDisplayToOutput() {
@@ -1601,6 +1658,36 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 		if (needUnbind)
 			fbo_unbind();
 	}
+}
+
+void FramebufferManager::NotifyBlockTransfer(u32 dst, u32 src) {
+#ifndef USING_GLES2
+	if (!reportedBlits_.insert(std::make_pair(dst, src)).second) {
+		// Already reported/checked.
+		return;
+	}
+
+	bool dstBuffer = false;
+	bool srcBuffer = false;
+
+	for (size_t i = 0; i < vfbs_.size(); ++i) {
+		VirtualFramebuffer *vfb = vfbs_[i];
+		if (MaskedEqual(vfb->fb_address, dst)) {
+			dstBuffer = true;
+		}
+		if (MaskedEqual(vfb->fb_address, src)) {
+			srcBuffer = true;
+		}
+	}
+
+	if (dstBuffer && srcBuffer) {
+		WARN_LOG_REPORT(G3D, "Intra buffer block transfer (not supported) %08x -> %08x", src, dst);
+	} else if (dstBuffer) {
+		WARN_LOG_REPORT(G3D, "Block transfer upload (not supported) %08x -> %08x", src, dst);
+	} else if (srcBuffer && g_Config.iRenderingMode == FB_BUFFERED_MODE) {
+		WARN_LOG_REPORT(G3D, "Block transfer download (not supported) %08x -> %08x", src, dst);
+	}
+#endif
 }
 
 void FramebufferManager::Resized() {

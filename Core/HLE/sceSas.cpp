@@ -129,10 +129,17 @@ u32 _sceSasCore(u32 core, u32 outAddr) {
 		return ERROR_SAS_INVALID_PARAMETER;
 	}
 
-	sas->Mix(outAddr);
+	bool ret = sas->Mix(outAddr);
 	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
-	// Let's aim low for now.
-	return hleDelayResult(0, "sas core", 240);
+	// Turns out that delaying only when there's no voicesPlayingCount fixes issue #2304. Feels a bit
+	// like a hack. Note that Mix() returns true in this case which is a little confusing.
+	if (ret) {
+		// If voicesPlayingCount == 0 , delay 240 us and reschedule
+		return hleDelayResult(0, "sas core", 240);
+	} else {
+		// if voicesPlayingCount > 0 , no delay
+		return 0;
+	}
 }
 
 // Another way of running the mixer, the inoutAddr should be both input and output
@@ -143,10 +150,17 @@ u32 _sceSasCoreWithMix(u32 core, u32 inoutAddr, int leftVolume, int rightVolume)
 		return ERROR_SAS_INVALID_PARAMETER;
 	}
 
-	sas->Mix(inoutAddr, inoutAddr, leftVolume, rightVolume);
+	bool ret = sas->Mix(inoutAddr, inoutAddr, leftVolume, rightVolume);
 	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
-	// Let's aim low for now.
-	return hleDelayResult(0, "sas core", 240);
+	// Turns out that delaying only when there's no voicesPlayingCount fixes issue #2304. Feels a bit
+	// like a hack. Note that Mix() returns true in this case which is a little confusing.
+	if (ret) {
+		// If voicesPlayingCount == 0 , delay 240 us and reschedule
+		return hleDelayResult(0, "sas core", 240);
+	} else {
+		// if voicesPlayingCount > 0 , no delay
+		return 0;
+	}
 }
 
 u32 sceSasSetVoice(u32 core, int voiceNum, u32 vagAddr, int size, int loop) {

@@ -225,12 +225,13 @@ namespace MainWindow
 		// Round up to a zoom factor for the render size.
 		int zoom = g_Config.iInternalResolution;
 		if (zoom == 0) // auto mode
+		{
 			zoom = (rc.right - rc.left + 479) / 480;
-
-		PSP_CoreParameter().renderWidth = 480 * zoom;
-		PSP_CoreParameter().renderHeight = 272 * zoom;
-		PSP_CoreParameter().outputWidth = 480 * zoom;
-		PSP_CoreParameter().outputHeight = 272 * zoom;
+			PSP_CoreParameter().renderWidth = 480 * zoom;
+			PSP_CoreParameter().renderHeight = 272 * zoom;
+			PSP_CoreParameter().outputWidth = 480 * zoom;
+			PSP_CoreParameter().outputHeight = 272 * zoom;
+		}
 		
 		if (displayOSM) {
 			I18NCategory *g = GetI18NCategory("Graphics");
@@ -259,6 +260,7 @@ namespace MainWindow
 				g_Config.iInternalResolution = 0;
 		}
 		
+		// Taking auto-texture scaling into account
 		if (g_Config.iTexScalingLevel == TEXSCALING_AUTO)
 			setTexScalingMultiplier(0);
 
@@ -615,8 +617,8 @@ namespace MainWindow
 		TranslateMenuItem(ID_OPTIONS_READFBOTOMEMORYCPU);
 		TranslateMenuItem(ID_OPTIONS_READFBOTOMEMORYGPU);
 		TranslateSubMenu("Frame Skipping", MENU_OPTIONS, SUBMENU_FRAME_SKIPPING, L"\tF7");
-		TranslateMenuItem(ID_OPTIONS_FRAMESKIP_0);
 		TranslateMenuItem(ID_OPTIONS_FRAMESKIP_AUTO);
+		TranslateMenuItem(ID_OPTIONS_FRAMESKIP_0);
 		// Skip frameskipping 1-8..
 		TranslateSubMenu("Texture Filtering", MENU_OPTIONS, SUBMENU_TEXTURE_FILTERING);
 		TranslateMenuItem(ID_OPTIONS_TEXTUREFILTERING_AUTO);
@@ -708,7 +710,6 @@ namespace MainWindow
 		I18NCategory *g = GetI18NCategory("Graphics");
 		const char *frameskipStr = g->T("Frame Skipping");
 		const char *offStr = g->T("Off");
-		const char *autoStr = g->T("Auto");
 
 		char message[256];
 		memset(message, 0, sizeof(message));
@@ -717,12 +718,8 @@ namespace MainWindow
 		case FRAMESKIP_OFF:
 			sprintf(message, "%s: %s", frameskipStr, offStr);
 			break;
-		case FRAMESKIP_AUTO:
-			sprintf(message, "%s: %s", frameskipStr, autoStr);
-			break;
 		default:
-			//1 means auto, 2 means 1, 3 means 2...
-			sprintf(message, "%s: %d", frameskipStr, g_Config.iFrameSkip - 1);
+			sprintf(message, "%s: %d", frameskipStr, g_Config.iFrameSkip);
 			break;
 		}
 
@@ -1216,6 +1213,10 @@ namespace MainWindow
 					g_Config.bVSync = !g_Config.bVSync;
 					break;
 
+				case ID_OPTIONS_FRAMESKIP_AUTO:
+					g_Config.bAutoFrameSkip = !g_Config.bAutoFrameSkip;
+					break;
+
 				case ID_TEXTURESCALING_AUTO: setTexScalingMultiplier(TEXSCALING_AUTO); break;
 				case ID_TEXTURESCALING_OFF: setTexScalingMultiplier(TEXSCALING_OFF); break;
 				case ID_TEXTURESCALING_2X:  setTexScalingMultiplier(TEXSCALING_2X); break;
@@ -1259,7 +1260,6 @@ namespace MainWindow
 					break;
 
 				case ID_OPTIONS_FRAMESKIP_0:    setFrameSkipping(FRAMESKIP_OFF); break;
-				case ID_OPTIONS_FRAMESKIP_AUTO: setFrameSkipping(FRAMESKIP_AUTO); break;
 				case ID_OPTIONS_FRAMESKIP_1:    setFrameSkipping(FRAMESKIP_1); break;
 				case ID_OPTIONS_FRAMESKIP_2:    setFrameSkipping(FRAMESKIP_2); break;
 				case ID_OPTIONS_FRAMESKIP_3:    setFrameSkipping(FRAMESKIP_3); break;
@@ -1286,7 +1286,7 @@ namespace MainWindow
 					break;
 
 				case ID_DEBUG_LOADMAPFILE:
-					if (W32Util::BrowseForFileName(true, hWnd, L"Load .MAP",0,L"Maps\0*.map\0All files\0*.*\0\0",L"map",fn)) {
+					if (W32Util::BrowseForFileName(true, hWnd, L"Load .ppmap",0,L"Maps\0*.ppmap\0All files\0*.*\0\0",L"ppmap",fn)) {
 						symbolMap.LoadSymbolMap(fn.c_str());
 
 						if (disasmWindow[0])
@@ -1298,7 +1298,7 @@ namespace MainWindow
 					break;
 
 				case ID_DEBUG_SAVEMAPFILE:
-					if (W32Util::BrowseForFileName(false, hWnd, L"Save .MAP",0,L"Maps\0*.map\0All files\0*.*\0\0",L"map",fn))
+					if (W32Util::BrowseForFileName(false, hWnd, L"Save .ppmap",0,L"Maps\0*.ppmap\0All files\0*.*\0\0",L"ppmap",fn))
 						symbolMap.SaveSymbolMap(fn.c_str());
 					break;
 
@@ -1596,6 +1596,7 @@ namespace MainWindow
 		CHECKITEM(ID_DEBUG_RUNONLOAD, g_Config.bAutoRun);
 		CHECKITEM(ID_OPTIONS_VERTEXCACHE, g_Config.bVertexCache);
 		CHECKITEM(ID_OPTIONS_SHOWFPS, g_Config.iShowFPSCounter);
+		CHECKITEM(ID_OPTIONS_FRAMESKIP_AUTO, g_Config.bAutoFrameSkip);
 		CHECKITEM(ID_OPTIONS_FRAMESKIP, g_Config.iFrameSkip != 0);
 		CHECKITEM(ID_OPTIONS_VSYNC, g_Config.bVSync);
 		CHECKITEM(ID_OPTIONS_TOPMOST, g_Config.bTopMost);
@@ -1719,7 +1720,6 @@ namespace MainWindow
 
 		static const int frameskipping[] = {
 			ID_OPTIONS_FRAMESKIP_0,
-			ID_OPTIONS_FRAMESKIP_AUTO,
 			ID_OPTIONS_FRAMESKIP_1,
 			ID_OPTIONS_FRAMESKIP_2,
 			ID_OPTIONS_FRAMESKIP_3,

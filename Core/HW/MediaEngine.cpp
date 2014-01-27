@@ -138,6 +138,7 @@ MediaEngine::MediaEngine(): m_pdata(0) {
 	m_buffer = 0;
 	m_demux = 0;
 	m_audioContext = 0;
+	m_audiopts = 0;
 	m_isVideoEnd = false;
 	m_noAudioData = false;
 	m_bufSize = 0x2000;
@@ -336,7 +337,7 @@ int MediaEngine::addStreamData(u8* buffer, int addSize) {
 #ifdef USE_FFMPEG
 		if (!m_pFormatCtx && m_pdata->getQueueSize() >= 2048) {
 			m_pdata->get_front(m_mpegheader, sizeof(m_mpegheader));
-			int mpegoffset = bswap32(*(int*)(m_mpegheader + 8));
+			int mpegoffset = (int)(*(s32_be*)(m_mpegheader + 8));
 			m_pdata->pop_front(0, mpegoffset);
 			openContext();
 		}
@@ -443,8 +444,6 @@ void MediaEngine::updateSwsFormat(int videoPixelMode) {
 }
 
 bool MediaEngine::stepVideo(int videoPixelMode) {
-	// if video engine is broken, force to add timestamp
-	m_videopts += 3003;
 #ifdef USE_FFMPEG
 	auto codecIter = m_pCodecCtxs.find(m_videoStream);
 	AVCodecContext *m_pCodecCtx = codecIter == m_pCodecCtxs.end() ? 0 : codecIter->second;
@@ -478,7 +477,10 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 				sws_scale(m_sws_ctx, m_pFrame->data, m_pFrame->linesize, 0,
 					m_pCodecCtx->height, m_pFrameRGB->data, m_pFrameRGB->linesize);
 
-				m_videopts = m_pFrame->pkt_dts + av_frame_get_pkt_duration(m_pFrame) - m_firstTimeStamp;
+				if (av_frame_get_best_effort_timestamp(m_pFrame) != AV_NOPTS_VALUE)
+					m_videopts = av_frame_get_best_effort_timestamp(m_pFrame) + av_frame_get_pkt_duration(m_pFrame) - m_firstTimeStamp;
+				else
+					m_videopts += av_frame_get_pkt_duration(m_pFrame);
 				bGetFrame = true;
 			}
 			if (result <= 0 && dataEnd) {
@@ -494,17 +496,18 @@ bool MediaEngine::stepVideo(int videoPixelMode) {
 	}
 	return bGetFrame;
 #else
+	// If video engine is not available, just add to the timestamp at least.
+	m_videopts += 3003;
 	return true;
 #endif // USE_FFMPEG
 }
 
 // Helpers that null out alpha (which seems to be the case on the PSP.)
 // Some games depend on this, for example Sword Art Online (doesn't clear A's from buffer.)
-
 inline void writeVideoLineRGBA(void *destp, const void *srcp, int width) {
 	// TODO: Use SSE/NEON, investigate why AV_PIX_FMT_RGB0 does not work.
-	u32 *dest = (u32 *)destp;
-	const u32 *src = (u32 *)srcp;
+	u32_le *dest = (u32_le *)destp;
+	const u32_le *src = (u32_le *)srcp;
 
 	u32 mask = 0x00FFFFFF;
 	for (int i = 0; i < width; ++i) {
@@ -518,8 +521,8 @@ inline void writeVideoLineABGR5650(void *destp, const void *srcp, int width) {
 
 inline void writeVideoLineABGR5551(void *destp, const void *srcp, int width) {
 	// TODO: Use SSE/NEON.
-	u16 *dest = (u16 *)destp;
-	const u16 *src = (u16 *)srcp;
+	u16_le *dest = (u16_le *)destp;
+	const u16_le *src = (u16_le *)srcp;
 
 	u16 mask = 0x7FFF;
 	for (int i = 0; i < width; ++i) {
@@ -529,8 +532,8 @@ inline void writeVideoLineABGR5551(void *destp, const void *srcp, int width) {
 
 inline void writeVideoLineABGR4444(void *destp, const void *srcp, int width) {
 	// TODO: Use SSE/NEON.
-	u16 *dest = (u16 *)destp;
-	const u16 *src = (u16 *)srcp;
+	u16_le *dest = (u16_le *)destp;
+	const u16_le *src = (u16_le *)srcp;
 
 	u16 mask = 0x0FFF;
 	for (int i = 0; i < width; ++i) {

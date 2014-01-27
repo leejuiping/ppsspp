@@ -666,14 +666,10 @@ else()
 	message(FATAL_ERROR "Could not find SDL. Failing.")
 endif()
 
-if(X86)
-	set(nativeExtra ${nativeExtra}
-		native/base/backtrace.cpp
-		native/base/backtrace.h)
-endif()
-
 add_library(native STATIC
 	${nativeExtra}
+	native/base/backtrace.cpp
+	native/base/backtrace.h
 	native/audio/mixer.cpp
 	native/audio/mixer.h
 	native/audio/wav_read.cpp
@@ -1065,6 +1061,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/sceOpenPSID.h
 	Core/HLE/sceP3da.cpp
 	Core/HLE/sceP3da.h
+	Core/HLE/sceMt19937.cpp
+	Core/HLE/sceMt19937.h
 	Core/HLE/sceMd5.cpp
 	Core/HLE/sceMd5.h
 	Core/HLE/sceMp4.cpp

@@ -15,6 +15,7 @@ static const int numCPUs = 1;
 enum { TL_NAME, TL_PROGRAMCOUNTER, TL_ENTRYPOINT, TL_PRIORITY, TL_STATE, TL_WAITTYPE, TL_COLUMNCOUNT };
 enum { BPL_TYPE, BPL_OFFSET, BPL_SIZELABEL, BPL_OPCODE, BPL_CONDITION, BPL_HITS, BPL_ENABLED, BPL_COLUMNCOUNT };
 enum { SF_ENTRY, SF_ENTRYNAME, SF_CURPC, SF_CUROPCODE, SF_CURSP, SF_FRAMESIZE, SF_COLUMNCOUNT };
+enum { ML_NAME, ML_ADDRESS, ML_SIZE, ML_ACTIVE, ML_COLUMNCOUNT };
 
 GenericListViewColumn threadColumns[TL_COLUMNCOUNT] = {
 	{ L"Name",			0.20f },
@@ -42,6 +43,13 @@ GenericListViewColumn stackTraceColumns[SF_COLUMNCOUNT] = {
 	{ L"Opcode",		0.28f },
 	{ L"SP",			0.12f },
 	{ L"Frame Size",	0.12f }
+};
+
+GenericListViewColumn moduleListColumns[ML_COLUMNCOUNT] = {
+	{ L"Name",			0.25f },
+	{ L"Address",		0.25f },
+	{ L"Size",			0.25f },
+	{ L"Active",		0.25f },
 };
 
 const int POPUP_SUBMENU_ID_BREAKPOINTLIST = 5;
@@ -429,7 +437,7 @@ void CtrlBreakpointList::GetColumnText(wchar_t* dest, int row, int col)
 	case BPL_TYPE:
 		{
 			if (isMemory) {
-				switch (displayedMemChecks_[index].cond) {
+				switch ((int)displayedMemChecks_[index].cond) {
 				case MEMCHECK_READ:
 					wcscpy(dest,L"Read");
 					break;
@@ -438,6 +446,12 @@ void CtrlBreakpointList::GetColumnText(wchar_t* dest, int row, int col)
 					break;
 				case MEMCHECK_READWRITE:
 					wcscpy(dest,L"Read/Write");
+					break;
+				case MEMCHECK_WRITE | MEMCHECK_WRITE_ONCHANGE:
+					wcscpy(dest,L"Write Change");
+					break;
+				case MEMCHECK_READWRITE | MEMCHECK_WRITE_ONCHANGE:
+					wcscpy(dest,L"Read/Write Change");
 					break;
 				}
 			} else {
@@ -463,8 +477,8 @@ void CtrlBreakpointList::GetColumnText(wchar_t* dest, int row, int col)
 				else
 					wsprintf(dest,L"0x%08X",mc.end-mc.start);
 			} else {
-				const char* sym = symbolMap.GetLabelName(displayedBreakPoints_[index].addr);
-				if (sym != NULL)
+				const std::string sym = symbolMap.GetLabelString(displayedBreakPoints_[index].addr);
+				if (!sym.empty())
 				{
 					std::wstring s = ConvertUTF8ToWString(sym);
 					wcscpy(dest,s.c_str());
@@ -635,8 +649,8 @@ void CtrlStackTraceView::GetColumnText(wchar_t* dest, int row, int col)
 		break;
 	case SF_ENTRYNAME:
 		{
-			const char* sym = symbolMap.GetLabelName(frames[row].entry);
-			if (sym != NULL) {
+			const std::string sym = symbolMap.GetLabelString(frames[row].entry);
+			if (!sym.empty()) {
 				wcscpy(dest, ConvertUTF8ToWString(sym).c_str());
 			} else {
 				wcscpy(dest,L"-");
@@ -687,5 +701,76 @@ void CtrlStackTraceView::loadStackTrace()
 	} else {
 		frames.clear();
 	}
+	Update();
+}
+
+//
+// CtrlModuleList
+//
+
+CtrlModuleList::CtrlModuleList(HWND hwnd, DebugInterface* cpu)
+	: GenericListControl(hwnd,moduleListColumns,ML_COLUMNCOUNT),cpu(cpu)
+{
+	Update();
+}
+
+bool CtrlModuleList::WindowMessage(UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& returnValue)
+{
+	switch(msg)
+	{
+	case WM_KEYDOWN:
+		if (wParam == VK_TAB)
+		{
+			returnValue = 0;
+			SendMessage(GetParent(GetHandle()),WM_DEB_TABPRESSED,0,0);
+			return true;
+		}
+		break;
+	case WM_GETDLGCODE:
+		if (lParam && ((MSG*)lParam)->message == WM_KEYDOWN)
+		{
+			if (wParam == VK_TAB || wParam == VK_RETURN)
+			{
+				returnValue = DLGC_WANTMESSAGE;
+				return true;
+			}
+		}
+		break;
+	}
+
+	return false;
+}
+
+void CtrlModuleList::GetColumnText(wchar_t* dest, int row, int col)
+{
+	if (row < 0 || row >= (int)modules.size()) {
+		return;
+	}
+
+	switch (col)
+	{
+	case ML_NAME:
+		wcscpy(dest,ConvertUTF8ToWString(modules[row].name).c_str());
+		break;
+	case ML_ADDRESS:
+		wsprintf(dest,L"%08X",modules[row].address);
+		break;
+	case ML_SIZE:
+		wsprintf(dest,L"%08X",modules[row].size);
+		break;
+	case ML_ACTIVE:
+		wcscpy(dest,modules[row].active ? L"true" : L"false");
+		break;
+	}
+}
+
+void CtrlModuleList::OnDoubleClick(int itemIndex, int column)
+{
+	SendMessage(GetParent(GetHandle()),WM_DEB_GOTOWPARAM,modules[itemIndex].address,0);
+}
+
+void CtrlModuleList::loadModules()
+{
+	modules = symbolMap.getAllModules();
 	Update();
 }

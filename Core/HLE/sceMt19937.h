@@ -17,43 +17,6 @@
 
 #pragma once
 
-typedef struct 
-{
-	s32_le unk0;
-	s32_le unk4;
-	s32_le err; // 8
-	s32_le edramAddr; // 12
-	s32_le neededMem; // 16
-	s32_le unk20;
-	u32_le inBuf; // 24
-	s32_le unk28;
-	u32_le outBuf; // 32
-	s32_le unk36;
-	s8 unk40;
-	s8 unk41;
-	s8 unk42;
-	s8 unk43;
-	s8 unk44;
-	s8 unk45;
-	s8 unk46;
-	s8 unk47;
-	s32_le unk48;
-	s32_le unk52;
-	s32_le unk56;
-	s32_le unk60;
-	s32_le unk64;
-	s32_le unk68;
-	s32_le unk72;
-	s32_le unk76;
-	s32_le unk80;
-	s32_le unk84;
-	s32_le unk88;
-	s32_le unk92;
-	s32_le unk96;
-	s32_le unk100;
-	u32_le allocMem; // 104
-	// make sure the size is 128
-	u8 unk[20];
-} SceAudiocodecCodec;
+#include "HLE.h"
 
-void Register_sceAudiocodec();
+void Register_sceMt19937();

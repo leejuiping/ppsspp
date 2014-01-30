@@ -870,7 +870,7 @@ int scePsmfPlayerBreak(u32 psmfPlayer)
 	ERROR_LOG(ME, "UNIMPL scePsmfPlayerBreak(%08x)", psmfPlayer);
 	PsmfPlayer *psmfplayer = getPsmfPlayer(psmfPlayer);
 	if (psmfplayer)
-		psmfplayer->status = PSMF_PLAYER_STATUS_STANDBY;
+		psmfplayer->status = PSMF_PLAYER_STATUS_INIT;//Fix everybody stress buster
 	return 0;
 }
 
@@ -994,7 +994,7 @@ int scePsmfPlayerSetPsmfOffsetCB(u32 psmfPlayer, const char *filename, int offse
 
 int scePsmfPlayerGetAudioOutSize(u32 psmfPlayer) 
 {
-	WARN_LOG(ME, "scePsmfPlayerGetAudioOutSize(%08x)", psmfPlayer);
+	WARN_LOG(ME, "%i = scePsmfPlayerGetAudioOutSize(%08x)",audioSamplesBytes,psmfPlayer);
 	return audioSamplesBytes;
 }
 

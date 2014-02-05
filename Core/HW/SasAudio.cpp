@@ -347,7 +347,7 @@ void SasVoice::ReadSamples(s16 *output, int numSamples) {
 		{
 			vag.GetSamples(output, numSamples);
 			if (vag.End()) {
-				// NOTICE_LOG(SAS, "Hit end of VAG audio");
+				// NOTICE_LOG(SCESAS, "Hit end of VAG audio");
 				playing = false;
 				on = false;  // ??
 				envelope.KeyOff();
@@ -464,13 +464,14 @@ void SasInstance::MixVoice(SasVoice &voice) {
 
 		if (voice.envelope.HasEnded())
 		{
-			// NOTICE_LOG(SAS, "Hit end of envelope");
+			// NOTICE_LOG(SCESAS, "Hit end of envelope");
 			voice.playing = false;
+			voice.on = false;
 		}
 	}
 }
 
-bool SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
+void SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 	int voicesPlayingCount = 0;
 
 	for (int v = 0; v < PSP_SAS_VOICES_MAX; v++) {
@@ -518,12 +519,6 @@ bool SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 #ifdef AUDIO_TO_FILE
 	fwrite(Memory::GetPointer(outAddr), 1, grainSize * 2 * 2, audioDump);
 #endif
-
-	if (voicesPlayingCount == 0) {
-		return true;
-	} else {
-		return false;
-	}
 }
 
 void SasInstance::ApplyReverb() {

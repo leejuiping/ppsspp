@@ -263,7 +263,12 @@ void AnalyzeMpeg(u8 *buffer, MpegContext *ctx) {
 	ctx->audioFrameCount = 0;
 	ctx->endOfAudioReached = false;
 	ctx->endOfVideoReached = false;
-
+	
+	// Sanity Check ctx->mpegFirstTimestamp
+	if (ctx->mpegFirstTimestamp != 90000) {
+		WARN_LOG_REPORT(ME, "Unexpected mpeg first timestamp: %llx / %lld", ctx->mpegFirstTimestamp, ctx->mpegFirstTimestamp);
+	}
+	
 	if (ctx->mpegMagic != PSMF_MAGIC || ctx->mpegVersion < 0 ||
 		(ctx->mpegOffset & 2047) != 0 || ctx->mpegOffset == 0) {
 		// mpeg header is invalid!
@@ -1549,6 +1554,11 @@ int sceMpegAvcConvertToYuv420(u32 mpeg, u32 bufferOutputAddr, u32 unknown1, int 
 	if (!ctx) {
 		WARN_LOG(ME, "sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x): bad mpeg handle", mpeg, bufferOutputAddr, unknown1, unknown2);
 		return -1;
+	}
+
+	if (ctx->mediaengine->m_buffer == 0){
+		WARN_LOG(ME, "sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)m_buffer = 0 ", mpeg, bufferOutputAddr, unknown1, unknown2);
+		return 0x806201FE;
 	}
 
 	DEBUG_LOG(ME, "sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)", mpeg, bufferOutputAddr, unknown1, unknown2);

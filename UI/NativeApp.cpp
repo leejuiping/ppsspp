@@ -116,13 +116,10 @@ static UIContext *uiContext;
 
 std::thread *graphicsLoadThread;
 
-class AndroidLogger : public LogListener
-{
+class AndroidLogger : public LogListener {
 public:
-	void Log(LogTypes::LOG_LEVELS level, const char *msg)
-	{
-		switch (level)
-		{
+	void Log(LogTypes::LOG_LEVELS level, const char *msg) {
+		switch (level) {
 		case LogTypes::LVERBOSE:
 		case LogTypes::LDEBUG:
 		case LogTypes::LINFO:
@@ -144,8 +141,7 @@ public:
 
 
 // TODO: Get rid of this junk
-class NativeHost : public Host
-{
+class NativeHost : public Host {
 public:
 	NativeHost() {
 		// hasRendered = false;
@@ -202,6 +198,17 @@ void NativeHost::ShutdownSound() {
 	g_mixer = 0;
 }
 
+std::string NativeQueryConfig(std::string query) {
+	if (query == "screenRotation") {
+		char temp[128];
+		sprintf(temp, "%i", g_Config.iScreenRotation);
+		ILOG("Rotation queried: %s", temp);
+		return temp;
+	} else {
+		return "";
+	}
+}
+
 int NativeMix(short *audio, int num_samples) {
 	if (g_mixer) {
 		num_samples = g_mixer->Mix(audio, num_samples);
@@ -211,6 +218,7 @@ int NativeMix(short *audio, int num_samples) {
 	return num_samples;
 }
 
+// This is called before NativeInit so we do a little bit of initialization here.
 void NativeGetAppInfo(std::string *app_dir_name, std::string *app_nice_name, bool *landscape) {
 	*app_nice_name = "PPSSPP";
 	*app_dir_name = "ppsspp";

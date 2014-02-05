@@ -99,7 +99,7 @@ u32 sceSasInit(u32 core, u32 grainSize, u32 maxVoices, u32 outputMode, u32 sampl
 	INFO_LOG(SCESAS, "sceSasInit(%08x, %i, %i, %i, %i)", core, grainSize, maxVoices, outputMode, sampleRate);
 
 	sas->SetGrainSize(grainSize);
-	// Seems like maxVoiecs is actually ignored for all intents and purposes.
+	// Seems like maxVoices is actually ignored for all intents and purposes.
 	sas->maxVoices = PSP_SAS_VOICES_MAX;
 	sas->outputMode = outputMode;
 	for (int i = 0; i < sas->maxVoices; i++) {
@@ -117,7 +117,7 @@ u32 sceSasGetEndFlag(u32 core) {
 			endFlag |= (1 << i);
 	}
 
-	DEBUG_LOG(SCESAS, "sceSasGetEndFlag(%08x)", endFlag);
+	DEBUG_LOG(SCESAS, "%08x=sceSasGetEndFlag(%08x)", endFlag, core);
 	return endFlag;
 }
 
@@ -129,17 +129,9 @@ u32 _sceSasCore(u32 core, u32 outAddr) {
 		return ERROR_SAS_INVALID_PARAMETER;
 	}
 
-	bool ret = sas->Mix(outAddr);
+	sas->Mix(outAddr);
 	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
-	// When there's no voicesPlayingCount , we return as no delay and fixes issue #2304.
-	// Note that Mix() returns true in this case when no voicesPlayingCount.
-	if (ret) {
-		// If voicesPlayingCount == 0 , no delay
-		return 0;
-	} else {
-		// if voicesPlayingCount > 0 , delay 240 us and reschedule
-		return hleDelayResult(0, "sas core", 240);
-	}
+	return hleDelayResult(0, "sas core", 240);
 }
 
 // Another way of running the mixer, the inoutAddr should be both input and output
@@ -150,17 +142,9 @@ u32 _sceSasCoreWithMix(u32 core, u32 inoutAddr, int leftVolume, int rightVolume)
 		return ERROR_SAS_INVALID_PARAMETER;
 	}
 
-	bool ret = sas->Mix(inoutAddr, inoutAddr, leftVolume, rightVolume);
+	sas->Mix(inoutAddr, inoutAddr, leftVolume, rightVolume);
 	// Actual delay time seems to between 240 and 1000 us, based on grain and possibly other factors.
-	// When there's no voicesPlayingCount , we return as no delay and fixes issue #2304.
-	// Note that Mix() returns true in this case when no voicesPlayingCount.
-	if (ret) {
-		// If voicesPlayingCount == 0 , no delay
-		return 0;
-	} else {
-		// if voicesPlayingCount > 0 , delay 240 us and reschedule
-		return hleDelayResult(0, "sas core", 240);
-	}
+	return hleDelayResult(0, "sas core", 240);
 }
 
 u32 sceSasSetVoice(u32 core, int voiceNum, u32 vagAddr, int size, int loop) {

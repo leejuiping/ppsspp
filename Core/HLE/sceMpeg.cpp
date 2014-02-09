@@ -197,16 +197,15 @@ static std::map<u32, MpegContext *> mpegMap;
 static u32 lastMpegHandle = 0;
 
 MpegContext *getMpegCtx(u32 mpegAddr) {
+	if (!Memory::IsValidAddress(mpegAddr))
+		return NULL;
+		
 	u32 mpeg = Memory::Read_U32(mpegAddr);
 
 	if (mpegMap.find(mpeg) == mpegMap.end())
 		return NULL;
 
 	return mpegMap[mpeg];
-}
-
-u32 getMpegHandle(u32 mpeg) {
-	return Memory::Read_U32(mpeg);
 }
 
 static void InitRingbuffer(SceMpegRingBuffer *buf, int packets, int data, int size, int callback_addr, int callback_args) {
@@ -1558,8 +1557,8 @@ int sceMpegAvcConvertToYuv420(u32 mpeg, u32 bufferOutputAddr, u32 unknown1, int 
 	}
 
 	if (ctx->mediaengine->m_buffer == 0){
-		WARN_LOG(ME, "sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)m_buffer = 0 ", mpeg, bufferOutputAddr, unknown1, unknown2);
-		return 0x806201FE;
+		WARN_LOG(ME, "sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x): m_buffer is zero ", mpeg, bufferOutputAddr, unknown1, unknown2);
+		return ERROR_MPEG_AVC_INVALID_VALUE;
 	}
 
 	DEBUG_LOG(ME, "sceMpegAvcConvertToYuv420(%08x, %08x, %08x, %08x)", mpeg, bufferOutputAddr, unknown1, unknown2);

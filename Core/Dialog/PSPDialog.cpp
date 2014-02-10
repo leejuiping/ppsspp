@@ -86,7 +86,11 @@ void PSPDialog::EndDraw()
 
 int PSPDialog::Shutdown(bool force)
 {
-	ChangeStatus(SCE_UTILITY_STATUS_SHUTDOWN, 0);
+	if (force) {
+		ChangeStatus(SCE_UTILITY_STATUS_NONE, 0);
+	} else {
+		ChangeStatus(SCE_UTILITY_STATUS_SHUTDOWN, 0);
+	}
 	return 0;
 }
 
@@ -97,28 +101,26 @@ void PSPDialog::StartFade(bool fadeIn_)
 	fadeIn = fadeIn_;
 }
 
-void PSPDialog::UpdateFade(int animSpeed)
-{
-	if (isFading)
-	{
+void PSPDialog::UpdateFade(int animSpeed) {
+	if (isFading) {
 		fadeTimer += 1.0f/30.0f * animSpeed; // Probably need a more real value of delta time
-		if (fadeTimer < FADE_TIME)
-		{
+		if (fadeTimer < FADE_TIME) {
 			if (fadeIn)
 				fadeValue = (u32) (fadeTimer / FADE_TIME * 255);
 			else
 				fadeValue = 255 - (u32) (fadeTimer / FADE_TIME * 255);
-		}
-		else
-		{
+		} else {
 			fadeValue = (fadeIn ? 255 : 0);
 			isFading = false;
-			if (!fadeIn)
-			{
-				ChangeStatus(SCE_UTILITY_STATUS_FINISHED, 0);
+			if (!fadeIn) {
+				FinishFadeOut();
 			}
 		}
 	}
+}
+
+void PSPDialog::FinishFadeOut() {
+	ChangeStatus(SCE_UTILITY_STATUS_FINISHED, 0);
 }
 
 u32 PSPDialog::CalcFadedColor(u32 inColor)

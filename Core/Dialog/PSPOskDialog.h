@@ -211,11 +211,16 @@ public:
 	virtual void DoState(PointerWrap &p);
 	virtual pspUtilityDialogCommon *GetCommonParam();
 
+protected:
+	virtual bool UseAutoStatus() {
+		return false;
+	}
+
 private:
 	void ConvertUCS2ToUTF8(std::string& _string, const PSPPointer<u16_le> em_address);
 	void ConvertUCS2ToUTF8(std::string& _string, const wchar_t *input);
 	void RenderKeyboard();
-#if defined(_WIN32) && !defined(USING_QT_UI)
+#if defined(USING_WIN_UI)
 	int NativeKeyboard();
 #endif
 

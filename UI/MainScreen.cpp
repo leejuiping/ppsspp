@@ -868,7 +868,7 @@ UI::EventReturn MainScreen::OnLoadFile(UI::EventParams &e) {
 		g_Config.Save();
 		screenManager()->switchScreen(new EmuScreen(fileName.toStdString()));
 	}
-#elif defined(_WIN32)
+#elif defined(USING_WIN_UI)
 	MainWindow::BrowseAndBoot("");
 #endif
 	return UI::EVENT_DONE;
@@ -942,8 +942,10 @@ UI::EventReturn MainScreen::OnForums(UI::EventParams &e) {
 
 UI::EventReturn MainScreen::OnExit(UI::EventParams &e) {
 	System_SendMessage("event", "exitprogram");
+#ifndef USING_WIN_UI
 	NativeShutdown();
-	exit(0);
+#endif
+	globalUIState = UISTATE_EXIT;
 	return UI::EVENT_DONE;
 }
 

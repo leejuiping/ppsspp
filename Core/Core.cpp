@@ -139,14 +139,16 @@ static inline void UpdateRunLoop() {
 		NativeUpdate(input_state);
 		EndInputState(&input_state);
 	}
-	NativeRender();
+	if (globalUIState != UISTATE_EXIT) {
+		NativeRender();
+	}
 }
 
 void Core_RunLoop() {
 	while ((globalUIState != UISTATE_INGAME || !PSP_IsInited()) && globalUIState != UISTATE_EXIT) {
 		time_update();
 
-#if defined(_WIN32) && !defined(USING_QT_UI)
+#if defined(USING_WIN_UI)
 		double startTime = time_now_d();
 		UpdateRunLoop();
 
@@ -165,7 +167,7 @@ void Core_RunLoop() {
 	while (!coreState && globalUIState == UISTATE_INGAME) {
 		time_update();
 		UpdateRunLoop();
-#if defined(_WIN32) && !defined(USING_QT_UI)
+#if defined(USING_WIN_UI)
 		if (!Core_IsStepping()) {
 			GL_SwapBuffers();
 		}
@@ -199,7 +201,7 @@ void Core_Run()
 #if defined(_DEBUG)
 	host->UpdateDisassembly();
 #endif
-#if !defined(USING_QT_UI) || defined(USING_GLES2)
+#if !defined(USING_QT_UI) || defined(MOBILE_DEVICE)
 	while (true)
 #endif
 	{
@@ -210,7 +212,7 @@ reswitch:
 				return;
 			}
 			Core_RunLoop();
-#if defined(USING_QT_UI) && !defined(USING_GLES2)
+#if defined(USING_QT_UI) && !defined(MOBILE_DEVICE)
 			return;
 #else
 			continue;
@@ -247,7 +249,7 @@ reswitch:
 #if defined(USING_QT_UI) || defined(_DEBUG)
 			host->SendCoreWait(false);
 #endif
-#if defined(USING_QT_UI) && !defined(USING_GLES2)
+#if defined(USING_QT_UI) && !defined(MOBILE_DEVICE)
 			if (coreState != CORE_STEPPING)
 				return;
 #endif

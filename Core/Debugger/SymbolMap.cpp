@@ -593,6 +593,7 @@ void SymbolMap::AssignFunctionIndices() {
 }
 
 void SymbolMap::UpdateActiveSymbols() {
+	// return;   (slow in debug mode)
 	lock_guard guard(lock_);
 	std::map<int, u32> activeModuleIndexes;
 	for (auto it = activeModuleEnds.begin(), end = activeModuleEnds.end(); it != end; ++it) {

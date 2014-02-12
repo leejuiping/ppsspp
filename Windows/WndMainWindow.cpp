@@ -210,6 +210,7 @@ namespace MainWindow
 	}
 
 	void ResizeDisplay(bool displayOSM = true, bool noWindowMovement = false) {
+		int width = PSP_CoreParameter().pixelWidth, height = PSP_CoreParameter().pixelHeight;
 		RECT rc;
 		GetClientRect(hwndMain, &rc);
 		if (!noWindowMovement) {
@@ -217,9 +218,10 @@ namespace MainWindow
 				(rc.bottom - rc.top) == PSP_CoreParameter().pixelHeight)
 				return;
 
-			PSP_CoreParameter().pixelWidth = rc.right - rc.left;
-			PSP_CoreParameter().pixelHeight = rc.bottom - rc.top;
-			MoveWindow(hwndDisplay, 0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, TRUE);
+			width = rc.right - rc.left;
+			height = rc.bottom - rc.top;
+			// Moves the internal window, not the frame. TODO: Get rid of the internal window.
+			MoveWindow(hwndDisplay, 0, 0, width, height, TRUE);
 		}
 
 		// Round up to a zoom factor for the render size.
@@ -227,10 +229,9 @@ namespace MainWindow
 		if (zoom == 0) // auto mode
 			zoom = (rc.right - rc.left + 479) / 480;
 
+		// Actually, auto mode should be more granular...
 		PSP_CoreParameter().renderWidth = 480 * zoom;
 		PSP_CoreParameter().renderHeight = 272 * zoom;
-		PSP_CoreParameter().outputWidth = 480 * zoom;
-		PSP_CoreParameter().outputHeight = 272 * zoom;
 		
 		if (displayOSM) {
 			I18NCategory *g = GetI18NCategory("Graphics");
@@ -241,7 +242,10 @@ namespace MainWindow
 			osm.Show(g->T(message), 2.0f);
 		}
 
-		NativeMessageReceived("gpu resized", "");
+		if (!noWindowMovement) {
+			UpdateScreenScale(width, height);
+			NativeMessageReceived("gpu resized", "");
+		}
 	}
 
 	void SetWindowSize(int zoom) {
@@ -336,7 +340,6 @@ namespace MainWindow
 		ResizeDisplay(showOSM, true);
 
 		ShowOwnedPopups(hwndMain, FALSE);
-		UpdateScreenScale();
 	}
 
 	RECT DetermineWindowRectangle() {

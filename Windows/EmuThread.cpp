@@ -1,6 +1,5 @@
 // NOTE: Apologies for the quality of this code, this is really from pre-opensource Dolphin - that is, 2003.
 
-#include "base/display.h"
 #include "base/timeutil.h"
 #include "base/NativeApp.h"
 #include "base/mutex.h"
@@ -60,7 +59,6 @@ void EmuThread_Stop()
 	}
 
 	globalUIState = UISTATE_EXIT;
-//	DSound_UpdateSound();
 	Core_Stop();
 	Core_WaitInactive(800);
 	if (WAIT_TIMEOUT == WaitForSingleObject(emuThread, 800))
@@ -89,7 +87,6 @@ unsigned int WINAPI TheThread(void *)
 	// Native overwrites host. Can't allow that.
 
 	Host *oldHost = host;
-	UpdateScreenScale();
 
 	NativeInit(__argc, (const char **)__argv, "1234", "1234", "1234");
 	Host *nativeHost = host;
@@ -118,6 +115,7 @@ unsigned int WINAPI TheThread(void *)
 	}
 
 	NativeInitGraphics();
+	NativeResized();
 
 	INFO_LOG(BOOT, "Done.");
 	_dbg_update_();

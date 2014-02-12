@@ -135,7 +135,7 @@ public:
 	ADSREnvelope();
 	void SetSimpleEnvelope(u32 ADSREnv1, u32 ADSREnv2);
 
-	void WalkCurve(int type);
+	void WalkCurve(int type, int rate);
 
 	void KeyOn();
 	void KeyOff();
@@ -164,12 +164,6 @@ public:
 private:
 	void ComputeDuration();
 
-	// Internal variables that are recomputed on state changes
-	// No need to save in state
-	int rate_;
-	int type_;
-	float invDuration_;
-
 	enum ADSRState {
 		STATE_ATTACK,
 		STATE_DECAY,
@@ -180,7 +174,6 @@ private:
 	void SetState(ADSRState state);
 
 	ADSRState state_;
-	int steps_;
 	s64 height_;  // s64 to avoid having to care about overflow when calculating. TODO: this should be fine as s32
 };
 

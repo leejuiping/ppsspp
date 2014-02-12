@@ -31,6 +31,7 @@
 #include "Common/FileUtil.h"
 #include "Core/System.h"
 #include "Core/Host.h"
+#include "Core/Reporting.h"
 #include "Core/SaveState.h"
 
 #include "UI/EmuScreen.h"
@@ -942,9 +943,12 @@ UI::EventReturn MainScreen::OnForums(UI::EventParams &e) {
 
 UI::EventReturn MainScreen::OnExit(UI::EventParams &e) {
 	System_SendMessage("event", "exitprogram");
-#ifndef USING_WIN_UI
-	NativeShutdown();
-#endif
+
+	// Request the framework to exit cleanly.
+	System_SendMessage("finish", "");
+
+	// We shouldn't call NativeShutdown here at all, it should be done by the framework.
+
 	globalUIState = UISTATE_EXIT;
 	return UI::EVENT_DONE;
 }
@@ -959,34 +963,6 @@ void MainScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 void GamePauseScreen::update(InputState &input) {
 	UpdateUIState(UISTATE_PAUSEMENU);
 	UIScreen::update(input);
-}
-
-void DrawBackground(float alpha);
-
-void GamePauseScreen::DrawBackground(UIContext &dc) {
-	GameInfo *ginfo = g_gameInfoCache.GetInfo(gamePath_, true);
-	dc.Flush();
-
-	if (ginfo) {
-		bool hasPic = false;
-		if (ginfo->pic1Texture) {
-			ginfo->pic1Texture->Bind(0);
-			hasPic = true;
-		} else if (ginfo->pic0Texture) {
-			ginfo->pic0Texture->Bind(0);
-			hasPic = true;
-		}
-		if (hasPic) {
-			uint32_t color = whiteAlpha(ease((time_now_d() - ginfo->timePic1WasLoaded) * 3)) & 0xFFc0c0c0;
-			dc.Draw()->DrawTexRect(0,0,dp_xres, dp_yres, 0,0,1,1, color);
-			dc.Flush();
-			dc.RebindTexture();
-		} else {
-			::DrawBackground(1.0f);
-			dc.RebindTexture();
-			dc.Flush();
-		}
-	}
 }
 
 GamePauseScreen::~GamePauseScreen() {
@@ -1076,6 +1052,7 @@ void GamePauseScreen::onFinish(DialogResult result) {
 	// Do we really always need to "gpu->Resized" here?
 	if (gpu)
 		gpu->Resized();
+	Reporting::UpdateConfig();
 }
 
 UI::EventReturn GamePauseScreen::OnExitToMenu(UI::EventParams &e) {

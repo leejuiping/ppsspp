@@ -98,7 +98,7 @@ public:
 
 	void AddLabel(const char* name, u32 address, int moduleIndex = -1);
 	std::string GetLabelString(u32 address) const;
-	void SetLabelName(const char* name, u32 address);
+	void SetLabelName(const char* name, u32 address, bool updateImmediately = true);
 	bool GetLabelValue(const char* name, u32& dest);
 
 	void AddData(u32 address, u32 size, DataType type, int moduleIndex = -1);
@@ -108,9 +108,10 @@ public:
 
 	static const u32 INVALID_ADDRESS = (u32)-1;
 
+	void UpdateActiveSymbols();
+
 private:
 	void AssignFunctionIndices();
-	void UpdateActiveSymbols();
 	const char *GetLabelName(u32 address) const;
 	const char *GetLabelNameRel(u32 relAddress, int moduleIndex) const;
 

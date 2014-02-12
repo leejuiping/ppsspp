@@ -102,16 +102,15 @@ void Core_WaitInactive(int milliseconds) {
 	}
 }
 
-void UpdateScreenScale() {
-	dp_xres = PSP_CoreParameter().pixelWidth;
-	dp_yres = PSP_CoreParameter().pixelHeight;
-	pixel_xres = PSP_CoreParameter().pixelWidth;
-	pixel_yres = PSP_CoreParameter().pixelHeight;
+void UpdateScreenScale(int width, int height) {
+	dp_xres = width;
+	dp_yres = height;
+	pixel_xres = width;
+	pixel_yres = height;
 	g_dpi = 72;
 	g_dpi_scale = 1.0f;
 #ifdef _WIN32
-	if (pixel_xres < 480 + 80)
-	{
+	if (pixel_xres < 480 + 80) {
 		dp_xres *= 2;
 		dp_yres *= 2;
 		g_dpi_scale = 2.0f;
@@ -119,10 +118,10 @@ void UpdateScreenScale() {
 	else
 #endif
 	pixel_in_dps = (float)pixel_xres / dp_xres;
+	NativeResized();
 }
 
 static inline void UpdateRunLoop() {
-	UpdateScreenScale();
 	{
 		{
 #ifdef _WIN32

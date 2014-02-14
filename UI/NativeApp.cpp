@@ -109,10 +109,14 @@ bool iosCanUseJit;
 // Really need to clean this mess of globals up... but instead I add more :P
 bool g_TakeScreenshot;
 static bool isOuya;
-recursive_mutex pendingMutex;
-static bool isMessagePending;
-static std::string pendingMessage;
-static std::string pendingValue;
+
+struct PendingMessage {
+	std::string msg;
+	std::string value;
+};
+
+static recursive_mutex pendingMutex;
+static std::vector<PendingMessage> pendingMessages;
 static UIContext *uiContext;
 
 std::thread *graphicsLoadThread;
@@ -243,8 +247,7 @@ void NativeInit(int argc, const char *argv[],
 	EnableFZ();
 	setlocale( LC_ALL, "C" );
 	std::string user_data_path = savegame_directory;
-	isMessagePending = false;
-
+	pendingMessages.clear();
 #ifdef IOS
 	user_data_path += "/";
 #endif
@@ -383,8 +386,16 @@ void NativeInit(int argc, const char *argv[],
 	if (!gfxLog)
 		logman->SetLogLevel(LogTypes::G3D, LogTypes::LERROR);
 #endif
+	// Allow the lang directory to be overridden for testing purposes (e.g. Android, where it's hard to 
+	// test new languages without recompiling the entire app, which is a hassle).
+	const std::string langOverridePath = g_Config.memCardDirectory + "PSP/SYSTEM/lang/";
 
-	i18nrepo.LoadIni(g_Config.sLanguageIni);
+	// If we run into the unlikely case that "lang" is actually a file, just use the built-in translations.
+	if (!File::Exists(langOverridePath) || !File::IsDirectory(langOverridePath))
+		i18nrepo.LoadIni(g_Config.sLanguageIni);
+	else
+		i18nrepo.LoadIni(g_Config.sLanguageIni, langOverridePath);
+
 	I18NCategory *d = GetI18NCategory("DesktopUI");
 	// Note to translators: do not translate this/add this to PPSSPP-lang's files.
 	// It's intended to be custom for every user.
@@ -643,10 +654,10 @@ void NativeRender() {
 void NativeUpdate(InputState &input) {
 	{
 		lock_guard lock(pendingMutex);
-		if (isMessagePending) {
-			screenManager->sendMessage(pendingMessage.c_str(), pendingValue.c_str());
-			isMessagePending = false;
+		for (size_t i = 0; i < pendingMessages.size(); i++) {
+			screenManager->sendMessage(pendingMessages[i].msg.c_str(), pendingMessages[i].value.c_str());
 		}
+		pendingMessages.clear();
 	}
 
 	g_DownloadManager.Update();
@@ -773,11 +784,10 @@ void NativeAxis(const AxisInput &key) {
 void NativeMessageReceived(const char *message, const char *value) {
 	// We can only have one message queued.
 	lock_guard lock(pendingMutex);
-	if (!isMessagePending) {
-		pendingMessage = message;
-		pendingValue = value;
-		isMessagePending = true;
-	}
+	PendingMessage pendingMessage;
+	pendingMessage.msg = message;
+	pendingMessage.value = value;
+	pendingMessages.push_back(pendingMessage);
 }
 
 void NativeResized() {

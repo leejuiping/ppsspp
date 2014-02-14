@@ -194,7 +194,7 @@ namespace MainWindow
 		}
 	}
 
-	void GetWindowRectAtResolution(int xres, int yres, RECT &rcInner, RECT &rcOuter) {
+	static void GetWindowRectAtResolution(int xres, int yres, RECT &rcInner, RECT &rcOuter) {
 		rcInner.left = 0;
 		rcInner.top = 0;
 
@@ -209,21 +209,19 @@ namespace MainWindow
 		rcOuter.top = g_Config.iWindowY;
 	}
 
-	void ResizeDisplay(bool displayOSM = true, bool noWindowMovement = false) {
-		int width = PSP_CoreParameter().pixelWidth, height = PSP_CoreParameter().pixelHeight;
+
+	static void ShowScreenResolution() {
+		I18NCategory *g = GetI18NCategory("Graphics");
+		char message[256];
+		sprintf(message, "%s: %ix%i  %s: %ix%i",
+			g->T("Internal Resolution"), PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight,
+			g->T("Window Size"), PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
+		osm.Show(g->T(message), 2.0f);
+	}
+
+	static void UpdateRenderResolution() {
 		RECT rc;
 		GetClientRect(hwndMain, &rc);
-		if (!noWindowMovement) {
-			if ((rc.right - rc.left) == PSP_CoreParameter().pixelWidth &&
-				(rc.bottom - rc.top) == PSP_CoreParameter().pixelHeight)
-				return;
-
-			width = rc.right - rc.left;
-			height = rc.bottom - rc.top;
-			// Moves the internal window, not the frame. TODO: Get rid of the internal window.
-			MoveWindow(hwndDisplay, 0, 0, width, height, TRUE);
-		}
-
 		// Round up to a zoom factor for the render size.
 		int zoom = g_Config.iInternalResolution;
 		if (zoom == 0) // auto mode
@@ -232,16 +230,25 @@ namespace MainWindow
 		// Actually, auto mode should be more granular...
 		PSP_CoreParameter().renderWidth = 480 * zoom;
 		PSP_CoreParameter().renderHeight = 272 * zoom;
-		
-		if (displayOSM) {
-			I18NCategory *g = GetI18NCategory("Graphics");
-			char message[256];
-			sprintf(message, "%s: %ix%i  %s: %ix%i",
-				g->T("Internal Resolution"), PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight,
-				g->T("Window Size"), PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
-			osm.Show(g->T(message), 2.0f);
+	}
+
+	static void ResizeDisplay(bool noWindowMovement = false) {
+		int width = 0, height = 0;
+		RECT rc;
+		GetClientRect(hwndMain, &rc);
+		if (!noWindowMovement) {
+			width = rc.right - rc.left;
+			height = rc.bottom - rc.top;
+			// Moves the internal window, not the frame. TODO: Get rid of the internal window.
+			MoveWindow(hwndDisplay, 0, 0, width, height, TRUE);
+			// This is taken care of anyway later, but makes sure that ShowScreenResolution gets the right numbers.
+			// Need to clean all of this up...
+			PSP_CoreParameter().pixelWidth = width;
+			PSP_CoreParameter().pixelHeight = height;
 		}
 
+		UpdateRenderResolution();
+		
 		if (!noWindowMovement) {
 			UpdateScreenScale(width, height);
 			NativeMessageReceived("gpu resized", "");
@@ -252,7 +259,8 @@ namespace MainWindow
 		RECT rc, rcOuter;
 		GetWindowRectAtResolution(480 * (int)zoom, 272 * (int)zoom, rc, rcOuter);
 		MoveWindow(hwndMain, rcOuter.left, rcOuter.top, rcOuter.right - rcOuter.left, rcOuter.bottom - rcOuter.top, TRUE);
-		ResizeDisplay(true, true);
+		ResizeDisplay(false);
+		ShowScreenResolution();
 	}
 
 	void SetInternalResolution(int res = -1) {
@@ -267,7 +275,11 @@ namespace MainWindow
 		if (g_Config.iTexScalingLevel == TEXSCALING_AUTO)
 			setTexScalingMultiplier(0);
 
-		ResizeDisplay(true, true);
+		if (gpu)
+			gpu->Resized();
+
+		UpdateRenderResolution();
+		ShowScreenResolution();
 	}
 
 	void CorrectCursor() {
@@ -307,7 +319,10 @@ namespace MainWindow
 		CorrectCursor();
 
 		bool showOSM = (g_Config.iInternalResolution == RESOLUTION_AUTO);
-		ResizeDisplay(showOSM, true);
+		ResizeDisplay(true);
+		if (showOSM) {
+			ShowScreenResolution();
+		}
 		ShowOwnedPopups(hwndMain, TRUE);
 		W32Util::MakeTopMost(hwndMain, g_Config.bTopMost);
 	}
@@ -337,7 +352,10 @@ namespace MainWindow
 		CorrectCursor();
 
 		bool showOSM = (g_Config.iInternalResolution == RESOLUTION_AUTO);
-		ResizeDisplay(showOSM, true);
+		ResizeDisplay(true);
+		if (showOSM) {
+			ShowScreenResolution();
+		}
 
 		ShowOwnedPopups(hwndMain, FALSE);
 	}
@@ -1031,12 +1049,11 @@ namespace MainWindow
 
 		case WM_MOVE:
 			SavePosition();
-			ResizeDisplay(false);
 			break;
 
 		case WM_SIZE:
 			SavePosition();
-			ResizeDisplay(false);
+			ResizeDisplay();
 			break;
 
 		case WM_TIMER:
@@ -1550,7 +1567,8 @@ namespace MainWindow
 			break;
 
 		case WM_USER_UPDATE_SCREEN:
-			ResizeDisplay(true, true);
+			ResizeDisplay(true);
+			ShowScreenResolution();
 			break;
 
 		case WM_USER_WINDOW_TITLE_CHANGED:

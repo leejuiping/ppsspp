@@ -46,8 +46,6 @@ const int PSMF_PLAYER_CONFIG_NO_LOOP = 1;
 const int PSMF_PLAYER_CONFIG_MODE_LOOP = 0;
 const int PSMF_PLAYER_CONFIG_MODE_PIXEL_TYPE = 1;
 
-const int TPSM_PIXEL_STORAGE_MODE_32BIT_ABGR8888 = 0X03;
-
 int psmfCurrentPts = 0;
 int psmfAvcStreamNum = 1;
 int psmfAtracStreamNum = 1;
@@ -56,7 +54,7 @@ int psmfPlayerVersion = PSMF_PLAYER_VERSION_FULL;
 int psmfMaxAheadTimestamp = 40000;
 int audioSamples = 2048;  
 int audioSamplesBytes = audioSamples * 4;
-int videoPixelMode = TPSM_PIXEL_STORAGE_MODE_32BIT_ABGR8888;
+int videoPixelMode = GE_CMODE_32BIT_ABGR8888;
 int videoLoopStatus = PSMF_PLAYER_CONFIG_NO_LOOP;
 
 enum PsmfPlayerStatus {
@@ -66,6 +64,15 @@ enum PsmfPlayerStatus {
 	PSMF_PLAYER_STATUS_PLAYING = 0x4,
 	PSMF_PLAYER_STATUS_ERROR = 0x100,
 	PSMF_PLAYER_STATUS_PLAYING_FINISHED = 0x200,
+};
+
+enum PsmfPlayerMode {
+	PSMF_PLAYER_MODE_PLAY = 0,
+	PSMF_PLAYER_MODE_SLOWMOTION = 1,
+	PSMF_PLAYER_MODE_STEPFRAME = 2,
+	PSMF_PLAYER_MODE_PAUSE = 3,
+	PSMF_PLAYER_MODE_FORWARD = 4,
+	PSMF_PLAYER_MODE_REWIND = 5,
 };
 
 struct PsmfData {
@@ -457,7 +464,7 @@ PsmfPlayer *getPsmfPlayer(u32 psmfplayer)
 
 void __PsmfInit()
 {
-	videoPixelMode = TPSM_PIXEL_STORAGE_MODE_32BIT_ABGR8888;
+	videoPixelMode = GE_CMODE_32BIT_ABGR8888;
 	videoLoopStatus = PSMF_PLAYER_CONFIG_NO_LOOP;
 }
 
@@ -489,6 +496,20 @@ void __PsmfShutdown()
 		delete it->second;
 	psmfMap.clear();
 	psmfPlayerMap.clear();
+}
+
+bool isPlayingStatus(u32 status) {
+	if (status != PSMF_PLAYER_STATUS_PLAYING && status != PSMF_PLAYER_STATUS_PLAYING_FINISHED) {
+		return false;
+	}
+	return true;
+}
+
+bool isInitializedStatus(u32 status) {
+	if (status == PSMF_PLAYER_STATUS_NONE) {
+		return false;
+	}
+	return true;
 }
 
 u32 scePsmfSetPsmf(u32 psmfStruct, u32 psmfData)
@@ -864,7 +885,8 @@ int scePsmfPlayerStop(u32 psmfPlayer)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
-	if (psmfplayer->status < PSMF_PLAYER_STATUS_STANDBY) {
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
 		ERROR_LOG(ME, "scePsmfPlayerStop(%08x): not initialized", psmfPlayer);
 		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
@@ -881,6 +903,12 @@ int scePsmfPlayerBreak(u32 psmfPlayer)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerBreak(%08x): invalid psmf player", psmfPlayer);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerBreak(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	// Fix everybody stress buster
@@ -944,6 +972,12 @@ int scePsmfPlayerSetPsmf(u32 psmfPlayer, const char *filename)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSetPsmf(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	INFO_LOG(ME, "scePsmfPlayerSetPsmf(%08x, %s)", psmfPlayer, filename);
 	psmfplayer->status = PSMF_PLAYER_STATUS_STANDBY;
 	_PsmfPlayerSetPsmfOffset(psmfplayer, filename, 0, false);
@@ -960,6 +994,12 @@ int scePsmfPlayerSetPsmfCB(u32 psmfPlayer, const char *filename)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSetPsmfCB(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	INFO_LOG(ME, "scePsmfPlayerSetPsmfCB(%08x, %s)", psmfPlayer, filename);
 	psmfplayer->status = PSMF_PLAYER_STATUS_STANDBY;
 	_PsmfPlayerSetPsmfOffset(psmfplayer, filename, 0, true);
@@ -973,6 +1013,12 @@ int scePsmfPlayerSetPsmfOffset(u32 psmfPlayer, const char *filename, int offset)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerSetPsmfOffset(%08x, %s, %i): invalid psmf player", psmfPlayer, filename, offset);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSetPsmfOffset(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	INFO_LOG(ME, "scePsmfPlayerSetPsmfOffset(%08x, %s, %i)", psmfPlayer, filename, offset);
@@ -991,6 +1037,12 @@ int scePsmfPlayerSetPsmfOffsetCB(u32 psmfPlayer, const char *filename, int offse
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSetPsmfOffsetCB(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	INFO_LOG(ME, "scePsmfPlayerSetPsmfOffsetCB(%08x, %s, %i)", psmfPlayer, filename, offset);
 	psmfplayer->status = PSMF_PLAYER_STATUS_STANDBY;
 	_PsmfPlayerSetPsmfOffset(psmfplayer, filename, offset, true);
@@ -1000,7 +1052,7 @@ int scePsmfPlayerSetPsmfOffsetCB(u32 psmfPlayer, const char *filename, int offse
 
 int scePsmfPlayerGetAudioOutSize(u32 psmfPlayer) 
 {
-	WARN_LOG(ME, "%i = scePsmfPlayerGetAudioOutSize(%08x)",audioSamplesBytes,psmfPlayer);
+	WARN_LOG(ME, "%i = scePsmfPlayerGetAudioOutSize(%08x)", audioSamplesBytes, psmfPlayer);
 	return audioSamplesBytes;
 }
 
@@ -1009,6 +1061,13 @@ int scePsmfPlayerStart(u32 psmfPlayer, u32 psmfPlayerData, int initPts)
 	WARN_LOG(ME, "UNIMPL scePsmfPlayerStart(%08x, %08x, %08x)", psmfPlayer, psmfPlayerData, initPts);
 
 	PsmfPlayer *psmfplayer = getPsmfPlayer(psmfPlayer);
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerStart(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	if (!psmfplayer) {
 		psmfplayer = new PsmfPlayer(psmfPlayerData);
 		psmfPlayerMap[psmfPlayer] = psmfplayer;
@@ -1052,18 +1111,17 @@ int scePsmfPlayerDelete(u32 psmfPlayer)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerDelete(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	INFO_LOG(ME, "scePsmfPlayerDelete(%08x)", psmfPlayer);
 	delete psmfplayer;
 	psmfPlayerMap.erase(psmfPlayer);
 
 	return 0;
-}
-
-bool isPlayingStatus(u32 status) {
-	if (status != PSMF_PLAYER_STATUS_PLAYING && status != PSMF_PLAYER_STATUS_PLAYING_FINISHED) {
-		return false;
-	}
-	return true;
 }
 
 int scePsmfPlayerUpdate(u32 psmfPlayer) 
@@ -1072,6 +1130,12 @@ int scePsmfPlayerUpdate(u32 psmfPlayer)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerUpdate(%08x): invalid psmf player", psmfPlayer);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerUpdate(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	bool psmfplayerstatus = isPlayingStatus(psmfplayer->status);
@@ -1093,15 +1157,15 @@ int scePsmfPlayerUpdate(u32 psmfPlayer)
 
 int scePsmfPlayerReleasePsmf(u32 psmfPlayer) 
 {
-
 	PsmfPlayer *psmfplayer = getPsmfPlayer(psmfPlayer);
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerReleasePsmf(%08x): invalid psmf player", psmfPlayer);
 		return ERROR_PSMF_NOT_FOUND;
 	}
-	
-	if (psmfplayer->status != PSMF_PLAYER_STATUS_STANDBY){
-		ERROR_LOG(ME, "scePsmfPlayerReleasePsmf(%08x): not initalized", psmfPlayer);
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerReleasePsmf(%08x): not initialized", psmfPlayer);
 		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
@@ -1118,12 +1182,23 @@ int scePsmfPlayerGetVideoData(u32 psmfPlayer, u32 videoDataAddr)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetVideoData(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	bool psmfplayerstatus = isPlayingStatus(psmfplayer->status);
 	if (!psmfplayerstatus) {
 		ERROR_LOG(ME, "scePsmfPlayerGetVideoData(%08x): psmf not playing", psmfPlayer);
 		return ERROR_PSMF_NOT_INITIALIZED;
 	}
 
+	if (psmfplayer->playMode == PSMF_PLAYER_MODE_PAUSE) {
+		INFO_LOG(HLE, "scePsmfPlayerGetVideoData(%08x): paused mode", psmfPlayer);
+		return 0;
+	}
+	
 	if (Memory::IsValidAddress(videoDataAddr)) {
 		int frameWidth = Memory::Read_U32(videoDataAddr);
         u32 displaybuf = Memory::Read_U32(videoDataAddr + 4);
@@ -1158,12 +1233,23 @@ int scePsmfPlayerGetAudioData(u32 psmfPlayer, u32 audioDataAddr)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetAudioData(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	bool psmfplayerstatus = isPlayingStatus(psmfplayer->status);
 	if (!psmfplayerstatus) {
 		ERROR_LOG(ME, "scePsmfPlayerGetAudioData(%08x): psmf not playing", psmfPlayer);
 		return ERROR_PSMF_NOT_INITIALIZED;
 	}
 
+	if (psmfplayer->playMode == PSMF_PLAYER_MODE_PAUSE) {
+		INFO_LOG(HLE, "scePsmfPlayerGetAudioData(%08x): paused mode", psmfPlayer);
+		return 0;
+	}
+	
 	if (Memory::IsValidAddress(audioDataAddr)) {
 		Memory::Memset(audioDataAddr, 0, audioSamplesBytes);
 		psmfplayer->mediaengine->getAudioSamples(audioDataAddr);
@@ -1182,6 +1268,13 @@ int scePsmfPlayerGetCurrentStatus(u32 psmfPlayer)
 		VERBOSE_LOG(ME, "scePsmfPlayerGetCurrentStatus(%08x): invalid psmf player", psmfPlayer);
 		return ERROR_PSMF_NOT_FOUND;
 	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetCurrentStatus(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	DEBUG_LOG(ME, "%d=scePsmfPlayerGetCurrentStatus(%08x)", psmfplayer->status, psmfPlayer);
 	return psmfplayer->status;
 }
@@ -1192,6 +1285,12 @@ u32 scePsmfPlayerGetCurrentPts(u32 psmfPlayer, u32 currentPtsAddr)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerGetCurrentPts(%08x, %08x): invalid psmf player", psmfPlayer, currentPtsAddr);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetCurrentPts(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	DEBUG_LOG(ME, "scePsmfPlayerGetCurrentPts(%08x, %08x)", psmfPlayer, currentPtsAddr);
@@ -1211,6 +1310,12 @@ u32 scePsmfPlayerGetPsmfInfo(u32 psmfPlayer, u32 psmfInfoAddr)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerGetPsmfInfo(%08x, %08x): invalid psmf player", psmfPlayer, psmfInfoAddr);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetPsmfInfo(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	if (psmfplayer->status < PSMF_PLAYER_STATUS_STANDBY) {
@@ -1239,6 +1344,12 @@ u32 scePsmfPlayerGetCurrentPlayMode(u32 psmfPlayer, u32 playModeAddr, u32 playSp
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetCurrentPlayMode(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	WARN_LOG(ME, "scePsmfPlayerGetCurrentPlayMode(%08x, %08x, %08x)", psmfPlayer, playModeAddr, playSpeedAddr);
 	if (Memory::IsValidAddress(playModeAddr)) {
 		// Fixing for AKB MPEG wrong pointer
@@ -1259,6 +1370,12 @@ u32 scePsmfPlayerGetCurrentVideoStream(u32 psmfPlayer, u32 videoCodecAddr, u32 v
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetCurrentVideoStream(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	WARN_LOG(ME, "scePsmfPlayerGetCurrentVideoStream(%08x, %08x, %08x)", psmfPlayer, videoCodecAddr, videoStreamNumAddr);
 	if (Memory::IsValidAddress(videoCodecAddr)) {
 		Memory::Write_U64(psmfplayer->videoCodec, videoCodecAddr);
@@ -1275,6 +1392,12 @@ u32 scePsmfPlayerGetCurrentAudioStream(u32 psmfPlayer, u32 audioCodecAddr, u32 a
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerGetCurrentAudioStream(%08x, %08x, %08x): invalid psmf player", psmfPlayer, audioCodecAddr, audioStreamNumAddr);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerGetCurrentAudioStream(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	WARN_LOG(ME, "scePsmfPlayerGetCurrentAudioStream(%08x, %08x, %08x)", psmfPlayer, audioCodecAddr, audioStreamNumAddr);
@@ -1295,6 +1418,12 @@ int scePsmfPlayerSetTempBuf(u32 psmfPlayer, u32 tempBufAddr, u32 tempBufSize)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSetTempBuf(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	INFO_LOG(ME, "scePsmfPlayerSetTempBuf(%08x, %08x, %08x)", psmfPlayer, tempBufAddr, tempBufSize);
 	psmfplayer->status = PSMF_PLAYER_STATUS_INIT;
 	// fake it right now, use tempbuf from memory directly
@@ -1312,6 +1441,12 @@ u32 scePsmfPlayerChangePlayMode(u32 psmfPlayer, int playMode, int playSpeed)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerChangePlayMode(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	WARN_LOG(ME, "scePsmfPlayerChangePlayMode(%08x, %i, %i)", psmfPlayer, playMode, playSpeed);
 	psmfplayer->playMode = playMode;
 	psmfplayer->playSpeed = playSpeed;
@@ -1324,6 +1459,12 @@ u32 scePsmfPlayerSelectAudio(u32 psmfPlayer)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerSelectAudio(%08x): invalid psmf player", psmfPlayer);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSelectAudio(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	ERROR_LOG(ME, "scePsmfPlayerSelectAudio(%08x)", psmfPlayer);
@@ -1339,6 +1480,12 @@ u32 scePsmfPlayerSelectVideo(u32 psmfPlayer)
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSelectVideo(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	ERROR_LOG(ME, "scePsmfPlayerSelectVideo(%08x)", psmfPlayer);
 	psmfplayer->videoStreamNum++;
 	return 0;
@@ -1350,6 +1497,12 @@ u32 scePsmfPlayerSelectSpecificVideo(u32 psmfPlayer, int videoCodec, int videoSt
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerSelectSpecificVideo(%08x, %i, %i): invalid psmf player", psmfPlayer, videoCodec, videoStreamNum);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSelectSpecificVideo(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	ERROR_LOG(ME, "scePsmfPlayerSelectSpecificVideo(%08x, %i, %i)", psmfPlayer, videoCodec, videoStreamNum);
@@ -1367,6 +1520,12 @@ u32 scePsmfPlayerSelectSpecificAudio(u32 psmfPlayer, int audioCodec, int audioSt
 		return ERROR_PSMF_NOT_FOUND;
 	}
 
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerSelectSpecificAudio(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
+	}
+
 	ERROR_LOG(ME, "scePsmfPlayerSelectSpecificAudio(%08x, %i, %i)", psmfPlayer, audioCodec, audioStreamNum);
 	psmfplayer->audioCodec = audioCodec;
 	psmfplayer->audioStreamNum = audioStreamNum;
@@ -1380,6 +1539,12 @@ u32 scePsmfPlayerConfigPlayer(u32 psmfPlayer, int configMode, int configAttr)
 	if (!psmfplayer) {
 		ERROR_LOG(ME, "scePsmfPlayerConfigPlayer(%08x, %i, %i): invalid psmf player", psmfPlayer, configMode, configAttr);
 		return ERROR_PSMF_NOT_FOUND;
+	}
+
+	bool isInitialized = isInitializedStatus(psmfplayer->status);
+	if (!isInitialized) {
+		ERROR_LOG(ME, "scePsmfPlayerConfigPlayer(%08x): not initialized", psmfPlayer);
+		return ERROR_PSMFPLAYER_NOT_INITIALIZED;
 	}
 
 	switch (configMode) {

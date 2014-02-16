@@ -182,7 +182,7 @@ void EnableCrashingOnCrashes()
   } 
 }
 
-bool System_InputBoxGetString(char *title, const char *defaultValue, char *outValue, size_t outLength)
+bool System_InputBoxGetString(const char *title, const char *defaultValue, char *outValue, size_t outLength)
 {
 	std::string out;
 	if (InputBox_GetString(MainWindow::GetHInstance(), MainWindow::GetHWND(), ConvertUTF8ToWString(title).c_str(), defaultValue, out)) {
@@ -343,7 +343,6 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	CtrlRegisterList::init();
 	CGEDebugger::Init();
 
-	DialogManager::AddDlg(memoryWindow[0] = new CMemoryDlg(_hInstance, hwndMain, currentDebugMIPS));
 	DialogManager::AddDlg(vfpudlg = new CVFPUDlg(_hInstance, hwndMain, currentDebugMIPS));
 
 	host = new WindowsHost(hwndMain, hwndDisplay);
@@ -380,7 +379,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			accel = hAccelTable;
 			break;
 		case WINDOW_CPUDEBUGGER:
-			wnd = disasmWindow[0]->GetDlgHandle();
+			wnd = disasmWindow[0] ? disasmWindow[0]->GetDlgHandle() : 0;
 			accel = hDebugAccelTable;
 			break;
 		case WINDOW_GEDEBUGGER:
@@ -405,6 +404,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 
 	EmuThread_Stop();
 
+	MainWindow::DestroyDebugWindows();
 	DialogManager::DestroyAll();
 	timeEndPeriod(1);
 	delete host;

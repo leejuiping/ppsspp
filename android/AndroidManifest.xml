@@ -2,11 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.ppsspp.ppsspp"
     android:installLocation="auto"
-    android:versionCode="971"
-    android:versionName="0.9.7.1" >
+    android:versionCode="972"
+    android:versionName="0.9.7.2" >
 
     <uses-sdk
-        android:minSdkVersion="8"
+        android:minSdkVersion="9"
         android:targetSdkVersion="19" />
 
     <uses-feature android:glEsVersion="0x00020000" >

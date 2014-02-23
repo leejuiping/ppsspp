@@ -315,7 +315,7 @@ void ADSREnvelope::SetSimpleEnvelope(u32 ADSREnv1, u32 ADSREnv2) {
 SasInstance::SasInstance()
 	: maxVoices(PSP_SAS_VOICES_MAX),
 		sampleRate(44100),
-		outputMode(0),
+		outputMode(PSP_SAS_OUTPUTMODE_MIXED),
 		mixBuffer(0),
 		sendBuffer(0),
 		resampleBuffer(0),
@@ -452,7 +452,7 @@ void SasInstance::MixVoice(SasVoice &voice) {
 		// Actually this is not entirely correct - we need to get one extra sample, and store it
 		// for the next time around. A little complicated...
 		// But for now, see Smoothness HACKERY below :P
-		u32 numSamples = ((u32)voice.sampleFrac + (u32)grainSize * (u32)voice.pitch) >> PSP_SAS_PITCH_BASE_SHIFT;
+		u32 numSamples = ((u32)voice.sampleFrac + (u32)grainSize * (u32)voice.pitch + PSP_SAS_PITCH_BASE - 1) >> PSP_SAS_PITCH_BASE_SHIFT;
 		if ((int)numSamples > grainSize * 4) {
 			ERROR_LOG(SASMIX, "numSamples too large, clamping: %i vs %i", numSamples, grainSize * 4);
 			numSamples = grainSize * 4;
@@ -507,6 +507,7 @@ void SasInstance::MixSamples(SasVoice &voice) {
 	if (g_Config.iSFXVolume >= 0 && g_Config.iSFXVolume < MAX_CONFIG_VOLUME)
 		volumeShift += MAX_CONFIG_VOLUME - g_Config.iSFXVolume;
 
+	// The first two are resample history, were we done with the last one?
 	const int offset = sampleFrac == 0 ? 2 : 1;
 	for (int i = 0; i < grainSize; i++) {
 		const int readIndex = sampleFrac >> PSP_SAS_PITCH_BASE_SHIFT;
@@ -528,10 +529,11 @@ void SasInstance::MixSamplesHalfPitch(SasVoice &voice) {
 	if (g_Config.iSFXVolume >= 0 && g_Config.iSFXVolume < MAX_CONFIG_VOLUME)
 		volumeShift += MAX_CONFIG_VOLUME - g_Config.iSFXVolume;
 
-	int readIndex2 = voice.sampleFrac == 0 ? 0 : -1;
+	// The first two are resample history, were we done with the last one?
+	int readIndex2 = voice.sampleFrac == 0 ? 4 : 3;
 	for (int i = 0; i < grainSize; i++) {
-		int sample1 = resampleBuffer[(readIndex2 >> 1) + 2];
-		int sample2 = resampleBuffer[(readIndex2 >> 1) + 1 + 2];
+		int sample1 = resampleBuffer[(readIndex2 >> 1)];
+		int sample2 = resampleBuffer[(readIndex2 >> 1) + 1];
 		int sample = readIndex2 & 1 ? ((sample1 + sample2) >> 1) : sample1;
 		++readIndex2;
 
@@ -547,6 +549,7 @@ void SasInstance::MixSamplesOptimal(SasVoice &voice) {
 	if (g_Config.iSFXVolume >= 0 && g_Config.iSFXVolume < MAX_CONFIG_VOLUME)
 		volumeShift += MAX_CONFIG_VOLUME - g_Config.iSFXVolume;
 
+	// The first two are resample history.
 	int readIndex = 2;
 	for (int i = 0; i < grainSize; i++) {
 		int sample = resampleBuffer[readIndex++];
@@ -567,10 +570,10 @@ inline void SasInstance::MixSample(SasVoice &voice, int i, int sample, u8 volume
 	// We mix into this 32-bit temp buffer and clip in a second loop
 	// Ideally, the shift right should be there too but for now I'm concerned about
 	// not overflowing.
-	mixBuffer[i * 2] += (sample * voice.volumeLeft ) >> volumeShift; // Max = 16 and Min = 12(default)
+	mixBuffer[i * 2] += (sample * voice.volumeLeft) >> volumeShift; // Max = 16 and Min = 12(default)
 	mixBuffer[i * 2 + 1] += (sample * voice.volumeRight) >> volumeShift; // Max = 16 and Min = 12(default)
-	sendBuffer[i * 2] += sample * voice.volumeLeftSend >> 12;
-	sendBuffer[i * 2 + 1] += sample * voice.volumeRightSend >> 12;
+	sendBuffer[i * 2] += (sample * voice.effectLeft) >> volumeShift;
+	sendBuffer[i * 2 + 1] += (sample * voice.effectRight) >> volumeShift;
 	voice.envelope.Step();
 }
 
@@ -586,6 +589,7 @@ void SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 	}
 
 	// Okay, apply effects processing to the Send buffer.
+	// TODO: Is this only done in PSP_SAS_OUTPUTMODE_MIXED?
 	//if (waveformEffect.type != PSP_SAS_EFFECT_TYPE_OFF)
 	//	ApplyReverb();
 
@@ -594,26 +598,32 @@ void SasInstance::Mix(u32 outAddr, u32 inAddr, int leftVol, int rightVol) {
 	// Alright, all voices mixed. Let's convert and clip, and at the same time, wipe mixBuffer for next time. Could also dither.
 	s16 *outp = (s16 *)Memory::GetPointer(outAddr);
 	const s16 *inp = inAddr ? (s16*)Memory::GetPointer(inAddr) : 0;
-	if (outputMode == 0) {
+	if (outputMode == PSP_SAS_OUTPUTMODE_MIXED) {
+		// TODO: Mix send when it has proper values, probably based on dry/wet?
 		if (inp) {
 			for (int i = 0; i < grainSize * 2; i += 2) {
-				int sampleL = mixBuffer[i] + sendBuffer[i] + ((*inp++) * leftVol >> 12);
-				int sampleR = mixBuffer[i + 1] + sendBuffer[i + 1] + ((*inp++) * rightVol >> 12);
+				int sampleL = mixBuffer[i + 0] + ((*inp++) * leftVol >> 12);
+				int sampleR = mixBuffer[i + 1] + ((*inp++) * rightVol >> 12);
 				*outp++ = clamp_s16(sampleL);
 				*outp++ = clamp_s16(sampleR);
 			}
 		} else {
 			for (int i = 0; i < grainSize * 2; i += 2) {
-				*outp++ = clamp_s16(mixBuffer[i] + sendBuffer[i]);
-				*outp++ = clamp_s16(mixBuffer[i + 1] + sendBuffer[i + 1]);
+				*outp++ = clamp_s16(mixBuffer[i + 0]);
+				*outp++ = clamp_s16(mixBuffer[i + 1]);
 			}
 		}
 	} else {
+		s16 *outpL = outp + grainSize * 0;
+		s16 *outpR = outp + grainSize * 1;
+		s16 *outpSendL = outp + grainSize * 2;
+		s16 *outpSendR = outp + grainSize * 3;
+		WARN_LOG_REPORT(SCESAS, "sceSasCore: raw outputMode");
 		for (int i = 0; i < grainSize * 2; i += 2) {
-			int sampleL = mixBuffer[i] + sendBuffer[i];
-			if (inp)
-				sampleL += (*inp++) * leftVol >> 12;
-			*outp++ = clamp_s16(sampleL);
+			*outpL++ = clamp_s16(mixBuffer[i + 0]);
+			*outpR++ = clamp_s16(mixBuffer[i + 1]);
+			*outpSendL++ = clamp_s16(sendBuffer[i + 0]);
+			*outpSendR++ = clamp_s16(sendBuffer[i + 1]);
 		}
 	}
 	memset(mixBuffer, 0, grainSize * sizeof(int) * 2);
@@ -693,6 +703,7 @@ void SasVoice::KeyOn() {
 	on = true;
 	paused = false;
 	sampleFrac = 0;
+	Reset();
 }
 
 void SasVoice::KeyOff() {
@@ -711,7 +722,7 @@ void SasVoice::ChangedParams(bool changedVag) {
 
 void SasVoice::DoState(PointerWrap &p)
 {
-	auto s = p.Section("SasVoice", 1, 2);
+	auto s = p.Section("SasVoice", 1, 3);
 	if (!s)
 		return;
 
@@ -746,8 +757,11 @@ void SasVoice::DoState(PointerWrap &p)
 
 	p.Do(volumeLeft);
 	p.Do(volumeRight);
-	p.Do(volumeLeftSend);
-	p.Do(volumeRightSend);
+	if (s < 3) {
+		// There were extra variables here that were for the same purpose.
+		p.Do(effectLeft);
+		p.Do(effectRight);
+	}
 	p.Do(effectLeft);
 	p.Do(effectRight);
 	p.DoArray(resampleHist, ARRAY_SIZE(resampleHist));

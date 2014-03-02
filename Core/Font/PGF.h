@@ -264,22 +264,23 @@ public:
 
 	bool ReadPtr(const u8 *ptr, size_t dataSize);
 
-	bool GetCharInfo(int charCode, PGFCharInfo *ci, int altCharCode);
-	void GetFontInfo(PGFFontInfo *fi);
-	void DrawCharacter(const GlyphImage *image, int clipX, int clipY, int clipWidth, int clipHeight, int charCode, int altCharCode, int glyphType);
+	bool GetCharInfo(int charCode, PGFCharInfo *ci, int altCharCode, int glyphType = FONT_PGF_CHARGLYPH) const;
+	void GetFontInfo(PGFFontInfo *fi) const;
+	void DrawCharacter(const GlyphImage *image, int clipX, int clipY, int clipWidth, int clipHeight, int charCode, int altCharCode, int glyphType) const;
 
 	void DoState(PointerWrap &p);
 
 	PGFHeader header;
 
 private:
-	bool GetGlyph(const u8 *fontdata, size_t charPtr, int glyphType, Glyph &glyph);
-	bool GetCharGlyph(int charCode, int glyphType, Glyph &glyph);
+	bool ReadCharGlyph(const u8 *fontdata, size_t charPtr, Glyph &glyph);
+	bool ReadShadowGlyph(const u8 *fontdata, size_t charPtr, Glyph &glyph);
+	bool GetCharGlyph(int charCode, int glyphType, Glyph &glyph) const;
 
 	// Unused
 	int GetCharIndex(int charCode, const std::vector<int> &charmapCompressed);
 
-	void SetFontPixel(u32 base, int bpl, int bufWidth, int bufHeight, int x, int y, int pixelColor, int pixelformat);
+	void SetFontPixel(u32 base, int bpl, int bufWidth, int bufHeight, int x, int y, int pixelColor, int pixelformat) const;
 
 	PGFHeaderRev3Extra rev3extra;
 

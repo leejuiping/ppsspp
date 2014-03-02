@@ -330,7 +330,11 @@ bool PSP_InitStart(const CoreParameter &coreParam, std::string *error_string) {
 	}
 
 	*error_string = coreParameter.errorString;
-	return coreParameter.fileToStart != "";
+	bool success = coreParameter.fileToStart != "";
+	if (!success) {
+		pspIsIniting = false;
+	}
+	return success;
 }
 
 bool PSP_InitUpdate(std::string *error_string) {
@@ -455,6 +459,8 @@ std::string GetSysDirectory(PSPDirectories directoryType) {
 		return g_Config.memCardDirectory + "PSP/SYSTEM/";
 	case DIRECTORY_PAUTH:
 		return g_Config.memCardDirectory + "PAUTH/";
+	case DIRECTORY_DUMP:
+		return g_Config.memCardDirectory + "PSP/SYSTEM/DUMP/";
 	// Just return the memory stick root if we run into some sort of problem.
 	default:
 		ERROR_LOG(FILESYS, "Unknown directory type.");

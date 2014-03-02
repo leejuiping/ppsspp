@@ -46,8 +46,10 @@
 #include "Core/HLE/sceKernelModule.h"
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/HLE/sceKernelMemory.h"
+#include "Core/HLE/sceMpeg.h"
 #include "Core/HLE/sceIo.h"
 #include "Core/HLE/KernelWaitHelpers.h"
+#include "Core/ELF/ParamSFO.h"
 
 #include "GPU/GPUState.h"
 
@@ -719,6 +721,85 @@ void Module::Cleanup() {
 	}
 }
 
+void __SaveDecryptedEbootToStorageMedia(const u8 *decryptedEbootDataPtr, const u32 length) {
+	if (!decryptedEbootDataPtr) {
+		ERROR_LOG(SCEMODULE, "Error saving decrypted EBOOT.BIN: invalid pointer");
+		return;
+	}
+
+	if (length == 0) {
+		ERROR_LOG(SCEMODULE, "Error saving decrypted EBOOT.BIN: invalid length");
+		return;
+	}
+
+	const std::string filenameToDumpTo = g_paramSFO.GetValueString("DISC_ID") + ".BIN";
+	const std::string dumpDirectory = GetSysDirectory(DIRECTORY_DUMP);
+	const std::string fullPath = dumpDirectory + filenameToDumpTo;
+
+	// If the file already exists, don't dump it again.
+	if (File::Exists(fullPath)) {
+		INFO_LOG(SCEMODULE, "Decrypted EBOOT.BIN already exists for this game, skipping dump.");
+		return;
+	}
+
+	// Make sure the dump directory exists before continuing.
+	if (!File::Exists(dumpDirectory)) {
+		if (!File::CreateDir(dumpDirectory)) {
+			ERROR_LOG(SCEMODULE, "Unable to create directory for EBOOT dumping, aborting.");
+			return;
+		}
+	}
+
+	FILE *decryptedEbootFile = fopen(fullPath.c_str(), "wb");
+	if (!decryptedEbootFile) {
+		ERROR_LOG(SCEMODULE, "Unable to write decrypted EBOOT.");
+		return;
+	}
+
+	const size_t lengthToWrite = length;
+
+	fwrite(decryptedEbootDataPtr, sizeof(u8), lengthToWrite, decryptedEbootFile);
+	fclose(decryptedEbootFile);
+	INFO_LOG(SCEMODULE, "Successfully wrote decrypted EBOOT to %s", fullPath.c_str());
+}
+
+static bool IsHLEVersionedModule(const char *name) {
+	// TODO: Only some of these are currently known to be versioned.
+	// Potentially only sceMpeg_library matters.
+	// For now, we're just reporting version numbers.
+	for (size_t i = 0; i < ARRAY_SIZE(blacklistedModules); i++) {
+		if (!strncmp(name, blacklistedModules[i], 28)) {
+			return true;
+		}
+	}
+	static const char *otherModules[] = {
+		"sceAvcodec_driver",
+		"sceAudiocodec_Driver",
+		"sceAudiocodec",
+		"sceVideocodec_Driver",
+		"sceVideocodec",
+		"sceMpegbase_Driver",
+		"sceMpegbase",
+		"scePsmf_library",
+		"scePsmfP_library",
+		"scePsmfPlayer",
+		"sceSAScore",
+		"sceCcc_Library",
+		"SceParseHTTPheader_Library",
+		"SceParseURI_Library",
+		// Guessing.
+		"sceJpeg",
+		"sceJpeg_library",
+		"sceJpeg_Library",
+	};
+	for (size_t i = 0; i < ARRAY_SIZE(otherModules); i++) {
+		if (!strncmp(name, otherModules[i], 28)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 Module *__KernelLoadELFFromPtr(const u8 *ptr, u32 loadAddress, std::string *error_string, u32 *magic) {
 	Module *module = new Module;
 	kernelObjects.Create(module);
@@ -736,6 +817,18 @@ Module *__KernelLoadELFFromPtr(const u8 *ptr, u32 loadAddress, std::string *erro
 	if (*magic == 0x5053507e) { // "~PSP"
 		DEBUG_LOG(SCEMODULE, "Decrypting ~PSP file");
 		PSP_Header *head = (PSP_Header*)ptr;
+
+		if (IsHLEVersionedModule(head->modname)) {
+			int ver = (head->module_ver_hi << 8) | head->module_ver_lo;
+			char temp[256];
+			snprintf(temp, sizeof(temp), "Loading module %s with version %%04x", head->modname);
+			INFO_LOG_REPORT(SCEMODULE,temp, ver);
+
+			if (!strcmp(head->modname, "sceMpeg_library")) {
+				__MpegLoadModule(ver);
+			}
+		}
+
 		const u8 *in = ptr;
 		u32 size = head->elf_size;
 		if (head->psp_size > size)
@@ -763,6 +856,13 @@ Module *__KernelLoadELFFromPtr(const u8 *ptr, u32 loadAddress, std::string *erro
 		} else {
 			// TODO: Is this right?
 			module->nm.bss_size = head->bss_size;
+
+			// If we've made it this far, it should be safe to dump.
+			if (g_Config.bDumpDecryptedEboot) {
+				INFO_LOG(SCEMODULE, "Dumping derypted EBOOT.BIN to file.");
+				const u32 dumpLength = ret;
+				__SaveDecryptedEbootToStorageMedia(ptr, dumpLength);
+			}
 		}
 	}
 
@@ -826,6 +926,16 @@ Module *__KernelLoadELFFromPtr(const u8 *ptr, u32 loadAddress, std::string *erro
 	// Let's also get a truncated version.
 	char moduleName[29] = {0};
 	strncpy(moduleName, modinfo->name, ARRAY_SIZE(module->nm.name));
+
+	if (IsHLEVersionedModule(modinfo->name)) {
+		char temp[256];
+		snprintf(temp, sizeof(temp), "Loading module %s with version %%04x", modinfo->name);
+		INFO_LOG_REPORT(SCEMODULE, temp, modinfo->moduleVersion);
+
+		if (!strcmp(modinfo->name, "sceMpeg_library")) {
+			__MpegLoadModule(modinfo->moduleVersion);
+		}
+	}
 
 	// Check for module blacklist - we don't allow games to load these modules from disc
 	// as we have HLE implementations and the originals won't run in the emu because they
@@ -945,7 +1055,7 @@ Module *__KernelLoadELFFromPtr(const u8 *ptr, u32 loadAddress, std::string *erro
 			for (int i = 0; i < entry->numFuncs; ++i) {
 				// This is the id of the import.
 				func.nid = nidDataPtr[i];
-				// This is the address to write the j abnd delay slot to.
+				// This is the address to write the j and delay slot to.
 				func.stubAddr = entry->firstSymAddr + i * 8;
 				module->ImportFunc(func);
 			}
@@ -1649,7 +1759,7 @@ u32 sceKernelStopModule(u32 moduleId, u32 argSize, u32 argAddr, u32 returnValueA
 	// TODO: Need to test how this really works.  Let's assume it's an override.
 	if (Memory::IsValidAddress(optionAddr))
 	{
-		auto options = Memory::GetStruct<SceKernelSMOption>(optionAddr);
+		auto options = PSPPointer<SceKernelSMOption>::Create(optionAddr);
 		// TODO: Check how size handling actually works.
 		if (options->size != 0 && options->priority != 0)
 			priority = options->priority;
@@ -1728,7 +1838,7 @@ u32 sceKernelStopUnloadSelfModuleWithStatus(u32 exitCode, u32 argSize, u32 argp,
 
 		// TODO: Need to test how this really works.  Let's assume it's an override.
 		if (Memory::IsValidAddress(optionAddr)) {
-			auto options = Memory::GetStruct<SceKernelSMOption>(optionAddr);
+			auto options = PSPPointer<SceKernelSMOption>::Create(optionAddr);
 			// TODO: Check how size handling actually works.
 			if (options->size != 0 && options->priority != 0)
 				priority = options->priority;

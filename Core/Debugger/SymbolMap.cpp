@@ -23,7 +23,9 @@
 
 #ifdef _WIN32
 #include "Common/CommonWindows.h"
+#ifndef _XBOX
 #include <WindowsX.h>
+#endif
 #else
 #include <unistd.h>
 #endif
@@ -615,14 +617,20 @@ void SymbolMap::AssignFunctionIndices() {
 void SymbolMap::UpdateActiveSymbols() {
 	// return;   (slow in debug mode)
 	lock_guard guard(lock_);
-	std::map<int, u32> activeModuleIndexes;
-	for (auto it = activeModuleEnds.begin(), end = activeModuleEnds.end(); it != end; ++it) {
-		activeModuleIndexes[it->second.index] = it->second.start;
-	}
 
 	activeFunctions.clear();
 	activeLabels.clear();
 	activeData.clear();
+
+	// On startup and shutdown, we can skip the rest.  Tiny optimization.
+	if (activeModuleEnds.empty() || (functions.empty() && labels.empty() && data.empty())) {
+		return;
+	}
+
+	std::map<int, u32> activeModuleIndexes;
+	for (auto it = activeModuleEnds.begin(), end = activeModuleEnds.end(); it != end; ++it) {
+		activeModuleIndexes[it->second.index] = it->second.start;
+	}
 
 	for (auto it = functions.begin(), end = functions.end(); it != end; ++it) {
 		const auto mod = activeModuleIndexes.find(it->second.module);
@@ -904,7 +912,7 @@ DataType SymbolMap::GetDataType(u32 startAddress) const {
 	return it->second.type;
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_XBOX)
 
 struct DefaultSymbol {
 	u32 address;

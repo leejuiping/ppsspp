@@ -57,9 +57,9 @@ const int ERROR_ERRNO_IO_ERROR                     = 0x80010005;
 const int ERROR_ERRNO_FILE_ALREADY_EXISTS          = 0x80010011;
 const int ERROR_MEMSTICK_DEVCTL_BAD_PARAMS         = 0x80220081;
 const int ERROR_MEMSTICK_DEVCTL_TOO_MANY_CALLBACKS = 0x80220082;
-const int ERROR_KERNEL_BAD_FILE_DESCRIPTOR		   = 0x80020323;
+const int ERROR_KERNEL_BAD_FILE_DESCRIPTOR         = 0x80020323;
 
-const int ERROR_PGD_INVALID_HEADER				   = 0x80510204;
+const int ERROR_PGD_INVALID_HEADER                 = 0x80510204;
 
 /*
 
@@ -81,14 +81,14 @@ umd00: block access - umd
 umd01: block access - umd
 */
 
-#define O_RDONLY		0x0001
-#define O_WRONLY		0x0002
-#define O_RDWR			0x0003
-#define O_NBLOCK		0x0010
-#define O_APPEND		0x0100
-#define O_CREAT			0x0200
-#define O_TRUNC			0x0400
-#define O_NOWAIT		0x8000
+#define O_RDONLY        0x0001
+#define O_WRONLY        0x0002
+#define O_RDWR          0x0003
+#define O_NBLOCK        0x0010
+#define O_APPEND        0x0100
+#define O_CREAT         0x0200
+#define O_TRUNC         0x0400
+#define O_NOWAIT        0x8000
 #define O_NPDRM         0x40000000
 
 // chstat
@@ -128,8 +128,8 @@ const int IO_THREAD_MIN_DATA_SIZE = 0;
 #define SCE_STM_FLNK 0x4000
 
 enum {
-	TYPE_DIR=0x10,
-	TYPE_FILE=0x20
+	TYPE_DIR  = 0x10,
+	TYPE_FILE = 0x20
 };
 
 #ifdef __SYMBIAN32__
@@ -475,6 +475,11 @@ void __IoInit() {
 	if (ioManagerThreadEnabled) {
 		Core_ListenShutdown(&__IoWakeManager);
 		ioManagerThread = new std::thread(&__IoManagerThread);
+#ifdef _XBOX
+		SuspendThread(ioManagerThread->native_handle());
+		XSetThreadProcessor(ioManagerThread->native_handle(), 4);
+		ResumeThread(ioManagerThread->native_handle());
+#endif
 		ioManagerThread->detach();
 	}
 
@@ -638,7 +643,7 @@ void __IoSchedSync(FileNode *f, int fd, int usec) {
 	u64 param = ((u64)__KernelGetCurThread()) << 32 | fd;
 	CoreTiming::ScheduleEvent(usToCycles(usec), syncNotifyEvent, param);
 
-	f->pendingAsyncResult = true;
+	f->pendingAsyncResult = false;
 	f->hasAsyncResult = false;
 }
 
@@ -742,7 +747,17 @@ bool __IoRead(int &result, int id, u32 data_addr, int size) {
 			if (f->npdrm) {
 				result = npdrmRead(f, data, size);
 				return true;
-			} else if (__KernelIsDispatchEnabled() && ioManagerThreadEnabled && size > IO_THREAD_MIN_DATA_SIZE) {
+			}
+
+			bool useThread = __KernelIsDispatchEnabled() && ioManagerThreadEnabled && size > IO_THREAD_MIN_DATA_SIZE;
+			if (useThread) {
+				// If there's a pending operation on this file, wait for it to finish and don't overwrite it.
+				useThread = !ioManager.HasOperation(f->handle);
+				if (!useThread) {
+					ioManager.SyncThread();
+				}
+			}
+			if (useThread) {
 				AsyncIOEvent ev = IO_EVENT_READ;
 				ev.handle = f->handle;
 				ev.buf = data;
@@ -754,10 +769,13 @@ bool __IoRead(int &result, int id, u32 data_addr, int size) {
 				return true;
 			}
 		} else {
-			ERROR_LOG_REPORT(SCEIO, "sceIoRead Reading into bad pointer %08x", data_addr);
-			// TODO: Returning 0 because it wasn't being sign-extended in async result before.
-			// What should this do?
-			result = 0;
+			if (size != 0) {
+				// TODO: For some combinations of bad pointer + size, SCE_KERNEL_ERROR_ILLEGAL_ADDR.
+				// Seems like only for kernel RAM.  For most cases, it really is -1.
+				result = -1;
+			} else {
+				result = 0;
+			}
 			return true;
 		}
 	} else {
@@ -854,7 +872,16 @@ bool __IoWrite(int &result, int id, u32 data_addr, int size) {
 			result = ERROR_KERNEL_BAD_FILE_DESCRIPTOR;
 			return true;
 		}
-		if (__KernelIsDispatchEnabled() && ioManagerThreadEnabled && size > IO_THREAD_MIN_DATA_SIZE) {
+
+		bool useThread = __KernelIsDispatchEnabled() && ioManagerThreadEnabled && size > IO_THREAD_MIN_DATA_SIZE;
+		if (useThread) {
+			// If there's a pending operation on this file, wait for it to finish and don't overwrite it.
+			useThread = !ioManager.HasOperation(f->handle);
+			if (!useThread) {
+				ioManager.SyncThread();
+			}
+		}
+		if (useThread) {
 			AsyncIOEvent ev = IO_EVENT_WRITE;
 			ev.handle = f->handle;
 			ev.buf = (u8 *) data_ptr;
@@ -1004,6 +1031,11 @@ u32 npdrmLseek(FileNode *f, s32 where, FileMove whence)
 
 s64 __IoLseekDest(FileNode *f, s64 offset, int whence, FileMove &seek) {
 	seek = FILEMOVE_BEGIN;
+
+	// Let's make sure this isn't incorrect mid-operation.
+	if (ioManager.HasOperation(f->handle)) {
+		ioManager.SyncThread();
+	}
 
 	s64 newPos = 0;
 	switch (whence) {

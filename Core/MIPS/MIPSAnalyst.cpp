@@ -337,7 +337,7 @@ skip:
 
 		for (u32 ahead = fromAddr; ahead < fromAddr + MAX_AHEAD_SCAN; ahead += 4) {
 			MIPSOpcode aheadOp = Memory::Read_Instruction(ahead);
-			u32 target = GetBranchTargetNoRA(ahead);
+			u32 target = GetBranchTargetNoRA(ahead, aheadOp);
 			if (target == INVALIDTARGET && ((aheadOp & 0xFC000000) == 0x08000000)) {
 				target = GetJumpTarget(ahead);
 			}
@@ -358,7 +358,7 @@ skip:
 		if (closestJumpbackAddr != INVALIDTARGET && furthestJumpbackAddr == INVALIDTARGET) {
 			for (u32 behind = closestJumpbackTarget; behind < fromAddr; behind += 4) {
 				MIPSOpcode behindOp = Memory::Read_Instruction(behind);
-				u32 target = GetBranchTargetNoRA(behind);
+				u32 target = GetBranchTargetNoRA(behind, behindOp);
 				if (target == INVALIDTARGET && ((behindOp & 0xFC000000) == 0x08000000)) {
 					target = GetJumpTarget(behind);
 				}
@@ -409,7 +409,7 @@ skip:
 			}
 
 			MIPSOpcode op = Memory::Read_Instruction(addr);
-			u32 target = GetBranchTargetNoRA(addr);
+			u32 target = GetBranchTargetNoRA(addr, op);
 			if (target != INVALIDTARGET) {
 				isStraightLeaf = false;
 				if (target > furthestBranch) {
@@ -588,7 +588,7 @@ skip:
 
 	const char *LookupHash(u64 hash, int funcsize) {
 		for (auto it = hashMap.begin(), end = hashMap.end(); it != end; ++it) {
-			if (it->hash == hash && it->size == funcsize) {
+			if (it->hash == hash && (int)it->size == funcsize) {
 				return it->name;
 			}
 		}

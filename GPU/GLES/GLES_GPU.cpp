@@ -37,6 +37,7 @@
 #include "GPU/GLES/TransformPipeline.h"
 #include "GPU/GLES/TextureCache.h"
 
+#include "Core/MIPS/MIPS.h"
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/HLE/sceKernelInterrupt.h"
 #include "Core/HLE/sceGe.h"
@@ -1340,7 +1341,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 					dst[i] = newVal;
 					shaderManager_->DirtyUniform(DIRTY_WORLDMATRIX);
 				}
-				if (++i > end) {
+				if (++i >= end) {
 					break;
 				}
 			}
@@ -1384,7 +1385,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 					dst[i] = newVal;
 					shaderManager_->DirtyUniform(DIRTY_VIEWMATRIX);
 				}
-				if (++i > end) {
+				if (++i >= end) {
 					break;
 				}
 			}
@@ -1428,7 +1429,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 					dst[i] = newVal;
 					shaderManager_->DirtyUniform(DIRTY_PROJMATRIX);
 				}
-				if (++i > end) {
+				if (++i >= end) {
 					break;
 				}
 			}
@@ -1472,7 +1473,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 					dst[i] = newVal;
 					shaderManager_->DirtyUniform(DIRTY_TEXMATRIX);
 				}
-				if (++i > end) {
+				if (++i >= end) {
 					break;
 				}
 			}
@@ -1517,7 +1518,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 						Flush();
 						dst[i] = newVal;
 					}
-					if (++i > end) {
+					if (++i >= end) {
 						break;
 					}
 				}
@@ -1529,7 +1530,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 			} else {
 				while ((src[i] >> 24) == GE_CMD_BONEMATRIXDATA) {
 					dst[i] = src[i] << 8;
-					if (++i > end) {
+					if (++i >= end) {
 						break;
 					}
 				}

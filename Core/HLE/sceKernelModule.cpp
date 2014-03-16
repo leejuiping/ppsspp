@@ -24,6 +24,7 @@
 #include "Common/FileUtil.h"
 #include "Core/Config.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/HLETables.h"
 #include "Core/Reporting.h"
 #include "Core/Host.h"
@@ -1595,10 +1596,18 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr)
 			return -1;
 		}
 
-		// Module was blacklisted or couldn't be decrypted, which means it's a kernel module we don't want to run.
-		// Let's just act as if it worked.
-		NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we lie about success", name);
-		return 1;
+		if (info.name == "BOOT.BIN")
+		{
+			NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we try __KernelLoadExec", name)
+			return __KernelLoadExec(name, 0, &error_string);
+		}
+		else
+		{
+			// Module was blacklisted or couldn't be decrypted, which means it's a kernel module we don't want to run..
+			// Let's just act as if it worked.
+			NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we lie about success", name)
+			return 1;
+		}
 	}
 
 	if (lmoption) {

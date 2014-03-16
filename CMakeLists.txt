@@ -420,7 +420,7 @@ if(USE_FFMPEG)
 		)
 	endif()
 
-	if(IOS OR BLACKBERRY)
+	if(IOS OR BLACKBERRY OR MACOSX)
 		set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES} iconv)
 	endif()
 
@@ -1107,6 +1107,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/HLE/scePauth.h
 	Core/HW/SimpleAT3Dec.cpp
 	Core/HW/SimpleAT3Dec.h
+	Core/HW/SimpleMp3Dec.cpp
+	Core/HW/SimpleMp3Dec.h
 	Core/HW/AsyncIOManager.cpp
 	Core/HW/AsyncIOManager.h
 	Core/HW/MediaEngine.cpp

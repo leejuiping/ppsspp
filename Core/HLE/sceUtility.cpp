@@ -22,8 +22,10 @@
 
 #include "Common/ChunkFile.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HLE/FunctionWrappers.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/Reporting.h"
+#include "Core/Config.h"
 
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelThread.h"
@@ -145,11 +147,13 @@ int sceUtilitySavedataGetStatus()
 	if (currentDialogType != UTILITY_DIALOG_SAVEDATA)
 	{
 		DEBUG_LOG(SCEUTILITY, "sceUtilitySavedataGetStatus(): wrong dialog type");
+		hleEatCycles(200);
 		return SCE_ERROR_UTILITY_WRONG_TYPE;
 	}
 
 	int status = saveDialog.GetStatus();
 	DEBUG_LOG(SCEUTILITY, "%08x=sceUtilitySavedataGetStatus()", status);
+	hleEatCycles(200);
 	return status;
 }
 

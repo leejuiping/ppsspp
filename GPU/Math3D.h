@@ -20,6 +20,8 @@
 #include <cmath>
 #include "Common/Common.h"
 
+#include "math/fast/fast_matrix.h"
+
 #if defined(_M_SSE)
 #include <emmintrin.h>
 #endif
@@ -828,10 +830,7 @@ inline void Norm3ByMatrix43(float vecOut[3], const float v[3], const float m[12]
 }
 
 inline void Matrix4ByMatrix4(float out[16], const float a[16], const float b[16]) {
-	Vec4ByMatrix44(out, a, b);
-	Vec4ByMatrix44(out + 4, a + 4, b);
-	Vec4ByMatrix44(out + 8, a + 8, b);
-	Vec4ByMatrix44(out + 12, a + 12, b);
+	fast_matrix_mul_4x4(out, b, a);
 }
 
 inline void ConvertMatrix4x3To4x4(float *m4x4, const float *m4x3) {
@@ -920,7 +919,7 @@ inline Vec3<int> Vec3<int>::FromRGB(unsigned int rgb)
 }
 
 template<>
-inline unsigned int Vec3<float>::ToRGB() const
+__forceinline unsigned int Vec3<float>::ToRGB() const
 {
 #if defined(_M_SSE)
 	__m128i c = _mm_cvtps_epi32(_mm_mul_ps(vec, _mm_set_ps1(255.0f)));
@@ -934,7 +933,7 @@ inline unsigned int Vec3<float>::ToRGB() const
 }
 
 template<>
-inline unsigned int Vec3<int>::ToRGB() const
+__forceinline unsigned int Vec3<int>::ToRGB() const
 {
 #if defined(_M_SSE)
 	__m128i c16 = _mm_packs_epi32(ivec, ivec);
@@ -974,7 +973,7 @@ inline Vec4<int> Vec4<int>::FromRGBA(unsigned int rgba)
 }
 
 template<>
-inline unsigned int Vec4<float>::ToRGBA() const
+__forceinline unsigned int Vec4<float>::ToRGBA() const
 {
 #if defined(_M_SSE)
 	__m128i c = _mm_cvtps_epi32(_mm_mul_ps(vec, _mm_set_ps1(255.0f)));
@@ -989,7 +988,7 @@ inline unsigned int Vec4<float>::ToRGBA() const
 }
 
 template<>
-inline unsigned int Vec4<int>::ToRGBA() const
+__forceinline unsigned int Vec4<int>::ToRGBA() const
 {
 #if defined(_M_SSE)
 	__m128i c16 = _mm_packs_epi32(ivec, ivec);

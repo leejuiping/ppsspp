@@ -375,8 +375,6 @@ skip:
 		return furthestJumpbackAddr;
 	}
 
-	void ReplaceFunctions();
-
 	void ScanForFunctions(u32 startAddr, u32 endAddr, bool insertSymbols) {
 		AnalyzedFunction currentFunction = {startAddr};
 
@@ -558,6 +556,8 @@ skip:
 				iter++;
 			}
 		}
+
+		RestoreReplacedInstructions(startAddr, endAddr);
 
 		// TODO: Also wipe them from hash->function map
 	}

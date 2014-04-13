@@ -145,9 +145,8 @@ void TextureCache::Invalidate(u32 addr, int size, GPUInvalidationType type) {
 		u32 texEnd = iter->second.addr + iter->second.sizeInRAM;
 
 		if (texAddr < addr_end && addr < texEnd) {
-			if ((iter->second.status & TexCacheEntry::STATUS_MASK) == TexCacheEntry::STATUS_RELIABLE) {
-				// Clear status -> STATUS_HASHING.
-				iter->second.status &= ~TexCacheEntry::STATUS_MASK;
+			if (iter->second.GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
+				iter->second.SetHashStatus(TexCacheEntry::STATUS_HASHING);
 			}
 			if (type != GPU_INVALIDATE_ALL) {
 				gpuStats.numTextureInvalidations++;
@@ -168,9 +167,8 @@ void TextureCache::InvalidateAll(GPUInvalidationType /*unused*/) {
 	}
 
 	for (TexCache::iterator iter = cache.begin(), end = cache.end(); iter != end; ++iter) {
-		if ((iter->second.status & TexCacheEntry::STATUS_MASK) == TexCacheEntry::STATUS_RELIABLE) {
-			// Clear status -> STATUS_HASHING.
-			iter->second.status &= ~TexCacheEntry::STATUS_MASK;
+		if (iter->second.GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
+			iter->second.SetHashStatus(TexCacheEntry::STATUS_HASHING);
 		}
 		if (!iter->second.framebuffer) {
 			iter->second.invalidHint++;
@@ -489,8 +487,8 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 		// Enforce no mip filtering, for safety.
 		minFilt &= 1; // no mipmaps yet
 	} else {
-		// TODO: Is this a signed value? Which direction?
-		float lodBias = 0.0; // -(float)((gstate.texlevel >> 16) & 0xFF) / 16.0f;
+		// Texture lod bias should be signed.
+		float lodBias = (float)(int)(s8)((gstate.texlevel >> 16) & 0xFF) / 16.0f;
 		if (force || entry.lodBias != lodBias) {
 #ifndef USING_GLES2
 			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, lodBias);
@@ -921,8 +919,13 @@ void TextureCache::SetTexture(bool force) {
 			}
 		}
 
-		bool rehash = (entry->status & TexCacheEntry::STATUS_MASK) == TexCacheEntry::STATUS_UNRELIABLE;
+		bool rehash = entry->GetHashStatus() == TexCacheEntry::STATUS_UNRELIABLE;
 		bool doDelete = true;
+
+		// If we only loaded a clut, or changed framebuf or something, we don't need to rehash the texture data.
+		if ((gstate_c.textureChanged & TEXCHANGE_UPDATED) == 0) {
+			rehash = false;
+		}
 
 		if (match) {
 			if (entry->lastFrame != gpuStats.numFlips) {
@@ -956,14 +959,14 @@ void TextureCache::SetTexture(bool force) {
 				rehash = false;
 			}
 
-			if (rehash && (entry->status & TexCacheEntry::STATUS_MASK) != TexCacheEntry::STATUS_RELIABLE) {
+			if (rehash && entry->GetHashStatus() != TexCacheEntry::STATUS_RELIABLE) {
 				fullhash = QuickTexHash(texaddr, bufw, w, h, format);
 				if (fullhash != entry->fullhash) {
 					hashFail = true;
-				} else if ((entry->status & TexCacheEntry::STATUS_MASK) == TexCacheEntry::STATUS_UNRELIABLE && entry->numFrames > TexCacheEntry::FRAMES_REGAIN_TRUST) {
+				} else if (entry->GetHashStatus() != TexCacheEntry::STATUS_HASHING && entry->numFrames > TexCacheEntry::FRAMES_REGAIN_TRUST) {
 					// Reset to STATUS_HASHING.
 					if (g_Config.bTextureBackoffCache) {
-						entry->status &= ~TexCacheEntry::STATUS_MASK;
+						entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
 					}
 				}
 			}
@@ -1009,7 +1012,7 @@ void TextureCache::SetTexture(bool force) {
 			if (entry->texture != lastBoundTexture) {
 				glBindTexture(GL_TEXTURE_2D, entry->texture);
 				lastBoundTexture = entry->texture;
-				gstate_c.textureFullAlpha = (entry->status & TexCacheEntry::STATUS_ALPHA_MASK) == TexCacheEntry::STATUS_ALPHA_FULL;
+				gstate_c.textureFullAlpha = entry->GetAlphaStatus() == TexCacheEntry::STATUS_ALPHA_FULL;
 			}
 			UpdateSamplingParams(*entry, false);
 			VERBOSE_LOG(G3D, "Texture at %08x Found in Cache, applying", texaddr);
@@ -1031,8 +1034,8 @@ void TextureCache::SetTexture(bool force) {
 				}
 			}
 			// Clear the reliable bit if set.
-			if ((entry->status & TexCacheEntry::STATUS_MASK) == TexCacheEntry::STATUS_RELIABLE) {
-				entry->status &= ~TexCacheEntry::STATUS_MASK;
+			if (entry->GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
+				entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
 			}
 		}
 	} else {
@@ -1229,7 +1232,7 @@ void TextureCache::SetTexture(bool force) {
 	//glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 	glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
-	gstate_c.textureFullAlpha = (entry->status & TexCacheEntry::STATUS_ALPHA_MASK) == TexCacheEntry::STATUS_ALPHA_FULL;
+	gstate_c.textureFullAlpha = entry->GetAlphaStatus() == TexCacheEntry::STATUS_ALPHA_FULL;
 }
 
 GLenum TextureCache::GetDestFormat(GETextureFormat format, GEPaletteFormat clutFormat) const {
@@ -1537,11 +1540,11 @@ void TextureCache::CheckAlpha(TexCacheEntry &entry, u32 *pixelData, GLenum dstFm
 	}
 
 	if (hitSomeAlpha != 0)
-		entry.status |= TexCacheEntry::STATUS_ALPHA_UNKNOWN;
+		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_UNKNOWN);
 	else if (hitZeroAlpha != 0)
-		entry.status |= TexCacheEntry::STATUS_ALPHA_SIMPLE;
+		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_SIMPLE);
 	else
-		entry.status |= TexCacheEntry::STATUS_ALPHA_FULL;
+		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_FULL);
 }
 
 void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replaceImages, int scaleFactor, GLenum dstFmt) {
@@ -1578,7 +1581,7 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 	if ((entry.status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0)
 		CheckAlpha(entry, pixelData, dstFmt, useUnpack ? bufw : w, w, h);
 	else
-		entry.status |= TexCacheEntry::STATUS_ALPHA_UNKNOWN;
+		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_UNKNOWN);
 
 	GLuint components = dstFmt == GL_UNSIGNED_SHORT_5_6_5 ? GL_RGB : GL_RGBA;
 

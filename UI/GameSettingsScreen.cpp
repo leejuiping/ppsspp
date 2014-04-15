@@ -199,8 +199,6 @@ void GameSettingsScreen::CreateViews() {
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Hack Settings", "Hack Settings (these WILL cause glitches)")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bTimerHack, gs->T("Timer Hack")));
-	// Maybe hide this on non-PVR?
-	graphicsSettings->Add(new CheckBox(&g_Config.bDisableAlphaTest, gs->T("Disable Alpha Test (PowerVR speedup)")))->OnClick.Handle(this, &GameSettingsScreen::OnShaderChange);
 	graphicsSettings->Add(new CheckBox(&g_Config.bDisableStencilTest, gs->T("Disable Stencil Test")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bAlphaMaskHack, gs->T("Alpha Mask Hack (3rd Birthday)")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bAlwaysDepthWrite, gs->T("Always Depth Write")));
@@ -248,7 +246,7 @@ void GameSettingsScreen::CreateViews() {
 	CheckBox *lowAudio = audioSettings->Add(new CheckBox(&g_Config.bLowLatencyAudio, a->T("Low latency audio")));
 	lowAudio->SetEnabledPtr(&g_Config.bEnableSound);
 
-	audioSettings->Add(new ItemHeader(ms->T("Audio hacks")));
+	audioSettings->Add(new ItemHeader(a->T("Audio hacks")));
 	audioSettings->Add(new CheckBox(&g_Config.bSoundSpeedHack, a->T("Sound speed hack (DOA etc.)")));
 
 	// Control

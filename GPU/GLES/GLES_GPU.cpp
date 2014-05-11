@@ -1929,28 +1929,9 @@ void GLES_GPU::DoBlockTransfer() {
 		}
 	}
 
-	// TODO: Notify all overlapping FBOs that they need to reload.
-	framebufferManager_.NotifyBlockTransfer(dstBasePtr, srcBasePtr);
-
-	textureCache_.Invalidate(dstBasePtr + (dstY * dstStride + dstX) * bpp, height * dstStride * bpp, GPU_INVALIDATE_HINT);
-	if (Memory::IsRAMAddress(srcBasePtr) && Memory::IsVRAMAddress(dstBasePtr)) {
-		// TODO: This causes glitches in Tactics Ogre if we don't implement both ways (which will probably be slow...)
-		// The main thing this helps is videos, which will have a matching stride, and zero x/y.
-		if (dstStride == srcStride && dstY == 0 && dstX == 0 && srcX == 0 && srcY == 0) {
-			framebufferManager_.UpdateFromMemory(dstBasePtr, (dstY + height) * dstStride * bpp, true);
-		}
-	}
-	
-	// A few games use this INSTEAD of actually drawing the video image to the screen, they just blast it to
-	// the backbuffer. Detect this and have the framebuffermanager draw the pixels.
-
-	u32 backBuffer = framebufferManager_.PrevDisplayFramebufAddr();
-	u32 displayBuffer = framebufferManager_.DisplayFramebufAddr();
-
-	if (((backBuffer != 0 && dstBasePtr == backBuffer) ||
-		  (displayBuffer != 0 && dstBasePtr == displayBuffer)) &&
-			dstStride == 512 && height == 272) {
-		framebufferManager_.DrawPixels(Memory::GetPointerUnchecked(dstBasePtr), GE_FORMAT_8888, 512);
+	// Tell the framebuffer manager to take action if possible. If it does the entire thing, let's just return.
+	if (!framebufferManager_.NotifyBlockTransfer(dstBasePtr, dstStride, dstX, dstY, srcBasePtr, srcStride, srcX, srcY, width, height, bpp)) {
+		textureCache_.Invalidate(dstBasePtr + (dstY * dstStride + dstX) * bpp, height * dstStride * bpp, GPU_INVALIDATE_HINT);
 	}
 
 #ifndef MOBILE_DEVICE

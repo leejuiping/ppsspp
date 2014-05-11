@@ -234,7 +234,8 @@ void GameSettingsScreen::CreateViews() {
 	bgmVol->SetEnabledPtr(&g_Config.bEnableSound);
 
 	audioSettings->Add(new CheckBox(&g_Config.bEnableSound, a->T("Enable Sound")));
-	CheckBox *lowAudio = audioSettings->Add(new CheckBox(&g_Config.bLowLatencyAudio, a->T("Low latency audio")));
+	static const char *latency[] = { "Low", "Medium", "High" };
+	PopupMultiChoice *lowAudio = audioSettings->Add(new PopupMultiChoice(&g_Config.IaudioLatency, a->T("Audio Latency"), latency, 0, ARRAY_SIZE(latency), gs, screenManager()));
 	lowAudio->SetEnabledPtr(&g_Config.bEnableSound);
 
 	audioSettings->Add(new ItemHeader(a->T("Audio hacks")));
@@ -270,7 +271,11 @@ void GameSettingsScreen::CreateViews() {
 	CheckBox *enablePauseBtn = controlsSettings->Add(new CheckBox(&g_Config.bShowTouchPause, c->T("Show Touch Pause Menu Button")));
 
 	// Don't allow the user to disable it once in-game, so they can't lock themselves out of the menu.
-	enablePauseBtn->SetEnabled(!PSP_IsInited());
+	if (!PSP_IsInited()) {
+		enablePauseBtn->SetEnabledPtr(&g_Config.bShowTouchControls);
+	} else {
+		enablePauseBtn->SetEnabled(false);
+	}
 #endif
 
 	CheckBox *disableDiags = controlsSettings->Add(new CheckBox(&g_Config.bDisableDpadDiagonals, c->T("Disable D-Pad diagonals (4-way touch)")));

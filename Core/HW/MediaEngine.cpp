@@ -72,6 +72,10 @@ void ffmpeg_logger(void *, int level, const char *format, va_list va_args) {
 	if (tmp[len - 1] == '\n')
 		tmp[len - 1] = '\0';
 
+	if (!strcmp(tmp, "GHA Phase shifting")) {
+		Reporting::ReportMessage("Atrac3+: GHA phase shifting");
+	}
+
 	// Let's color the log line appropriately.
 	if (level <= AV_LOG_PANIC) {
 		ERROR_LOG(ME, "FF: %s", tmp);
@@ -735,7 +739,7 @@ int MediaEngine::writeVideoImageWithRange(u32 bufferPtr, int frameWidth, int vid
 		break;
 
 	default:
-		ERROR_LOG(ME, "Unsupported video pixel format %d", videoPixelMode);
+		ERROR_LOG_REPORT(ME, "Unsupported video pixel format %d", videoPixelMode);
 		break;
 	}
 	return videoImageSize;

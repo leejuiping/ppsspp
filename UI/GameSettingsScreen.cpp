@@ -57,7 +57,6 @@ void GameSettingsScreen::CreateViews() {
 	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, true);
 
 	cap60FPS_ = g_Config.iForceMaxEmulatedFPS == 60;
-	showDebugStats_ = g_Config.bShowDebugStats;
 
 	iAlternateSpeedPercent_ = (g_Config.iFpsLimit * 100) / 60;
 
@@ -191,7 +190,6 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new ItemHeader(gs->T("Hack Settings", "Hack Settings (these WILL cause glitches)")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bTimerHack, gs->T("Timer Hack")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bDisableStencilTest, gs->T("Disable Stencil Test")));
-	graphicsSettings->Add(new CheckBox(&g_Config.bAlphaMaskHack, gs->T("Alpha Mask Hack (3rd Birthday)")));
 	graphicsSettings->Add(new CheckBox(&g_Config.bAlwaysDepthWrite, gs->T("Always Depth Write")));
 	CheckBox *prescale = graphicsSettings->Add(new CheckBox(&g_Config.bPrescaleUV, gs->T("Texture Coord Speedhack")));
 	if (PSP_IsInited())
@@ -205,7 +203,7 @@ void GameSettingsScreen::CreateViews() {
 #endif
 	};
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gs->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gs, screenManager()));
-	graphicsSettings->Add(new CheckBox(&showDebugStats_, gs->T("Show Debug Statistics")));
+	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gs->T("Show Debug Statistics")))->OnClick.Handle(this, &GameSettingsScreen::OnJitAffectingSetting);
 
 	// Developer tools are not accessible ingame, so it goes here.
 	graphicsSettings->Add(new ItemHeader(gs->T("Debugging")));
@@ -302,7 +300,7 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new Choice(dev->T("Language", "Language")))->OnClick.Handle(this, &GameSettingsScreen::OnLanguage);
 
 	systemSettings->Add(new ItemHeader(s->T("Emulation")));
-	systemSettings->Add(new CheckBox(&g_Config.bFastMemory, s->T("Fast Memory", "Fast Memory (Unstable)")));
+	systemSettings->Add(new CheckBox(&g_Config.bFastMemory, s->T("Fast Memory", "Fast Memory (Unstable)")))->OnClick.Handle(this, &GameSettingsScreen::OnJitAffectingSetting);
 
 	systemSettings->Add(new CheckBox(&g_Config.bSeparateCPUThread, s->T("Multithreaded (experimental)")))->SetEnabled(!PSP_IsInited());
 	systemSettings->Add(new CheckBox(&g_Config.bSeparateIOThread, s->T("I/O on thread (experimental)")))->SetEnabled(!PSP_IsInited());
@@ -406,6 +404,11 @@ UI::EventReturn GameSettingsScreen::OnRenderingMode(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GameSettingsScreen::OnJitAffectingSetting(UI::EventParams &e) {
+	NativeMessageReceived("clear jit", "");
+	return UI::EVENT_DONE;
+}
+
 UI::EventReturn GameSettingsScreen::OnFrameSkipChange(UI::EventParams &e) {
 	frameSkipAuto_->SetEnabled(g_Config.iFrameSkip != 0);
 
@@ -461,12 +464,6 @@ void GameSettingsScreen::update(InputState &input) {
 	g_Config.iForceMaxEmulatedFPS = cap60FPS_ ? 60 : 0;
 
 	g_Config.iFpsLimit = (iAlternateSpeedPercent_ * 60) / 100;
-
-	if (g_Config.bShowDebugStats != showDebugStats_) {
-		// This affects the jit.
-		NativeMessageReceived("clear jit", "");
-		g_Config.bShowDebugStats = showDebugStats_;
-	}
 }
 
 void GameSettingsScreen::sendMessage(const char *message, const char *value) {
@@ -523,7 +520,7 @@ UI::EventReturn GameSettingsScreen::OnChangeproAdhocServerAddress(UI::EventParam
 	char name[name_len];
 	memset(name, 0, sizeof(name));
 
-	if (System_InputBoxGetString("Enter a IP address", g_Config.proAdhocServer.c_str(), name, name_len)) {
+	if (System_InputBoxGetString("Enter an IP address", g_Config.proAdhocServer.c_str(), name, name_len)) {
 		g_Config.proAdhocServer = name;
 	}
 #endif
@@ -537,7 +534,7 @@ UI::EventReturn GameSettingsScreen::OnChangeMacAddress(UI::EventParams &e) {
 	char name[name_len];
 	memset(name, 0, sizeof(name));
 
-	if (System_InputBoxGetString("Enter a Mac address", g_Config.localMacAddress.c_str(), name, name_len)) {
+	if (System_InputBoxGetString("Enter a MAC address", g_Config.localMacAddress.c_str(), name, name_len)) {
 		g_Config.localMacAddress = name;
 	}
 #endif
@@ -617,19 +614,16 @@ void DeveloperToolsScreen::CreateViews() {
 	list->SetSpacing(0);
 	list->Add(new ItemHeader(s->T("General")));
 
+	bool canUseJit = true;
 #ifdef IOS
 	if (!iosCanUseJit) {
+		canUseJit = false;
 		list->Add(new TextView(s->T("DynarecisJailed", "Dynarec (JIT) - (Not jailbroken - JIT not available)")));
-	} else {
-		auto jitCheckbox = new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)"));
-		jitCheckbox->SetEnabled(!PSP_IsInited());
-		list->Add(jitCheckbox);
 	}
-#else
-	auto jitCheckbox = new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)"));
-	jitCheckbox->SetEnabled(!PSP_IsInited());
-	list->Add(jitCheckbox);
 #endif
+	if (canUseJit) {
+		list->Add(new CheckBox(&g_Config.bJit, s->T("Dynarec", "Dynarec (JIT)")))->OnClick.Handle(this, &DeveloperToolsScreen::OnJitAffectingSetting);
+	}
 
 	list->Add(new Choice(de->T("System Information")))->OnClick.Handle(this, &DeveloperToolsScreen::OnSysInfo);
 	list->Add(new CheckBox(&g_Config.bShowDeveloperMenu, de->T("Show Developer Menu")));
@@ -702,5 +696,10 @@ UI::EventReturn DeveloperToolsScreen::OnLoadLanguageIni(UI::EventParams &e) {
 
 UI::EventReturn DeveloperToolsScreen::OnLogConfig(UI::EventParams &e) {
 	screenManager()->push(new LogConfigScreen());
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn DeveloperToolsScreen::OnJitAffectingSetting(UI::EventParams &e) {
+	NativeMessageReceived("clear jit", "");
 	return UI::EVENT_DONE;
 }

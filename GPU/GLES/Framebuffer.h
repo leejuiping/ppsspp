@@ -86,6 +86,7 @@ struct VirtualFramebuffer {
 	GEBufferFormat format;  // virtual, right now they are all RGBA8888
 	FBOColorDepth colorDepth;
 	FBO *fbo;
+	FBO *depalFBO;
 
 	bool dirtyAfterDisplay;
 	bool reallyDirtyAfterDisplay;  // takes frame skipping into account
@@ -161,7 +162,7 @@ public:
 	void BindFramebufferDepth(VirtualFramebuffer *sourceframebuffer, VirtualFramebuffer *targetframebuffer);
 
 	// For use when texturing from a framebuffer.  May create a duplicate if target.
-	void BindFramebufferColor(VirtualFramebuffer *framebuffer);
+	void BindFramebufferColor(VirtualFramebuffer *framebuffer, bool skipCopy = false);
 
 	// Returns true if it's sure this is a direct FBO->FBO transfer and it has already handle it.
 	// In that case we hardly need to actually copy the bytes in VRAM, they will be wrong anyway (unless
@@ -211,13 +212,15 @@ public:
 	}
 	inline bool ShouldDownloadFramebuffer(const VirtualFramebuffer *vfb) const;
 
-	bool NotifyFramebufferCopy(u32 src, u32 dest, int size);
+	bool NotifyFramebufferCopy(u32 src, u32 dest, int size, bool isMemset = false);
 
 	void DestroyFramebuf(VirtualFramebuffer *vfb);
 
 	bool GetCurrentFramebuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentDepthbuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentStencilbuffer(GPUDebugBuffer &buffer);
+
+	void RebindFramebuffer();
 
 private:
 	void CompileDraw2DProgram();

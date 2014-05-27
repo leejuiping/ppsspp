@@ -162,8 +162,8 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_STENCILTESTENABLE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_ALPHABLENDENABLE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_BLENDMODE, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_BLENDFIXEDA, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_BLENDFIXEDB, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_BLENDFIXEDA, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTEONCHANGE, &GLES_GPU::Execute_BlendFixA},
+	{GE_CMD_BLENDFIXEDB, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTEONCHANGE, &GLES_GPU::Execute_BlendFixB},
 	{GE_CMD_MASKRGB, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_MASKALPHA, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_ZTEST, FLAG_FLUSHBEFOREONCHANGE},
@@ -410,6 +410,7 @@ GLES_GPU::GLES_GPU()
 	framebufferManager_.SetTextureCache(&textureCache_);
 	framebufferManager_.SetShaderManager(shaderManager_);
 	textureCache_.SetFramebufferManager(&framebufferManager_);
+	textureCache_.SetDepalShaderCache(&depalShaderCache_);
 
 	// Sanity check gstate
 	if ((int *)&gstate.transferstart - (int *)&gstate != 0xEA) {
@@ -459,6 +460,7 @@ GLES_GPU::GLES_GPU()
 GLES_GPU::~GLES_GPU() {
 	framebufferManager_.DestroyAllFBOs();
 	shaderManager_->ClearCache(true);
+	depalShaderCache_.Clear();
 	delete shaderManager_;
 }
 
@@ -495,6 +497,7 @@ void GLES_GPU::DeviceLost() {
 	// TransformDraw has registered as a GfxResourceHolder.
 	shaderManager_->ClearCache(false);
 	textureCache_.Clear(false);
+	depalShaderCache_.Clear();
 	framebufferManager_.DeviceLost();
 }
 
@@ -662,7 +665,11 @@ void GLES_GPU::ProcessEvent(GPUEvent ev) {
 		break;
 
 	case GPU_EVENT_FB_MEMCPY:
-		UpdateMemoryInternal(ev.fb_memcpy.dst, ev.fb_memcpy.src, ev.fb_memcpy.size);
+		PerformMemoryCopyInternal(ev.fb_memcpy.dst, ev.fb_memcpy.src, ev.fb_memcpy.size);
+		break;
+
+	case GPU_EVENT_FB_MEMSET:
+		PerformMemorySetInternal(ev.fb_memset.dst, ev.fb_memset.v, ev.fb_memset.size);
 		break;
 
 	default:
@@ -1078,6 +1085,14 @@ void GLES_GPU::Execute_StencilTest(u32 op, u32 diff) {
 
 void GLES_GPU::Execute_ColorRef(u32 op, u32 diff) {
 	shaderManager_->DirtyUniform(DIRTY_ALPHACOLORREF);
+}
+
+void GLES_GPU::Execute_BlendFixA(u32 op, u32 diff) {
+	shaderManager_->DirtyUniform(DIRTY_BLENDFIX);
+}
+
+void GLES_GPU::Execute_BlendFixB(u32 op, u32 diff) {
+	shaderManager_->DirtyUniform(DIRTY_BLENDFIX);
 }
 
 void GLES_GPU::Execute_WorldMtxNum(u32 op, u32 diff) {
@@ -1607,8 +1622,14 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 	//////////////////////////////////////////////////////////////////
 	case GE_CMD_ALPHABLENDENABLE:
 	case GE_CMD_BLENDMODE:
+		break;
+
 	case GE_CMD_BLENDFIXEDA:
+		Execute_BlendFixA(op, diff);
+		break;
+
 	case GE_CMD_BLENDFIXEDB:
+		Execute_BlendFixB(op, diff);
 		break;
 
 	case GE_CMD_ALPHATESTENABLE:
@@ -1968,16 +1989,20 @@ void GLES_GPU::InvalidateCacheInternal(u32 addr, int size, GPUInvalidationType t
 	}
 }
 
-void GLES_GPU::UpdateMemoryInternal(u32 dest, u32 src, int size) {
+void GLES_GPU::PerformMemoryCopyInternal(u32 dest, u32 src, int size) {
 	if (!framebufferManager_.NotifyFramebufferCopy(src, dest, size)) {
 		Memory::Memcpy(dest, Memory::GetPointer(src), size);
-		InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
-	} else {
+	}
+	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
+}
+
+void GLES_GPU::PerformMemorySetInternal(u32 dest, u8 v, int size) {
+	if (!framebufferManager_.NotifyFramebufferCopy(dest, dest, size, true)) {
 		InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 	}
 }
 
-bool GLES_GPU::UpdateMemory(u32 dest, u32 src, int size) {
+bool GLES_GPU::PerformMemoryCopy(u32 dest, u32 src, int size) {
 	// Track stray copies of a framebuffer in RAM. MotoGP does this.
 	if (framebufferManager_.MayIntersectFramebuffer(src) || framebufferManager_.MayIntersectFramebuffer(dest)) {
 		if (IsOnSeparateCPUThread()) {
@@ -1990,11 +2015,35 @@ bool GLES_GPU::UpdateMemory(u32 dest, u32 src, int size) {
 			// This is a memcpy, so we need to wait for it to complete.
 			SyncThread();
 		} else {
-			UpdateMemoryInternal(dest, src, size);
+			PerformMemoryCopyInternal(dest, src, size);
 		}
 		return true;
 	}
 
+	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
+	return false;
+}
+
+bool GLES_GPU::PerformMemorySet(u32 dest, u8 v, int size) {
+	// This may indicate a memset, usually to 0, of a framebuffer.
+	if (framebufferManager_.MayIntersectFramebuffer(dest)) {
+		Memory::Memset(dest, v, size);
+
+		if (IsOnSeparateCPUThread()) {
+			GPUEvent ev(GPU_EVENT_FB_MEMSET);
+			ev.fb_memset.dst = dest;
+			ev.fb_memset.v = v;
+			ev.fb_memset.size = size;
+			ScheduleEvent(ev);
+
+			// We don't need to wait for the framebuffer to be updated.
+		} else {
+			PerformMemorySetInternal(dest, v, size);
+		}
+		return true;
+	}
+
+	// Or perhaps a texture, let's invalidate.
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 	return false;
 }
@@ -2023,6 +2072,7 @@ void GLES_GPU::DoState(PointerWrap &p) {
 	// In Freeze-Frame mode, we don't want to do any of this.
 	if (p.mode == p.MODE_READ && !PSP_CoreParameter().frozen) {
 		textureCache_.Clear(true);
+		depalShaderCache_.Clear();
 		transformDraw_.ClearTrackedVertexArrays();
 
 		gstate_c.textureChanged = TEXCHANGE_UPDATED;

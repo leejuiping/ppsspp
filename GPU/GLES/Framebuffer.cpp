@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+﻿// Copyright (c) 2012- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -490,7 +490,7 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 	// (it always runs at output resolution so FXAA may look odd).
 	float x, y, w, h;
 	CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight);
-	if (applyPostShader && usePostShader_ && g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) {
+	if (applyPostShader && usePostShader_ && useBufferedRendering_) {
 		DrawActiveTexture(0, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, postShaderProgram_);
 	} else {
 		DrawActiveTexture(0, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, false, 0.0f, 0.0f, 480.0f / 512.0f);
@@ -610,6 +610,7 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 	shaderManager_->DirtyLastShader();  // dirty lastShader_
 }
 
+
 VirtualFramebuffer *FramebufferManager::GetVFBAt(u32 addr) {
 	VirtualFramebuffer *match = NULL;
 	for (size_t i = 0; i < vfbs_.size(); ++i) {
@@ -684,9 +685,13 @@ void FramebufferManager::DestroyFramebuf(VirtualFramebuffer *v) {
 	delete v;
 }
 
+void FramebufferManager::RebindFramebuffer() {
+	fbo_bind_as_render_target(currentRenderVfb_->fbo);
+}
+
 void FramebufferManager::DoSetRenderFrameBuffer() {
 	/*
-	if (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && currentRenderVfb_) {
+	if (useBufferedRendering_ && currentRenderVfb_) {
 		// Hack is enabled, and there was a previous framebuffer.
 		// Before we switch, let's do a series of trickery to copy one bit of stencil to
 		// destination alpha. Or actually, this is just a bunch of hackery attempts on Wipeout.
@@ -784,7 +789,7 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 
 	// None found? Create one.
 	if (!vfb) {
-		gstate_c.textureChanged |= TEXCHANGE_PARAMSONLY;
+		textureCache_->ForgetLastTexture();
 		vfb = new VirtualFramebuffer();
 		vfb->fbo = 0;
 		vfb->fb_address = fb_address;
@@ -891,7 +896,7 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 		// Use it as a render target.
 		DEBUG_LOG(SCEGE, "Switching render target to FBO for %08x: %i x %i x %i ", vfb->fb_address, vfb->width, vfb->height, vfb->format);
 		vfb->usageFlags |= FB_USAGE_RENDERTARGET;
-		gstate_c.textureChanged |= TEXCHANGE_PARAMSONLY;
+		textureCache_->ForgetLastTexture();
 		vfb->last_frame_render = gpuStats.numFlips;
 		frameLastFramebufUsed = gpuStats.numFlips;
 		vfb->dirtyAfterDisplay = true;
@@ -992,6 +997,7 @@ void FramebufferManager::BindFramebufferDepth(VirtualFramebuffer *sourceframebuf
 			// Let's only do this if not clearing.
 			if (!gstate.isModeClear() || !gstate.isClearModeDepthMask()) {
 				fbo_bind_for_read(sourceframebuffer->fbo);
+				glDisable(GL_SCISSOR_TEST);
 
 #if defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))  // We only support this extension on Android, it's not even available on PC.
 				if (useNV) {
@@ -1000,13 +1006,19 @@ void FramebufferManager::BindFramebufferDepth(VirtualFramebuffer *sourceframebuf
 #endif // defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))
 					glBlitFramebuffer(0, 0, sourceframebuffer->renderWidth, sourceframebuffer->renderHeight, 0, 0, targetframebuffer->renderWidth, targetframebuffer->renderHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 				// If we set targetframebuffer->depthUpdated here, our optimization above would be pointless.
+
+				glstate.scissorTest.restore();
 			}
 #endif
 		}
 	}
 }
 
-void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer) {
+void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer, bool skipCopy) {
+	if (framebuffer == NULL) {
+		framebuffer = currentRenderVfb_;
+	}
+
 	if (!framebuffer->fbo || !useBufferedRendering_) {
 		glBindTexture(GL_TEXTURE_2D, 0);
 		gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
@@ -1015,7 +1027,7 @@ void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer) {
 
 	// currentRenderVfb_ will always be set when this is called, except from the GE debugger.
 	// Let's just not bother with the copy in that case.
-	if (currentRenderVfb_ && MaskedEqual(framebuffer->fb_address, gstate.getFrameBufRawAddress())) {
+	if (!skipCopy && currentRenderVfb_ && MaskedEqual(framebuffer->fb_address, gstate.getFrameBufRawAddress())) {
 #ifndef USING_GLES2
 		if (gl_extensions.FBO_ARB) {
 			bool useNV = false;
@@ -1041,6 +1053,7 @@ void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer) {
 
 			fbo_bind_as_render_target(renderCopy);
 			glViewport(0, 0, framebuffer->renderWidth, framebuffer->renderHeight);
+			glDisable(GL_SCISSOR_TEST);
 			fbo_bind_for_read(framebuffer->fbo);
 			
 #if defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))  // We only support this extension on Android, it's not even available on PC.
@@ -1052,6 +1065,8 @@ void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer) {
 			
 			fbo_bind_as_render_target(currentRenderVfb_->fbo);
 			fbo_bind_color_as_texture(renderCopy, 0);
+			glstate.viewport.restore();
+			glstate.scissorTest.restore();
 #endif
 		} else {
 			fbo_bind_color_as_texture(framebuffer->fbo, 0);
@@ -1238,7 +1253,7 @@ void FramebufferManager::ReadFramebufferToMemory(VirtualFramebuffer *vfb, bool s
 			glEnable(GL_DITHER);
 		} else {
 			nvfb->usageFlags |= FB_USAGE_RENDERTARGET;
-			gstate_c.textureChanged |= TEXCHANGE_PARAMSONLY;
+			textureCache_->ForgetLastTexture();
 			nvfb->last_frame_render = gpuStats.numFlips;
 			nvfb->dirtyAfterDisplay = true;
 
@@ -1317,7 +1332,7 @@ void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *dst, int dstX, int
 	}
 
 	fbo_bind_as_render_target(dst->fbo);
-
+	glDisable(GL_SCISSOR_TEST);
 
 #ifndef USING_GLES2
 	if (gl_extensions.FBO_ARB) {
@@ -1373,7 +1388,7 @@ void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *dst, int dstX, int
 		// Make sure our 2D drawing program is ready. Compiles only if not already compiled.
 		CompileDraw2DProgram();
 
-		glstate.viewport.set(0, 0, dst->width, dst->height);
+		glViewport(0, 0, dst->width, dst->height);
 		DisableState();
 
 		// The first four coordinates are relative to the 6th and 7th arguments of DrawActiveTexture.
@@ -1382,17 +1397,12 @@ void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *dst, int dstX, int
 		float srcH = src->height;
 		DrawActiveTexture(0, dstX, dstY, w, h, dst->width, dst->height, false, srcX / srcW, srcY / srcH, (srcX + w) / srcW, (srcY + h) / srcH, draw2dprogram_);
 		glBindTexture(GL_TEXTURE_2D, 0);
+		textureCache_->ForgetLastTexture();
 	}
 
+	glstate.scissorTest.restore();
+	glstate.viewport.restore();
 	fbo_unbind();
-}
-
-static inline bool UseBGRA8888() {
-	// TODO: Other platforms?  May depend on vendor which is faster?
-#ifdef _WIN32
-	return gl_extensions.EXT_bgra;
-#endif
-	return false;
 }
 
 // TODO: SSE/NEON
@@ -1702,7 +1712,7 @@ void FramebufferManager::EndFrame() {
 #ifndef USING_GLES2
 	// We flush to memory last requested framebuffer, if any.
 	// Only do this in the read-framebuffer modes.
-	if (g_Config.iRenderingMode == FB_READFBOMEMORY_CPU || g_Config.iRenderingMode == FB_READFBOMEMORY_GPU)
+	if (updateVRAM_)
 		PackFramebufferAsync_(NULL);
 #endif
 }
@@ -1717,6 +1727,7 @@ void FramebufferManager::BeginFrame() {
 	DecimateFBOs();
 	currentRenderVfb_ = 0;
 	useBufferedRendering_ = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE;
+	updateVRAM_ = !(g_Config.iRenderingMode == FB_NON_BUFFERED_MODE || g_Config.iRenderingMode == FB_BUFFERED_MODE);
 }
 
 void FramebufferManager::SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {
@@ -1850,8 +1861,8 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 	}
 }
 
-bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size) {
-	if (!(g_Config.iRenderingMode == FB_BUFFERED_MODE)) {
+bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool isMemset) {
+	if (!useBufferedRendering_ || updateVRAM_) {
 		return false;
 	}
 
@@ -1881,7 +1892,7 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size) {
 
 	// TODO: Do ReadFramebufferToMemory etc where applicable.
 	// This will slow down MotoGP but make the hack above unnecessary.
-	if (dstBuffer && srcBuffer) {
+	if (dstBuffer && srcBuffer && !isMemset) {
 		if (srcBuffer == dstBuffer) {
 			WARN_LOG_REPORT_ONCE(dstsrccpy, G3D, "Intra-buffer memcpy (not supported) %08x -> %08x", src, dst);
 		} else {
@@ -1910,7 +1921,7 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size) {
 				fbo_unbind();
 			}
 			glstate.viewport.restore();
-			gstate_c.textureChanged = TEXCHANGE_PARAMSONLY;
+			textureCache_->ForgetLastTexture();
 			// This is a memcpy, let's still copy just in case.
 			return false;
 		}
@@ -1963,7 +1974,7 @@ void FramebufferManager::FindTransferFramebuffers(VirtualFramebuffer *&dstBuffer
 }
 
 bool FramebufferManager::NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride, int dstX, int dstY, u32 srcBasePtr, int srcStride, int srcX, int srcY, int width, int height, int bpp) {
-	if (!(g_Config.iRenderingMode == FB_BUFFERED_MODE)) {
+	if (!useBufferedRendering_ || updateVRAM_) {
 		return false;
 	}
 
@@ -2003,7 +2014,7 @@ bool FramebufferManager::NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride
 }
 
 void FramebufferManager::NotifyBlockTransferAfter(u32 dstBasePtr, int dstStride, int dstX, int dstY, u32 srcBasePtr, int srcStride, int srcX, int srcY, int width, int height, int bpp) {
-	if (!(g_Config.iRenderingMode == FB_BUFFERED_MODE)) {
+	if (!useBufferedRendering_ || updateVRAM_) {
 		return;
 	}
 
@@ -2044,7 +2055,7 @@ void FramebufferManager::NotifyBlockTransferAfter(u32 dstBasePtr, int dstStride,
 					fbo_unbind();
 				}
 				glstate.viewport.restore();
-				gstate_c.textureChanged = TEXCHANGE_PARAMSONLY;
+				textureCache_->ForgetLastTexture();
 			}
 		}
 	}

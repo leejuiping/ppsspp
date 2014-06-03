@@ -411,6 +411,7 @@ GLES_GPU::GLES_GPU()
 	framebufferManager_.SetShaderManager(shaderManager_);
 	textureCache_.SetFramebufferManager(&framebufferManager_);
 	textureCache_.SetDepalShaderCache(&depalShaderCache_);
+	textureCache_.SetShaderManager(shaderManager_);
 
 	// Sanity check gstate
 	if ((int *)&gstate.transferstart - (int *)&gstate != 0xEA) {
@@ -545,6 +546,7 @@ void GLES_GPU::BeginFrameInternal() {
 
 	textureCache_.StartFrame();
 	transformDraw_.DecimateTrackedVertexArrays();
+	depalShaderCache_.Decimate();
 
 	if (dumpNextFrame_) {
 		NOTICE_LOG(G3D, "DUMPING THIS FRAME");
@@ -670,6 +672,10 @@ void GLES_GPU::ProcessEvent(GPUEvent ev) {
 
 	case GPU_EVENT_FB_MEMSET:
 		PerformMemorySetInternal(ev.fb_memset.dst, ev.fb_memset.v, ev.fb_memset.size);
+		break;
+
+	case GPU_EVENT_FB_STENCIL_UPLOAD:
+		PerformStencilUploadInternal(ev.fb_stencil_upload.dst, ev.fb_stencil_upload.size);
 		break;
 
 	default:
@@ -1938,7 +1944,7 @@ void GLES_GPU::DoBlockTransfer() {
 		// Do the copy! (Hm, if we detect a drawn video frame (see below) then we could maybe skip this?)
 		// Can use GetPointerUnchecked because we checked the addresses above. We could also avoid them
 		// entirely by walking a couple of pointers...
-		if (srcStride == dstStride && width == srcStride) {
+		if (srcStride == dstStride && (u32)width == srcStride) {
 			// Common case in God of War, let's do it all in one chunk.
 			u32 srcLineStartAddr = srcBasePtr + (srcY * srcStride + srcX) * bpp;
 			u32 dstLineStartAddr = dstBasePtr + (dstY * dstStride + dstX) * bpp;
@@ -2002,6 +2008,10 @@ void GLES_GPU::PerformMemorySetInternal(u32 dest, u8 v, int size) {
 	}
 }
 
+void GLES_GPU::PerformStencilUploadInternal(u32 dest, int size) {
+	framebufferManager_.NotifyStencilUpload(dest, size);
+}
+
 bool GLES_GPU::PerformMemoryCopy(u32 dest, u32 src, int size) {
 	// Track stray copies of a framebuffer in RAM. MotoGP does this.
 	if (framebufferManager_.MayIntersectFramebuffer(src) || framebufferManager_.MayIntersectFramebuffer(dest)) {
@@ -2045,6 +2055,27 @@ bool GLES_GPU::PerformMemorySet(u32 dest, u8 v, int size) {
 
 	// Or perhaps a texture, let's invalidate.
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
+	return false;
+}
+
+bool GLES_GPU::PerformMemoryDownload(u32 dest, int size) {
+	// Cheat a bit to force a download of the framebuffer.
+	// VRAM + 0x00400000 is simply a VRAM mirror.
+	return gpu->PerformMemoryCopy(dest ^ 0x00400000, dest, size);
+}
+
+bool GLES_GPU::PerformStencilUpload(u32 dest, int size) {
+	if (framebufferManager_.MayIntersectFramebuffer(dest)) {
+		if (IsOnSeparateCPUThread()) {
+			GPUEvent ev(GPU_EVENT_FB_STENCIL_UPLOAD);
+			ev.fb_stencil_upload.dst = dest;
+			ev.fb_stencil_upload.size = size;
+			ScheduleEvent(ev);
+		} else {
+			PerformStencilUploadInternal(dest, size);
+		}
+		return true;
+	}
 	return false;
 }
 

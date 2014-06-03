@@ -46,8 +46,8 @@ extern "C" {
 
 struct SimpleAudio {
 public:
-	SimpleAudio(int);
-	SimpleAudio(u32, int);
+	SimpleAudio(int audioType);
+	SimpleAudio(u32 ctxPtr, int audioType);
 	~SimpleAudio();
 
 	bool Decode(void* inbuf, int inbytes, uint8_t *outbuf, int *outbytes);
@@ -72,6 +72,9 @@ public:
 
 	bool GetAudioCodecID(int audioType); // Get audioCodecId from audioType
 #endif  // USE_FFMPEG
+
+private:
+	void Init();
 };
 
 // audioType
@@ -87,7 +90,7 @@ static const char *const codecNames[4] = {
 };
 
 void AudioClose(SimpleAudio **ctx);
-static const char *GetCodecName(int codec) {
+static inline const char *GetCodecName(int codec) {
 	if (codec >= PSP_CODEC_AT3PLUS && codec <= PSP_CODEC_AAC) {
 		return codecNames[codec - PSP_CODEC_AT3PLUS];
 	}

@@ -28,6 +28,7 @@
 struct VirtualFramebuffer;
 class FramebufferManager;
 class DepalShaderCache;
+class ShaderManager;
 
 enum TextureFiltering {
 	AUTO = 1,
@@ -74,6 +75,9 @@ public:
 	void SetDepalShaderCache(DepalShaderCache *dpCache) {
 		depalShaderCache_ = dpCache;
 	}
+	void SetShaderManager(ShaderManager *sm) {
+		shaderManager_ = sm;
+	}
 
 	size_t NumLoadedTextures() const {
 		return cache.size();
@@ -116,7 +120,6 @@ public:
 		u32 addr;
 		u32 hash;
 		VirtualFramebuffer *framebuffer;  // if null, not sourced from an FBO.
-		FBO *depalFBO;
 		u32 sizeInRAM;
 		int lastFrame;
 		int numFrames;
@@ -151,6 +154,14 @@ public:
 		void SetAlphaStatus(Status newStatus) {
 			status = (status & ~STATUS_ALPHA_MASK) | newStatus;
 		}
+		void SetAlphaStatus(Status newStatus, int level) {
+			// For non-level zero, only set more restrictive.
+			if (newStatus == STATUS_ALPHA_UNKNOWN || level == 0) {
+				SetAlphaStatus(newStatus);
+			} else if (newStatus == STATUS_ALPHA_SIMPLE && GetAlphaStatus() == STATUS_ALPHA_FULL) {
+				SetAlphaStatus(STATUS_ALPHA_SIMPLE);
+			}
+		}
 		bool Matches(u16 dim2, u8 format2, int maxLevel2);
 	};
 
@@ -162,7 +173,7 @@ private:
 	void LoadTextureLevel(TexCacheEntry &entry, int level, bool replaceImages, int scaleFactor, GLenum dstFmt);
 	GLenum GetDestFormat(GETextureFormat format, GEPaletteFormat clutFormat) const;
 	void *DecodeTextureLevel(GETextureFormat format, GEPaletteFormat clutformat, int level, u32 &texByteAlign, GLenum dstFmt, int *bufw = 0);
-	void CheckAlpha(TexCacheEntry &entry, u32 *pixelData, GLenum dstFmt, int stride, int w, int h, bool isPrimary);
+	TexCacheEntry::Status CheckAlpha(u32 *pixelData, GLenum dstFmt, int stride, int w, int h);
 	template <typename T>
 	const T *GetCurrentClut();
 	u32 GetCurrentClutHash();
@@ -203,6 +214,7 @@ private:
 	int decimationCounter_;
 	FramebufferManager *framebufferManager_;
 	DepalShaderCache *depalShaderCache_;
+	ShaderManager *shaderManager_;
 };
 
 GLenum getClutDestFormat(GEPaletteFormat format);

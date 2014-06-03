@@ -4,6 +4,9 @@ TARGET = Native
 TEMPLATE = lib
 CONFIG += staticlib
 
+# Allows Symbian to compile gl3stub
+symbian: DEFINES+=SYMBIAN_OGLES_DLL_EXPORTS
+
 include(Settings.pri)
 
 !mobile_platform: {
@@ -59,8 +62,9 @@ SOURCES += $$P/native/ext/libzip/*.c
 HEADERS += $$P/native/ext/libzip/*.h
 
 # Libpng
-SOURCES += $$P/native/ext/libpng16/*.c
-HEADERS += $$P/native/ext/libpng16/*.h
+SOURCES += $$P/native/ext/libpng17/*.c
+HEADERS += $$P/native/ext/libpng17/*.h
+armv7: SOURCES += $$P/native/ext/libpng17/arm/*.c
 INCLUDEPATH += $$P/native/ext
 
 
@@ -106,7 +110,7 @@ SOURCES +=  $$P/native/audio/*.cpp \
 x86 {
 	SOURCES += $$files($$P/native/math/fast/fast_matrix_sse.c)
 }
-arm:!symbian {
+armv7 {
 	SOURCES += $$files($$P/native/math/fast/fast_matrix_neon.S)
 }
 

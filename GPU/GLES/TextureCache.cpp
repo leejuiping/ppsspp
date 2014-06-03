@@ -28,6 +28,7 @@
 #include "GPU/GLES/Framebuffer.h"
 #include "GPU/GLES/FragmentShaderGenerator.h"
 #include "GPU/GLES/DepalettizeShader.h"
+#include "GPU/GLES/ShaderManager.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "Core/Config.h"
 #include "Core/Host.h"
@@ -118,9 +119,6 @@ void TextureCache::Decimate() {
 	for (TexCache::iterator iter = cache.begin(); iter != cache.end(); ) {
 		if (iter->second.lastFrame + killAge < gpuStats.numFlips) {
 			glDeleteTextures(1, &iter->second.texture);
-			if (iter->second.depalFBO) {
-				fbo_destroy(iter->second.depalFBO);
-			}
 			cache.erase(iter++);
 		} else {
 			++iter;
@@ -132,9 +130,6 @@ void TextureCache::Decimate() {
 			// In low memory mode, we kill them all.
 			if (lowMemoryMode_ || iter->second.lastFrame + TEXTURE_SECOND_KILL_AGE < gpuStats.numFlips) {
 				glDeleteTextures(1, &iter->second.texture);
-				if (iter->second.depalFBO) {
-					fbo_destroy(iter->second.depalFBO);
-				}
 				secondCache.erase(iter++);
 			} else {
 				++iter;
@@ -898,10 +893,8 @@ void TextureCache::SetTextureFramebuffer(TexCacheEntry *entry) {
 		}
 		if (program) {
 			GLuint clutTexture = depalShaderCache_->GetClutTexture(clutHash_, clutBuf_);
-			if (!entry->depalFBO) {
-				entry->depalFBO = fbo_create(entry->framebuffer->renderWidth, entry->framebuffer->renderHeight, 1, false, FBO_8888);
-			}
-			fbo_bind_as_render_target(entry->depalFBO);
+			FBO *depalFBO = framebufferManager_->GetTempFBO(entry->framebuffer->renderWidth, entry->framebuffer->renderHeight, FBO_8888);
+			fbo_bind_as_render_target(depalFBO);
 			static const float pos[12] = {
 				-1, -1, -1,
 				 1, -1, -1,
@@ -916,13 +909,17 @@ void TextureCache::SetTextureFramebuffer(TexCacheEntry *entry) {
 			};
 			static const GLubyte indices[4] = { 0, 1, 3, 2 };
 
+			shaderManager_->DirtyLastShader();
+
 			glUseProgram(program);
-			gstate_c.shaderChanged = true;
+
+			GLint a_position = glGetAttribLocation(program, "a_position");
+			GLint a_texcoord0 = glGetAttribLocation(program, "a_texcoord0");
 
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(1);
+			glEnableVertexAttribArray(a_position);
+			glEnableVertexAttribArray(a_texcoord0);
 
 			glActiveTexture(GL_TEXTURE1);
 			glBindTexture(GL_TEXTURE_2D, clutTexture);
@@ -944,31 +941,39 @@ void TextureCache::SetTextureFramebuffer(TexCacheEntry *entry) {
 #endif
 			glViewport(0, 0, entry->framebuffer->renderWidth, entry->framebuffer->renderHeight);
 
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, pos);
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8, uv);
+			glVertexAttribPointer(a_position, 3, GL_FLOAT, GL_FALSE, 12, pos);
+			glVertexAttribPointer(a_texcoord0, 2, GL_FLOAT, GL_FALSE, 8, uv);
 			glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, indices);
+			glDisableVertexAttribArray(a_position);
+			glDisableVertexAttribArray(a_texcoord0);
 
-			/*
-			glDisableVertexAttribArray(0);
-			glDisableVertexAttribArray(1);
-			*/
-			fbo_bind_color_as_texture(entry->depalFBO, 0);
+			fbo_bind_color_as_texture(depalFBO, 0);
 			glstate.Restore();
 			framebufferManager_->RebindFramebuffer();
+
+			const GEPaletteFormat clutFormat = gstate.getClutPaletteFormat();
+			const u32 clutBase = gstate.getClutIndexStartPos();
+			const u32 bytesPerColor = clutFormat == GE_CMODE_32BIT_ABGR8888 ? sizeof(u32) : sizeof(u16);
+			const u32 clutExtendedColors = (clutTotalBytes_ / bytesPerColor) + clutBase;
+
+			TexCacheEntry::Status alphaStatus = CheckAlpha(clutBuf_, getClutDestFormat(gstate.getClutPaletteFormat()), clutExtendedColors, clutExtendedColors, 1);
+			gstate_c.textureFullAlpha = alphaStatus == TexCacheEntry::STATUS_ALPHA_FULL;
+			gstate_c.textureSimpleAlpha = alphaStatus == TexCacheEntry::STATUS_ALPHA_SIMPLE;
 		} else {
 			entry->status &= ~TexCacheEntry::STATUS_DEPALETTIZE;
 			framebufferManager_->BindFramebufferColor(entry->framebuffer);
+
+			gstate_c.textureFullAlpha = entry->framebuffer->format == GE_FORMAT_565;
+			gstate_c.textureSimpleAlpha = gstate_c.textureFullAlpha;
 		}
 
 		// Keep the framebuffer alive.
 		entry->framebuffer->last_frame_used = gpuStats.numFlips;
 
 		// We need to force it, since we may have set it on a texture before attaching.
-		gstate_c.curTextureWidth = entry->framebuffer->width;
-		gstate_c.curTextureHeight = entry->framebuffer->height;
+		gstate_c.curTextureWidth = entry->framebuffer->bufferWidth;
+		gstate_c.curTextureHeight = entry->framebuffer->bufferHeight;
 		gstate_c.flipTexture = true;
-		gstate_c.textureFullAlpha = entry->framebuffer->format == GE_FORMAT_565;
-		gstate_c.textureSimpleAlpha = gstate_c.textureFullAlpha;
 		UpdateSamplingParams(*entry, true);
 	} else {
 		if (entry->framebuffer->fbo)
@@ -1220,7 +1225,6 @@ void TextureCache::SetTexture(bool force) {
 	entry->framebuffer = 0;
 	entry->maxLevel = maxLevel;
 	entry->lodBias = 0.0f;
-	entry->depalFBO = 0;
 
 	entry->dim = gstate.getTextureDimension(0);
 	entry->bufw = bufw;
@@ -1325,7 +1329,6 @@ void TextureCache::SetTexture(bool force) {
 	if (entry->addr > 0x05000000 && entry->addr < 0x08800000)
 		scaleFactor = 1;
 
-#if defined(MAY_HAVE_GLES3)
 	if (gl_extensions.GLES3 && maxLevel > 0) {
 		// glTexStorage2D requires the use of sized formats.
 		GLenum storageFmt = GL_RGBA8;
@@ -1343,7 +1346,6 @@ void TextureCache::SetTexture(bool force) {
 		// Make sure we don't use glTexImage2D after glTexStorage2D.
 		replaceImages = true;
 	}
-#endif
 
 	// GLES2 doesn't have support for a "Max lod" which is critical as PSP games often
 	// don't specify mips all the way down. As a result, we either need to manually generate
@@ -1372,7 +1374,7 @@ void TextureCache::SetTexture(bool force) {
 	} else {
 #ifndef USING_GLES2
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-#elif defined(MAY_HAVE_GLES3)
+#else
 		if (gl_extensions.GLES3) {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 		}
@@ -1649,7 +1651,7 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 	return finalBuf;
 }
 
-void TextureCache::CheckAlpha(TexCacheEntry &entry, u32 *pixelData, GLenum dstFmt, int stride, int w, int h, bool isPrimary) {
+TextureCache::TexCacheEntry::Status TextureCache::CheckAlpha(u32 *pixelData, GLenum dstFmt, int stride, int w, int h) {
 	// TODO: Could probably be optimized more.
 	u32 hitZeroAlpha = 0;
 	u32 hitSomeAlpha = 0;
@@ -1707,11 +1709,11 @@ void TextureCache::CheckAlpha(TexCacheEntry &entry, u32 *pixelData, GLenum dstFm
 	}
 
 	if (hitSomeAlpha != 0)
-		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_UNKNOWN);
-	else if (hitZeroAlpha != 0 && (isPrimary || entry.GetAlphaStatus() != TexCacheEntry::STATUS_ALPHA_UNKNOWN))
-		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_SIMPLE);
-	else if (isPrimary)
-		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_FULL);
+		return TexCacheEntry::STATUS_ALPHA_UNKNOWN;
+	else if (hitZeroAlpha != 0)
+		return TexCacheEntry::STATUS_ALPHA_SIMPLE;
+	else
+		return TexCacheEntry::STATUS_ALPHA_FULL;
 }
 
 void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replaceImages, int scaleFactor, GLenum dstFmt) {
@@ -1745,19 +1747,19 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 	if (scaleFactor > 1 && (entry.status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0)
 		scaler.Scale(pixelData, dstFmt, w, h, scaleFactor);
 
-	if ((entry.status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0)
-		CheckAlpha(entry, pixelData, dstFmt, useUnpack ? bufw : w, w, h, level == 0);
-	else
+	if ((entry.status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0) {
+		TexCacheEntry::Status alphaStatus = CheckAlpha(pixelData, dstFmt, useUnpack ? bufw : w, w, h);
+		entry.SetAlphaStatus(alphaStatus, level);
+	} else {
 		entry.SetAlphaStatus(TexCacheEntry::STATUS_ALPHA_UNKNOWN);
+	}
 
 	GLuint components = dstFmt == GL_UNSIGNED_SHORT_5_6_5 ? GL_RGB : GL_RGBA;
 
 	GLuint components2 = components;
-#if defined(MAY_HAVE_GLES3)
 	if (useBGRA) {
 		components2 = GL_BGRA_EXT;
 	}
-#endif
 
 	if (replaceImages) {
 		glTexSubImage2D(GL_TEXTURE_2D, level, 0, 0, w, h, components2, dstFmt, pixelData);

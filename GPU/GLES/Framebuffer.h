@@ -86,7 +86,6 @@ struct VirtualFramebuffer {
 	GEBufferFormat format;  // virtual, right now they are all RGBA8888
 	FBOColorDepth colorDepth;
 	FBO *fbo;
-	FBO *depalFBO;
 
 	bool dirtyAfterDisplay;
 	bool reallyDirtyAfterDisplay;  // takes frame skipping into account
@@ -187,6 +186,8 @@ public:
 	int GetRenderHeight() const { return currentRenderVfb_ ? currentRenderVfb_->renderHeight : 272; }
 	int GetTargetWidth() const { return currentRenderVfb_ ? currentRenderVfb_->width : 480; }
 	int GetTargetHeight() const { return currentRenderVfb_ ? currentRenderVfb_->height : 272; }
+	int GetTargetBufferWidth() const { return currentRenderVfb_ ? currentRenderVfb_->bufferWidth : 480; }
+	int GetTargetBufferHeight() const { return currentRenderVfb_ ? currentRenderVfb_->bufferHeight : 272; }
 
 	u32 PrevDisplayFramebufAddr() {
 		return prevDisplayFramebuf_ ? (0x04000000 | prevDisplayFramebuf_->fb_address) : 0;
@@ -213,6 +214,7 @@ public:
 	inline bool ShouldDownloadFramebuffer(const VirtualFramebuffer *vfb) const;
 
 	bool NotifyFramebufferCopy(u32 src, u32 dest, int size, bool isMemset = false);
+	bool NotifyStencilUpload(u32 addr, int size);
 
 	void DestroyFramebuf(VirtualFramebuffer *vfb);
 
@@ -222,6 +224,8 @@ public:
 
 	void RebindFramebuffer();
 
+	FBO *GetTempFBO(u16 w, u16 h, FBOColorDepth depth = FBO_8888);
+
 private:
 	void CompileDraw2DProgram();
 	void DestroyDraw2DProgram();
@@ -230,6 +234,11 @@ private:
 	u32 FramebufferByteSize(const VirtualFramebuffer *vfb) const;
 
 	void SetNumExtraFBOs(int num);
+
+	void EstimateDrawingSize(int &drawing_width, int &drawing_height);
+	static void DisableState();
+	static void ClearBuffer();
+	static bool MaskedEqual(u32 addr1, u32 addr2);
 
 	u32 displayFramebufPtr_;
 	u32 displayStride_;
@@ -262,6 +271,7 @@ private:
 	GLSLProgram *draw2dprogram_;
 	GLSLProgram *plainColorProgram_;
 	GLSLProgram *postShaderProgram_;
+	GLSLProgram *stencilUploadProgram_;
 	int plainColorLoc_;
 	int timeLoc_;
 
@@ -283,8 +293,13 @@ private:
 	// The range of PSP memory that may contain FBOs.  So we can skip iterating.
 	u32 framebufRangeEnd_;
 
-	std::vector<VirtualFramebuffer *> bvfbs_; // blitting FBOs
-	std::map<std::pair<int, int>, FBO *> renderCopies_;
+	struct TempFBO {
+		FBO *fbo;
+		int last_frame_used;
+	};
+
+	std::vector<VirtualFramebuffer *> bvfbs_; // blitting framebuffers (for download)
+	std::map<u64, TempFBO> tempFBOs_;
 
 	std::set<std::pair<u32, u32>> knownFramebufferRAMCopies_;
 

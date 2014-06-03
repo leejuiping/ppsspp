@@ -202,7 +202,6 @@ StencilValueType ReplaceAlphaWithStencilType() {
 				return STENCIL_VALUE_KEEP;
 			}
 
-		// Decrementing always zeros, since there's only one bit.
 		case GE_STENCILOP_DECR:
 		case GE_STENCILOP_INCR:
 		case GE_STENCILOP_INVERT:
@@ -286,6 +285,9 @@ bool ShouldUseShaderBlending() {
 	}
 	// We can't blit on GLES2, so we don't support it.  We also want texelFetch (OpenGL 3.0+ / GLES3+.)
 	if (!gl_extensions.VersionGEThan(3, 0, 0) && !gl_extensions.GLES3) {
+		return false;
+	}
+	if (g_Config.iRenderingMode == FB_NON_BUFFERED_MODE) {
 		return false;
 	}
 

@@ -302,6 +302,8 @@ void GPUStateCache::DoState(PointerWrap &p) {
 		p.Do(flipTexture);
 	}
 
+	// needShaderTexClamp doesn't need to be saved.
+
 	if (s >= 3) {
 		p.Do(textureSimpleAlpha);
 	} else {
@@ -326,6 +328,7 @@ void GPUStateCache::DoState(PointerWrap &p) {
 	p.Do(curTextureWidth);
 	p.Do(curTextureHeight);
 	p.Do(actualTextureHeight);
+	// curTextureXOffset and curTextureYOffset don't need to be saved.  Well, the above don't either...
 
 	p.Do(vpWidth);
 	p.Do(vpHeight);

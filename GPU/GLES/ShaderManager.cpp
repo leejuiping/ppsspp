@@ -185,6 +185,8 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 	u_matspecular = glGetUniformLocation(program, "u_matspecular");
 	u_matemissive = glGetUniformLocation(program, "u_matemissive");
 	u_uvscaleoffset = glGetUniformLocation(program, "u_uvscaleoffset");
+	u_texclamp = glGetUniformLocation(program, "u_texclamp");
+	u_texclampoff = glGetUniformLocation(program, "u_texclampoff");
 
 	for (int i = 0; i < 4; i++) {
 		char temp[64];
@@ -225,6 +227,7 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 	if (u_fogcoef != -1) availableUniforms |= DIRTY_FOGCOEF;
 	if (u_texenv != -1) availableUniforms |= DIRTY_TEXENV;
 	if (u_uvscaleoffset != -1) availableUniforms |= DIRTY_UVSCALEOFFSET;
+	if (u_texclamp != -1) availableUniforms |= DIRTY_TEXCLAMP;
 	if (u_world != -1) availableUniforms |= DIRTY_WORLDMATRIX;
 	if (u_view != -1) availableUniforms |= DIRTY_VIEWMATRIX;
 	if (u_texmtx != -1) availableUniforms |= DIRTY_TEXMATRIX;
@@ -399,8 +402,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 		if (my_isinf(fogcoef[1])) {
 			// not really sure what a sensible value might be.
 			fogcoef[1] = fogcoef[1] < 0.0f ? -10000.0f : 10000.0f;
-		}
-		if (my_isnan(fogcoef[1]))	{
+		} else if (my_isnan(fogcoef[1]))	{
 			// Workaround for https://github.com/hrydgard/ppsspp/issues/5384#issuecomment-38365988
 			// Just put the fog far away at a large finite distance.
 			// Infinities and NaNs are rather unpredictable in shaders on many GPUs
@@ -408,6 +410,11 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 			fogcoef[0] = 100000.0f;
 			fogcoef[1] = 1.0f;
 		}
+#ifndef MOBILE_DEVICE
+		else if (my_isnanorinf(fogcoef[1]) || my_isnanorinf(fogcoef[0])) {
+			ERROR_LOG_REPORT_ONCE(fognan, G3D, "Unhandled fog NaN/INF combo: %f %f", fogcoef[0], fogcoef[1]);
+		}
+#endif
 		glUniform2fv(u_fogcoef, 1, fogcoef);
 	}
 
@@ -475,6 +482,31 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 			ERROR_LOG_REPORT(G3D, "Unexpected UV gen mode: %d", gstate.getUVGenMode());
 		}
 		glUniform4fv(u_uvscaleoffset, 1, uvscaleoff);
+	}
+
+	if (dirty & DIRTY_TEXCLAMP) {
+		const float invW = 1.0f / (float)gstate_c.curTextureWidth;
+		const float invH = 1.0f / (float)gstate_c.curTextureHeight;
+		const int w = gstate.getTextureWidth(0);
+		const int h = gstate.getTextureHeight(0);
+		const float widthFactor = (float)w * invW;
+		const float heightFactor = (float)h * invH;
+
+		// First wrap xy, then half texel xy (for clamp.)
+		const float texclamp[4] = {
+			widthFactor,
+			heightFactor,
+			invW * 0.5f,
+			invH * 0.5f,
+		};
+		const float texclampoff[2] = {
+			gstate_c.curTextureXOffset * invW,
+			gstate_c.curTextureYOffset * invH,
+		};
+		glUniform4fv(u_texclamp, 1, texclamp);
+		if (u_texclampoff != -1) {
+			glUniform2fv(u_texclampoff, 1, texclampoff);
+		}
 	}
 
 	// Transform

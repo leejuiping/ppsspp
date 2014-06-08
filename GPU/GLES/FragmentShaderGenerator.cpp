@@ -370,42 +370,55 @@ void ComputeFragmentShaderID(FragmentShaderID *id) {
 			id0 |= 1 << 1;
 			id0 |= gstate.getTextureFunction() << 2;
 			id0 |= (doTextureAlpha & 1) << 5; // rgb or rgba
+			id0 |= (gstate_c.flipTexture & 1) << 6;
+
+			if (gstate_c.needShaderTexClamp) {
+				bool textureAtOffset = gstate_c.curTextureXOffset != 0 || gstate_c.curTextureYOffset != 0;
+				// 3 bits total.
+				id0 |= 1 << 7;
+				id0 |= gstate.isTexCoordClampedS() << 8;
+				id0 |= gstate.isTexCoordClampedT() << 9;
+				id0 |= (textureAtOffset & 1) << 10;
+			}
 		}
 
-		// 6 is free.
-
-		id0 |= (lmode & 1) << 7;
+		id0 |= (lmode & 1) << 11;
 		if (enableAlphaTest) {
-			id0 |= 1 << 8;
-			id0 |= gstate.getAlphaTestFunction() << 9;
+			// 4 bits total.
+			id0 |= 1 << 12;
+			id0 |= gstate.getAlphaTestFunction() << 13;
 		}
 		if (enableColorTest) {
-			id0 |= 1 << 12;
-			id0 |= gstate.getColorTestFunction() << 13;	 // color test func
+			// 3 bits total.
+			id0 |= 1 << 16;
+			id0 |= gstate.getColorTestFunction() << 17;
 		}
-		id0 |= (enableFog & 1) << 15;
-		id0 |= (doTextureProjection & 1) << 16;
-		id0 |= (enableColorDoubling & 1) << 17;
-		id0 |= (enableAlphaDoubling & 1) << 18;
-		id0 |= (stencilToAlpha) << 19;
+		id0 |= (enableFog & 1) << 19;
+		id0 |= (doTextureProjection & 1) << 20;
+		id0 |= (enableColorDoubling & 1) << 21;
+		id0 |= (enableAlphaDoubling & 1) << 22;
+		// 2 bits
+		id0 |= (stencilToAlpha) << 23;
 	
 		if (stencilToAlpha != REPLACE_ALPHA_NO) {
 			// 3 bits
-			id0 |= ReplaceAlphaWithStencilType() << 21;
+			id0 |= ReplaceAlphaWithStencilType() << 25;
 		}
 
-		id0 |= (alphaTestAgainstZero & 1) << 24;
+		id0 |= (alphaTestAgainstZero & 1) << 28;
 		if (enableAlphaTest)
 			gpuStats.numAlphaTestedDraws++;
 		else
 			gpuStats.numNonAlphaTestedDraws++;
 
+		// 29 - 31 are free.
+
 		if (ShouldUseShaderBlending()) {
 			// 12 bits total.
-			id1 |= 1;
-			id1 |= (gstate.getBlendEq() << 1);
-			id1 |= (gstate.getBlendFuncA() << 4);
-			id1 |= (gstate.getBlendFuncB() << 8);
+			id1 |= 1 << 0;
+			id1 |= gstate.getBlendEq() << 1;
+			id1 |= gstate.getBlendFuncA() << 4;
+			id1 |= gstate.getBlendFuncB() << 8;
 		}
 	}
 
@@ -490,6 +503,7 @@ void GenerateFragmentShader(char *buffer) {
 	bool enableAlphaDoubling = !alphaToColorDoubling && CanDoubleSrcBlendMode();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doTextureAlpha = gstate.isTextureAlphaUsed();
+	bool textureAtOffset = gstate_c.curTextureXOffset != 0 || gstate_c.curTextureYOffset != 0;
 	ReplaceAlphaType stencilToAlpha = ReplaceAlphaWithStencil();
 
 	if (gstate_c.textureFullAlpha && gstate.getTextureFunction() != GE_TEXFUNC_REPLACE)
@@ -506,6 +520,12 @@ void GenerateFragmentShader(char *buffer) {
 		}
 		if (gstate.getBlendFuncB() == GE_DSTBLEND_FIXB) {
 			WRITE(p, "uniform vec3 u_blendFixB;\n");
+		}
+	}
+	if (gstate_c.needShaderTexClamp && doTexture) {
+		WRITE(p, "uniform vec4 u_texclamp;");
+		if (textureAtOffset) {
+			WRITE(p, "uniform vec2 u_texclampoff;");
 		}
 	}
 
@@ -568,10 +588,57 @@ void GenerateFragmentShader(char *buffer) {
 		}
 
 		if (gstate.isTextureMapEnabled()) {
+			const char *texcoord = "v_texcoord";
+			// TODO: Not sure the right way to do this for projection.
+			if (gstate_c.needShaderTexClamp) {
+				// We may be clamping inside a larger surface (tex = 64x64, buffer=480x272).
+				// We may also be wrapping in such a surface, or either one in a too-small surface.
+				// Obviously, clamping to a smaller surface won't work.  But better to clamp to something.
+				std::string ucoord = "v_texcoord.x";
+				std::string vcoord = "v_texcoord.y";
+				if (doTextureProjection) {
+					ucoord += " / v_texcoord.z";
+					vcoord = "(v_texcoord.y / v_texcoord.z)";
+					// Vertex texcoords are NOT flipped when projecting despite gstate_c.flipTexture.
+				} else if (gstate_c.flipTexture) {
+					vcoord = "1.0 - " + vcoord;
+				}
+
+				if (gstate.isTexCoordClampedS()) {
+					ucoord = "clamp(" + ucoord + ", u_texclamp.z, u_texclamp.x - u_texclamp.z)";
+				} else {
+					ucoord = "mod(" + ucoord + ", u_texclamp.x)";
+				}
+				// The v coordinate is more tricky, since it's flipped.
+				if (gstate.isTexCoordClampedT()) {
+					vcoord = "clamp(" + vcoord + ", u_texclamp.w, u_texclamp.y - u_texclamp.w)";
+				} else {
+					vcoord = "mod(" + vcoord + ", u_texclamp.y)";
+				}
+				if (textureAtOffset) {
+					ucoord = "(" + ucoord + " + u_texclampoff.x)";
+					vcoord = "(" + vcoord + " + u_texclampoff.y)";
+				}
+
+				if (gstate_c.flipTexture) {
+					vcoord = "1.0 - " + vcoord;
+				}
+
+				WRITE(p, "  vec2 fixedcoord = vec2(%s, %s);\n", ucoord.c_str(), vcoord.c_str());
+				texcoord = "fixedcoord";
+				// We already projected it.
+				doTextureProjection = false;
+			} else if (doTextureProjection && gstate_c.flipTexture) {
+				// Since we need to flip v, we project manually.
+				WRITE(p, "  vec2 fixedcoord = vec2(v_texcoord.x / v_texcoord.z, 1.0 - (v_texcoord.y / v_texcoord.z));\n");
+				texcoord = "fixedcoord";
+				doTextureProjection = false;
+			}
+
 			if (doTextureProjection) {
-				WRITE(p, "  vec4 t = %sProj(tex, v_texcoord);\n", texture);
+				WRITE(p, "  vec4 t = %sProj(tex, %s);\n", texture, texcoord);
 			} else {
-				WRITE(p, "  vec4 t = %s(tex, v_texcoord);\n", texture);
+				WRITE(p, "  vec4 t = %s(tex, %s);\n", texture, texcoord);
 			}
 			WRITE(p, "  vec4 p = v_color0;\n");
 
@@ -660,7 +727,6 @@ void GenerateFragmentShader(char *buffer) {
 		if (enableColorTest) {
 			GEComparison colorTestFunc = gstate.getColorTestFunction();
 			const char *colorTestFuncs[] = { "#", "#", " != ", " == " };	// never/always don't make sense
-			WARN_LOG_REPORT_ONCE(colortest, G3D, "Color test function : %s", colorTestFuncs[colorTestFunc]);
 			u32 colorTestMask = gstate.getColorTestMask();
 			if (colorTestFuncs[colorTestFunc][0] != '#') {
 				if (gl_extensions.gpuVendor == GPU_VENDOR_POWERVR)

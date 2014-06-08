@@ -188,6 +188,8 @@ public:
 	int GetTargetHeight() const { return currentRenderVfb_ ? currentRenderVfb_->height : 272; }
 	int GetTargetBufferWidth() const { return currentRenderVfb_ ? currentRenderVfb_->bufferWidth : 480; }
 	int GetTargetBufferHeight() const { return currentRenderVfb_ ? currentRenderVfb_->bufferHeight : 272; }
+	int GetTargetStride() const { return currentRenderVfb_ ? currentRenderVfb_->fb_stride : 512; }
+	GEBufferFormat GetTargetFormat() const { return currentRenderVfb_ ? currentRenderVfb_->format : displayFormat_; }
 
 	u32 PrevDisplayFramebufAddr() {
 		return prevDisplayFramebuf_ ? (0x04000000 | prevDisplayFramebuf_->fb_address) : 0;
@@ -217,6 +219,7 @@ public:
 	bool NotifyStencilUpload(u32 addr, int size);
 
 	void DestroyFramebuf(VirtualFramebuffer *vfb);
+	void ResizeFramebufFBO(VirtualFramebuffer *vfb, u16 w, u16 h, bool force = false);
 
 	bool GetCurrentFramebuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentDepthbuffer(GPUDebugBuffer &buffer);
@@ -230,7 +233,7 @@ private:
 	void CompileDraw2DProgram();
 	void DestroyDraw2DProgram();
 
-	void FindTransferFramebuffers(VirtualFramebuffer *&dstBuffer, VirtualFramebuffer *&srcBuffer, u32 dstBasePtr, int dstStride, int &dstX, int &dstY, u32 srcBasePtr, int srcStride, int &srcX, int &srcY, int bpp) const;
+	void FindTransferFramebuffers(VirtualFramebuffer *&dstBuffer, VirtualFramebuffer *&srcBuffer, u32 dstBasePtr, int dstStride, int &dstX, int &dstY, u32 srcBasePtr, int srcStride, int &srcX, int &srcY, int &srcWidth, int &srcHeight, int &dstWidth, int &dstHeight, int bpp) const;
 	u32 FramebufferByteSize(const VirtualFramebuffer *vfb) const;
 
 	void SetNumExtraFBOs(int num);

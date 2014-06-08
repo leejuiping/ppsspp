@@ -305,6 +305,7 @@ static ConfigSetting cpuSettings[] = {
 
 	ReportedConfigSetting("SeparateIOThread", &g_Config.bSeparateIOThread, true),
 	ConfigSetting("FastMemoryAccess", &g_Config.bFastMemory, true),
+	ReportedConfigSetting("FuncReplacements", &g_Config.bFuncReplacements, true),
 	ReportedConfigSetting("CPUSpeed", &g_Config.iLockedCPUSpeed, 0),
 
 	ConfigSetting(false),
@@ -397,7 +398,7 @@ static ConfigSetting graphicsSettings[] = {
 	ReportedConfigSetting("SplineBezierQuality", &g_Config.iSplineBezierQuality, 2),
 	ReportedConfigSetting("PostShader", &g_Config.sPostShaderName, "Off"),
 
-	ReportedConfigSetting("BlockTransferGPU", &g_Config.bBlockTransferGPU, false),
+	ReportedConfigSetting("MemBlockTransferGPU", &g_Config.bBlockTransferGPU, true),
 
 	ConfigSetting(false),
 };

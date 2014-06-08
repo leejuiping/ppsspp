@@ -458,12 +458,16 @@ struct GPUStateCache
 
 	UVScale uv;
 	bool flipTexture;
+	bool needShaderTexClamp;
 
 	float morphWeights[8];
 
 	u32 curTextureWidth;
 	u32 curTextureHeight;
 	u32 actualTextureHeight;
+	// Only applied when needShaderTexClamp = true.
+	u32 curTextureXOffset;
+	u32 curTextureYOffset;
 
 	float vpWidth;
 	float vpHeight;

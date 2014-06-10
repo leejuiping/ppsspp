@@ -132,6 +132,16 @@ void CenterRect(float *x, float *y, float *w, float *h,
 		outW = frameW;
 		outH = frameH;
 	} else {
+		// Add special case for 1080p displays, cutting off the bottom and top 1-pixel rows from the original 480x272.
+		// This will be what 99.9% of users want.
+		if (origW == 480 && origH == 272 && frameW == 1920 && frameH == 1080) {
+			*x = 0;
+			*y = -4;
+			*w = 1920;
+			*h = 1088;
+			return;
+		}
+
 		float origRatio = origW / origH;
 		float frameRatio = frameW / frameH;
 		if (origRatio > frameRatio) {
@@ -551,7 +561,7 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 
 	if (texture) {
 		// We know the texture, we can do a DrawTexture shortcut on nvidia.
-#if !defined(__SYMBIAN32__) && !defined(MEEGO_EDITION_HARMATTAN) && !defined(IOS) && !defined(BLACKBERRY) && !defined(MAEMO)
+#if !defined(IOS)
 		// Don't remember why I disabled this - no win?
 		if (false && gl_extensions.NV_draw_texture && !program) {
 			// Fast path for Tegra. TODO: Make this path work on desktop nvidia, seems GLEW doesn't have a clue.
@@ -673,7 +683,7 @@ void FramebufferManager::EstimateDrawingSize(int &drawing_width, int &drawing_he
 	}
 
 	// Assume no buffer is > 512 tall, it couldn't be textured or displayed fully if so.
-	if (drawing_height > MAX_FRAMEBUF_HEIGHT) {
+	if (drawing_height >= MAX_FRAMEBUF_HEIGHT) {
 		if (region_height < MAX_FRAMEBUF_HEIGHT) {
 			drawing_height = region_height;
 		} else if (scissor_height < MAX_FRAMEBUF_HEIGHT) {
@@ -740,6 +750,7 @@ void FramebufferManager::RebindFramebuffer() {
 void FramebufferManager::ResizeFramebufFBO(VirtualFramebuffer *vfb, u16 w, u16 h, bool force) {
 	float renderWidthFactor = (float)vfb->renderWidth / (float)vfb->bufferWidth;
 	float renderHeightFactor = (float)vfb->renderHeight / (float)vfb->bufferHeight;
+	VirtualFramebuffer old = *vfb;
 
 	if (force) {
 		vfb->bufferWidth = w;
@@ -788,7 +799,6 @@ void FramebufferManager::ResizeFramebufFBO(VirtualFramebuffer *vfb, u16 w, u16 h
 		return;
 	}
 
-	VirtualFramebuffer old = *vfb;
 	vfb->fbo = fbo_create(vfb->renderWidth, vfb->renderHeight, 1, true, vfb->colorDepth);
 	if (old.fbo) {
 		INFO_LOG(SCEGE, "Resizing FBO for %08x : %i x %i x %i", vfb->fb_address, w, h, vfb->format);
@@ -2177,7 +2187,7 @@ bool FramebufferManager::NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride
 			if (srcX != dstX || srcY != dstY) {
 				WARN_LOG_ONCE(dstsrc, G3D, "Intra-buffer block transfer %08x -> %08x", srcBasePtr, dstBasePtr);
 				if (g_Config.bBlockTransferGPU) {
-					FBO *tempFBO = GetTempFBO(dstBuffer->width, dstBuffer->height, dstBuffer->colorDepth);
+					FBO *tempFBO = GetTempFBO(dstBuffer->renderWidth, dstBuffer->renderHeight, dstBuffer->colorDepth);
 					VirtualFramebuffer tempBuffer = *dstBuffer;
 					tempBuffer.fbo = tempFBO;
 					BlitFramebuffer_(&tempBuffer, srcX, srcY, dstBuffer, srcX, srcY, dstWidth, dstHeight, bpp);
@@ -2227,9 +2237,8 @@ void FramebufferManager::NotifyBlockTransferAfter(u32 dstBasePtr, int dstStride,
 	// TODO: Is this not handled by upload?  Should we check !dstBuffer to avoid a double copy?
 	if (((backBuffer != 0 && dstBasePtr == backBuffer) ||
 		(displayBuffer != 0 && dstBasePtr == displayBuffer)) &&
-		dstStride == 512 && height == 272) {
-		// TODO: Use displayFormat_ instead of GE_FORMAT_8888?
-		DrawFramebuffer(Memory::GetPointerUnchecked(dstBasePtr), GE_FORMAT_8888, 512, false);
+		dstStride == 512 && height == 272 && !useBufferedRendering_) {
+		DrawFramebuffer(Memory::GetPointerUnchecked(dstBasePtr), displayFormat_, 512, false);
 	}
 
 	if (MayIntersectFramebuffer(srcBasePtr) || MayIntersectFramebuffer(dstBasePtr)) {

@@ -350,7 +350,7 @@ void ComputeFragmentShaderID(FragmentShaderID *id) {
 	} else {
 		bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled();
 		bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough();
-		bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue();
+		bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue() && !g_Config.bDisableAlphaTest;
 		bool alphaTestAgainstZero = gstate.getAlphaTestRef() == 0;
 		bool enableColorTest = gstate.isColorTestEnabled() && !IsColorTestTriviallyTrue();
 		bool alphaToColorDoubling = AlphaToColorDoubling();
@@ -466,6 +466,9 @@ void GenerateFragmentShader(char *buffer) {
 		texture = "texture";
 		glslES30 = true;
 		WRITE(p, "#version 330\n");
+		WRITE(p, "#define lowp\n");
+		WRITE(p, "#define mediump\n");
+		WRITE(p, "#define highp\n");
 	} else if (gl_extensions.VersionGEThan(3, 0, 0)) {
 		fragColor0 = "fragColor0";
 		WRITE(p, "#version 130\n");
@@ -494,7 +497,7 @@ void GenerateFragmentShader(char *buffer) {
 	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled();
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
-	bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue() && !gstate.isModeClear();
+	bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue() && !gstate.isModeClear() && !g_Config.bDisableAlphaTest;
 	bool alphaTestAgainstZero = gstate.getAlphaTestRef() == 0;
 	bool enableColorTest = gstate.isColorTestEnabled() && !IsColorTestTriviallyTrue() && !gstate.isModeClear();
 	bool alphaToColorDoubling = AlphaToColorDoubling();
@@ -511,7 +514,7 @@ void GenerateFragmentShader(char *buffer) {
 
 	if (doTexture)
 		WRITE(p, "uniform sampler2D tex;\n");
-	if (ShouldUseShaderBlending() && !gstate.isModeClear()) {
+	if (!gstate.isModeClear() && ShouldUseShaderBlending()) {
 		if (!gl_extensions.NV_shader_framebuffer_fetch) {
 			WRITE(p, "uniform sampler2D fbotex;\n");
 		}
@@ -523,9 +526,9 @@ void GenerateFragmentShader(char *buffer) {
 		}
 	}
 	if (gstate_c.needShaderTexClamp && doTexture) {
-		WRITE(p, "uniform vec4 u_texclamp;");
+		WRITE(p, "uniform vec4 u_texclamp;\n");
 		if (textureAtOffset) {
-			WRITE(p, "uniform vec2 u_texclampoff;");
+			WRITE(p, "uniform vec2 u_texclampoff;\n");
 		}
 	}
 

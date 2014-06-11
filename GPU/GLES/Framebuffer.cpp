@@ -561,7 +561,7 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 
 	if (texture) {
 		// We know the texture, we can do a DrawTexture shortcut on nvidia.
-#if !defined(IOS)
+#if defined(ANDROID)
 		// Don't remember why I disabled this - no win?
 		if (false && gl_extensions.NV_draw_texture && !program) {
 			// Fast path for Tegra. TODO: Make this path work on desktop nvidia, seems GLEW doesn't have a clue.
@@ -1094,11 +1094,11 @@ void FramebufferManager::BindFramebufferDepth(VirtualFramebuffer *sourceframebuf
 				fbo_bind_for_read(sourceframebuffer->fbo);
 				glDisable(GL_SCISSOR_TEST);
 
-#if defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))  // We only support this extension on Android, it's not even available on PC.
+#if defined(USING_GLES2) && defined(ANDROID)  // We only support this extension on Android, it's not even available on PC.
 				if (useNV) {
 					glBlitFramebufferNV(0, 0, sourceframebuffer->renderWidth, sourceframebuffer->renderHeight, 0, 0, targetframebuffer->renderWidth, targetframebuffer->renderHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 				} else 
-#endif // defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))
+#endif // defined(USING_GLES2) && defined(ANDROID)
 					glBlitFramebuffer(0, 0, sourceframebuffer->renderWidth, sourceframebuffer->renderHeight, 0, 0, targetframebuffer->renderWidth, targetframebuffer->renderHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 				// If we set targetframebuffer->depthUpdated here, our optimization above would be pointless.
 
@@ -1507,9 +1507,9 @@ void FramebufferManager::BlitFramebuffer_(VirtualFramebuffer *dst, int dstX, int
 		if (!useNV) {
 			glBlitFramebuffer(srcX1, srcY1, srcX2, srcY2, dstX1, dstY1, dstX2, dstY2, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 		} else {
-#if defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))  // We only support this extension on Android, it's not even available on PC.
+#if defined(USING_GLES2) && defined(ANDROID)  // We only support this extension on Android, it's not even available on PC.
 			glBlitFramebufferNV(srcX1, srcY1, srcX2, srcY2, dstX1, dstY1, dstX2, dstY2, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-#endif // defined(USING_GLES2) && (defined(ANDROID) || defined(BLACKBERRY))
+#endif // defined(USING_GLES2) && defined(ANDROID)
 		}
 
 	} else {
@@ -2071,8 +2071,13 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool 
 	} else if (srcBuffer) {
 		WARN_LOG_REPORT_ONCE(btdcpy, G3D, "Memcpy fbo download %08x -> %08x", src, dst);
 		if (g_Config.bBlockTransferGPU) {
-			// TODO: Validate x/y/w/h based on size and offset?
-			ReadFramebufferToMemory(srcBuffer, true, 0, 0, srcBuffer->width, srcBuffer->height);
+			// TODO: Support memcpy from offset within framebuffer?  Seems dangerous.
+			// Maybe at least if x offset is 0, in case a game manually copies or memsets by stride.
+			const u32 srcBpp = srcBuffer->format == GE_FORMAT_8888 ? 4 : 2;
+			int h = size / (srcBuffer->fb_stride * srcBpp);
+			if (h > 0) {
+				ReadFramebufferToMemory(srcBuffer, true, 0, 0, srcBuffer->width, h);
+			}
 		}
 		return false;
 	} else {
@@ -2092,9 +2097,12 @@ void FramebufferManager::FindTransferFramebuffers(VirtualFramebuffer *&dstBuffer
 	int width = srcWidth;
 	int height = srcHeight;
 
+	dstBasePtr &= 0x3FFFFFFF;
+	srcBasePtr &= 0x3FFFFFFF;
+
 	for (size_t i = 0; i < vfbs_.size(); ++i) {
 		VirtualFramebuffer *vfb = vfbs_[i];
-		const u32 vfb_address = 0x04000000 | vfb->fb_address;
+		const u32 vfb_address = (0x04000000 | vfb->fb_address) & 0x3FFFFFFF;
 		const u32 vfb_size = FramebufferByteSize(vfb);
 		const u32 vfb_bpp = vfb->format == GE_FORMAT_8888 ? 4 : 2;
 		const u32 vfb_byteStride = vfb->fb_stride * vfb_bpp;

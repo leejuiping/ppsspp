@@ -74,7 +74,7 @@ public:
 	bool GetCurrentFramebuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentDepthbuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentStencilbuffer(GPUDebugBuffer &buffer);
-	bool GetCurrentTexture(GPUDebugBuffer &buffer);
+	bool GetCurrentTexture(GPUDebugBuffer &buffer, int level);
 	bool GetCurrentSimpleVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices);
 
 	virtual bool DescribeCodePtr(const u8 *ptr, std::string &name);
@@ -128,8 +128,6 @@ public:
 	void Execute_AlphaTest(u32 op, u32 diff);
 	void Execute_StencilTest(u32 op, u32 diff);
 	void Execute_ColorRef(u32 op, u32 diff);
-	void Execute_BlendFixA(u32 op, u32 diff);
-	void Execute_BlendFixB(u32 op, u32 diff);
 	void Execute_WorldMtxNum(u32 op, u32 diff);
 	void Execute_WorldMtxData(u32 op, u32 diff);
 	void Execute_ViewMtxNum(u32 op, u32 diff);
@@ -162,6 +160,7 @@ private:
 	void PerformMemorySetInternal(u32 dest, u8 v, int size);
 	void PerformStencilUploadInternal(u32 dest, int size);
 	void InvalidateCacheInternal(u32 addr, int size, GPUInvalidationType type);
+	inline void UpdateVsyncInterval(bool force);
 
 	static CommandInfo cmdInfo_[256];
 

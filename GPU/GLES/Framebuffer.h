@@ -141,6 +141,7 @@ public:
 	void DestroyAllFBOs();
 	void DecimateFBOs();
 
+	void Init();
 	void BeginFrame();
 	void EndFrame();
 	void Resized();
@@ -206,6 +207,11 @@ public:
 			currentRenderVfb_->depthUpdated = true;
 		}
 	}
+	void SetColorUpdated() {
+		if (currentRenderVfb_) {
+			SetColorUpdated(currentRenderVfb_);
+		}
+	}
 
 	bool MayIntersectFramebuffer(u32 start) {
 		// Clear the cache/kernel bits.
@@ -246,6 +252,13 @@ private:
 	static void DisableState();
 	static void ClearBuffer();
 	static bool MaskedEqual(u32 addr1, u32 addr2);
+
+	void SetColorUpdated(VirtualFramebuffer *dstBuffer) {
+		dstBuffer->memoryUpdated = false;
+		dstBuffer->dirtyAfterDisplay = true;
+		if ((gstate_c.skipDrawReason & SKIPDRAW_SKIPFRAME) == 0)
+			dstBuffer->reallyDirtyAfterDisplay = true;
+	}
 
 	u32 displayFramebufPtr_;
 	u32 displayStride_;

@@ -37,6 +37,7 @@
 
 #include "GPU/Common/PostShader.h"
 #include "GPU/Common/TextureDecoder.h"
+#include "GPU/Debugger/Stepping.h"
 #include "GPU/GLES/Framebuffer.h"
 #include "GPU/GLES/TextureCache.h"
 #include "GPU/GLES/TransformPipeline.h"
@@ -349,14 +350,10 @@ FramebufferManager::FramebufferManager() :
 	currentPBO_(0)
 #endif
 {
+}
+
+void FramebufferManager::Init() {
 	CompileDraw2DProgram();
-
-	// And an initial clear. We don't clear per frame as the games are supposed to handle that
-	// by themselves.
-	ClearBuffer();
-
-	useBufferedRendering_ = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE;
-	updateVRAM_ = !(g_Config.iRenderingMode == FB_NON_BUFFERED_MODE || g_Config.iRenderingMode == FB_BUFFERED_MODE);
 
 	const std::string gameId = g_paramSFO.GetValueString("DISC_ID");
 	// This applies a hack to Dangan Ronpa, its demo, and its sequel.
@@ -364,7 +361,12 @@ FramebufferManager::FramebufferManager() :
 	// We force this framebuffer to 1x and force download it automatically.
 	hackForce04154000Download_ = gameId == "NPJH50631" || gameId == "NPJH50372" || gameId == "NPJH90164" || gameId == "NPJH50515";
 
+	// And an initial clear. We don't clear per frame as the games are supposed to handle that
+	// by themselves.
+	ClearBuffer();
+
 	SetLineWidth();
+	BeginFrame();
 }
 
 FramebufferManager::~FramebufferManager() {
@@ -861,16 +863,36 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 	// Find a matching framebuffer
 	VirtualFramebuffer *vfb = 0;
 	size_t i;
+	gstate_c.cutRTOffsetX = 0;
 	for (i = 0; i < vfbs_.size(); ++i) {
 		VirtualFramebuffer *v = vfbs_[i];
 		if (MaskedEqual(v->fb_address, fb_address)) {
 			vfb = v;
 			// Update fb stride in case it changed
 			vfb->fb_stride = fb_stride;
-			v->format = fmt;
-			v->width = drawing_width;
-			v->height = drawing_height;
+			vfb->format = fmt;
+			// In throughmode, a higher height could be used.  Let's avoid shrinking the buffer.
+			if (gstate.isModeThrough() && (int)vfb->width < fb_stride) {
+				vfb->width = std::max((int)vfb->width, drawing_width);
+				vfb->height = std::max((int)vfb->height, drawing_height);
+			} else {
+				vfb->width = drawing_width;
+				vfb->height = drawing_height;
+			}
 			break;
+		} else if (v->fb_address < fb_address && v->fb_address + v->fb_stride * 4 > fb_address) {
+			// Possibly a render-to-offset.
+			const u32 bpp = v->format == GE_FORMAT_8888 ? 4 : 2;
+			const int x_offset = (fb_address - v->fb_address) / bpp;
+			if (v->format == fmt && v->fb_stride == fb_stride && x_offset < fb_stride && v->height >= drawing_height) {
+				WARN_LOG_REPORT_ONCE(renderoffset, HLE, "Rendering to framebuffer offset: %08x +%dx%d", v->fb_address, x_offset, 0);
+				vfb = v;
+				gstate_c.cutRTOffsetX = x_offset;
+				vfb->width = std::max((int)vfb->width, x_offset + drawing_width);
+				// To prevent the newSize code from being confused.
+				drawing_width += x_offset;
+				break;
+			}
 		}
 	}
 
@@ -927,10 +949,7 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 		vfb->bufferHeight = drawing_height;
 		vfb->format = fmt;
 		vfb->usageFlags = FB_USAGE_RENDERTARGET;
-		vfb->dirtyAfterDisplay = true;
-		if ((gstate_c.skipDrawReason & SKIPDRAW_SKIPFRAME) == 0)
-			vfb->reallyDirtyAfterDisplay = true;
-		vfb->memoryUpdated = false;
+		SetColorUpdated(vfb);
 		vfb->depthUpdated = false;
 
 		ResizeFramebufFBO(vfb, drawing_width, drawing_height, true);
@@ -997,7 +1016,6 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 		vfb->dirtyAfterDisplay = true;
 		if ((gstate_c.skipDrawReason & SKIPDRAW_SKIPFRAME) == 0)
 			vfb->reallyDirtyAfterDisplay = true;
-		vfb->memoryUpdated = false;
 
 		if (useBufferedRendering_) {
 			if (vfb->fbo) {
@@ -1029,7 +1047,7 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 		// to it. This broke stuff before, so now it only clears on the first use of an
 		// FBO in a frame. This means that some games won't be able to avoid the on-some-GPUs
 		// performance-crushing framebuffer reloads from RAM, but we'll have to live with that.
-		if (vfb->last_frame_render != gpuStats.numFlips)	{
+		if (vfb->last_frame_render != gpuStats.numFlips) {
 			ClearBuffer();
 		}
 #endif
@@ -1053,6 +1071,8 @@ void FramebufferManager::DoSetRenderFrameBuffer() {
 		gstate_c.curRTWidth = vfb->width;
 		gstate_c.curRTHeight = vfb->height;
 	}
+	gstate_c.curRTRenderWidth = vfb->renderWidth;
+	gstate_c.curRTRenderHeight = vfb->renderHeight;
 }
 
 void FramebufferManager::SetLineWidth() {
@@ -1140,6 +1160,9 @@ void FramebufferManager::BindFramebufferColor(VirtualFramebuffer *framebuffer, b
 
 	// currentRenderVfb_ will always be set when this is called, except from the GE debugger.
 	// Let's just not bother with the copy in that case.
+	if (GPUStepping::IsStepping()) {
+		skipCopy = true;
+	}
 	if (!skipCopy && currentRenderVfb_ && MaskedEqual(framebuffer->fb_address, gstate.getFrameBufRawAddress())) {
 		// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
 		FBO *renderCopy = GetTempFBO(framebuffer->renderWidth, framebuffer->renderHeight, framebuffer->colorDepth);
@@ -1968,8 +1991,6 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 				FlushBeforeCopy();
 				fbo_unbind();
 
-				vfb->dirtyAfterDisplay = true;
-				vfb->reallyDirtyAfterDisplay = true;
 				// TODO: This without the fbo_unbind() above would be better than destroying the FBO.
 				// However, it doesn't seem to work for Star Ocean, at least
 				if (useBufferedRendering_ && vfb->fbo) {
@@ -1983,6 +2004,7 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 						fmt = displayFormat_;
 					}
 					DrawPixels(vfb, 0, 0, Memory::GetPointer(addr | 0x04000000), fmt, vfb->fb_stride, vfb->width, vfb->height);
+					SetColorUpdated(vfb);
 				} else {
 					INFO_LOG(SCEGE, "Invalidating FBO for %08x (%i x %i x %i)", vfb->fb_address, vfb->width, vfb->height, vfb->format)
 					DestroyFramebuf(vfb);
@@ -1999,7 +2021,7 @@ void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {
 }
 
 bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool isMemset) {
-	if (updateVRAM_) {
+	if (updateVRAM_ || size == 0) {
 		return false;
 	}
 
@@ -2015,15 +2037,41 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool 
 		}
 	}
 
+	dst &= 0x3FFFFFFF;
+	src &= 0x3FFFFFFF;
+
 	VirtualFramebuffer *dstBuffer = 0;
 	VirtualFramebuffer *srcBuffer = 0;
+	u32 dstY = (u32)-1;
+	u32 dstH = 0;
+	u32 srcY = (u32)-1;
+	u32 srcH = 0;
 	for (size_t i = 0; i < vfbs_.size(); ++i) {
 		VirtualFramebuffer *vfb = vfbs_[i];
-		if (MaskedEqual(vfb->fb_address, dst)) {
-			dstBuffer = vfb;
+		const u32 vfb_address = (0x04000000 | vfb->fb_address) & 0x3FFFFFFF;
+		const u32 vfb_size = FramebufferByteSize(vfb);
+		const u32 vfb_bpp = vfb->format == GE_FORMAT_8888 ? 4 : 2;
+		const u32 vfb_byteStride = vfb->fb_stride * vfb_bpp;
+		const u32 vfb_byteWidth = vfb->width * vfb_bpp;
+
+		if (dst >= vfb_address && (dst + size <= vfb_address + vfb_size || dst == vfb_address)) {
+			const u32 offset = dst - vfb_address;
+			const u32 yOffset = offset / vfb_byteStride;
+			if ((offset % vfb_byteStride) == 0 && (size == vfb_byteWidth || (size % vfb_byteStride) == 0) && yOffset < dstY) {
+				dstBuffer = vfb;
+				dstY = yOffset;
+				dstH = size == vfb_byteWidth ? 1 : std::min((u32)size / vfb_byteStride, (u32)vfb->height);
+			}
 		}
-		if (MaskedEqual(vfb->fb_address, src)) {
-			srcBuffer = vfb;
+
+		if (src >= vfb_address && (src + size <= vfb_address + vfb_size || src == vfb_address)) {
+			const u32 offset = src - vfb_address;
+			const u32 yOffset = offset / vfb_byteStride;
+			if ((offset % vfb_byteStride) == 0 && (size == vfb_byteWidth || (size % vfb_byteStride) == 0) && yOffset < srcY) {
+				srcBuffer = vfb;
+				srcY = yOffset;
+				srcH = size == vfb_byteWidth ? 1 : std::min((u32)size / vfb_byteStride, (u32)vfb->height);
+			}
 		}
 	}
 
@@ -2040,14 +2088,14 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool 
 		if (srcBuffer == dstBuffer) {
 			WARN_LOG_REPORT_ONCE(dstsrccpy, G3D, "Intra-buffer memcpy (not supported) %08x -> %08x", src, dst);
 		} else {
-			WARN_LOG_REPORT_ONCE(dstnotsrccpy, G3D, "Inter-buffer memcpy (not supported) %08x -> %08x", src, dst);
+			WARN_LOG_REPORT_ONCE(dstnotsrccpy, G3D, "Inter-buffer memcpy %08x -> %08x", src, dst);
 			// Just do the blit!
-			// if (g_Config.bBlockTransferGPU) {
-			//   BlitFramebuffer_(dstBuffer, 0, 0, srcBuffer, 0, 0, srcBuffer->width, srcBuffer->height, 0);
-			// }
+			if (g_Config.bBlockTransferGPU) {
+				BlitFramebuffer_(dstBuffer, 0, dstY, srcBuffer, 0, srcY, srcBuffer->width, srcH, 0);
+				SetColorUpdated(dstBuffer);
+			}
 		}
-		Memory::Memcpy(dst, Memory::GetPointer(src), size);
-		return true;
+		return false;
 	} else if (dstBuffer) {
 		WARN_LOG_REPORT_ONCE(btucpy, G3D, "Memcpy fbo upload %08x -> %08x", src, dst);
 		if (g_Config.bBlockTransferGPU) {
@@ -2057,11 +2105,8 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool 
 				fbo_bind_as_render_target(dstBuffer->fbo);
 			}
 			glViewport(0, 0, dstBuffer->renderWidth, dstBuffer->renderHeight);
-			// TODO: Validate x/y/w/h based on size and offset?
-			DrawPixels(dstBuffer, 0, 0, srcBase, dstBuffer->format, dstBuffer->fb_stride, dstBuffer->width, dstBuffer->height);
-			dstBuffer->dirtyAfterDisplay = true;
-			if ((gstate_c.skipDrawReason & SKIPDRAW_SKIPFRAME) == 0)
-				dstBuffer->reallyDirtyAfterDisplay = true;
+			DrawPixels(dstBuffer, 0, dstY, srcBase, dstBuffer->format, dstBuffer->fb_stride, dstBuffer->width, dstH);
+			SetColorUpdated(dstBuffer);
 			if (useBufferedRendering_) {
 				RebindFramebuffer();
 			} else {
@@ -2075,19 +2120,9 @@ bool FramebufferManager::NotifyFramebufferCopy(u32 src, u32 dst, int size, bool 
 		return false;
 	} else if (srcBuffer) {
 		WARN_LOG_REPORT_ONCE(btdcpy, G3D, "Memcpy fbo download %08x -> %08x", src, dst);
-		if (g_Config.bBlockTransferGPU) {
-			// TODO: Support memcpy from offset within framebuffer?  Seems dangerous.
-			// Maybe at least if x offset is 0, in case a game manually copies or memsets by stride.
-			const u32 srcBpp = srcBuffer->format == GE_FORMAT_8888 ? 4 : 2;
-			int h = size / (srcBuffer->fb_stride * srcBpp);
-			if (h > srcBuffer->height) {
-				WARN_LOG_REPORT_ONCE(btdcpybig, G3D, "Memcpy fbo download too large at %08x size=%08x height=%d", src, size, srcBuffer->height);
-				h = srcBuffer->height;
-			}
-			if (h > 0) {
-				FlushBeforeCopy();
-				ReadFramebufferToMemory(srcBuffer, true, 0, 0, srcBuffer->width, h);
-			}
+		FlushBeforeCopy();
+		if (g_Config.bBlockTransferGPU && !srcBuffer->memoryUpdated && srcH > 0) {
+			ReadFramebufferToMemory(srcBuffer, true, 0, 0, srcBuffer->width, srcH);
 		}
 		return false;
 	} else {
@@ -2219,6 +2254,7 @@ bool FramebufferManager::NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride
 					BlitFramebuffer_(&tempBuffer, srcX, srcY, dstBuffer, srcX, srcY, dstWidth, dstHeight, bpp);
 					BlitFramebuffer_(dstBuffer, dstX, dstY, &tempBuffer, srcX, srcY, dstWidth, dstHeight, bpp);
 					RebindFramebuffer();
+					SetColorUpdated(dstBuffer);
 					return true;
 				}
 			} else {
@@ -2234,6 +2270,7 @@ bool FramebufferManager::NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride
 				FlushBeforeCopy();
 				BlitFramebuffer_(dstBuffer, dstX, dstY, srcBuffer, srcX, srcY, dstWidth, dstHeight, bpp);
 				RebindFramebuffer();
+				SetColorUpdated(dstBuffer);
 				return true;  // No need to actually do the memory copy behind, probably.
 			}
 		}
@@ -2243,10 +2280,10 @@ bool FramebufferManager::NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride
 		return false;
 	} else if (srcBuffer) {
 		WARN_LOG_ONCE(btd, G3D, "Block transfer download %08x -> %08x", srcBasePtr, dstBasePtr);
-		if (g_Config.bBlockTransferGPU && (srcBuffer == currentRenderVfb_ || !srcBuffer->memoryUpdated)) {
+		FlushBeforeCopy();
+		if (g_Config.bBlockTransferGPU && !srcBuffer->memoryUpdated) {
 			int srcBpp = srcBuffer->format == GE_FORMAT_8888 ? 4 : 2;
 			float srcXFactor = (float)bpp / srcBpp;
-			FlushBeforeCopy();
 			ReadFramebufferToMemory(srcBuffer, true, srcX * srcXFactor, srcY, srcWidth * srcXFactor, srcHeight);
 		}
 		return false;  // Let the bit copy happen
@@ -2295,9 +2332,7 @@ void FramebufferManager::NotifyBlockTransferAfter(u32 dstBasePtr, int dstStride,
 				float dstXFactor = (float)bpp / dstBpp;
 				glViewport(0, 0, dstBuffer->renderWidth, dstBuffer->renderHeight);
 				DrawPixels(dstBuffer, dstX * dstXFactor, dstY, srcBase, dstBuffer->format, srcStride * dstXFactor, dstWidth * dstXFactor, dstHeight);
-				dstBuffer->dirtyAfterDisplay = true;
-				if ((gstate_c.skipDrawReason & SKIPDRAW_SKIPFRAME) == 0)
-					dstBuffer->reallyDirtyAfterDisplay = true;
+				SetColorUpdated(dstBuffer);
 				if (useBufferedRendering_) {
 					RebindFramebuffer();
 				} else {

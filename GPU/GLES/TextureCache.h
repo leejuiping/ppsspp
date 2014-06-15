@@ -113,9 +113,8 @@ public:
 
 			STATUS_CHANGE_FREQUENT = 0x10, // Changes often (less than 15 frames in between.)
 			STATUS_CLUT_RECHECK = 0x20,    // Another texture with same addr had a hashfail.
-			STATUS_DEPALETTIZE = 0x40,
-			STATUS_DEPALETTIZE_DIRTY = 0x80,
-			STATUS_TEXPARAM_DIRTY = 0x100
+			STATUS_DEPALETTIZE = 0x40,     // Needs to go through a depalettize pass.
+			STATUS_TO_SCALE = 0x80,        // Pending texture scaling in a later frame.
 		};
 
 		// Status, but int so we can zero initialize.
@@ -168,6 +167,8 @@ public:
 		bool Matches(u16 dim2, u8 format2, int maxLevel2);
 	};
 
+	void SetFramebufferSamplingParams(u16 bufferWidth, u16 bufferHeight);
+
 private:
 	typedef std::map<u64, TexCacheEntry> TexCache;
 
@@ -175,6 +176,7 @@ private:
 	void DeleteTexture(TexCache::iterator it);
 	void *UnswizzleFromMem(const u8 *texptr, u32 bufw, u32 bytesPerPixel, u32 level);
 	void *ReadIndexedTex(int level, const u8 *texptr, int bytesPerIndex, GLuint dstFmt, int bufw);
+	void GetSamplingParams(int &minFilt, int &magFilt, bool &sClamp, bool &tClamp, float &lodBias, int maxLevel);
 	void UpdateSamplingParams(TexCacheEntry &entry, bool force);
 	void LoadTextureLevel(TexCacheEntry &entry, int level, bool replaceImages, int scaleFactor, GLenum dstFmt);
 	GLenum GetDestFormat(GETextureFormat format, GEPaletteFormat clutFormat) const;
@@ -184,7 +186,7 @@ private:
 	const T *GetCurrentClut();
 	u32 GetCurrentClutHash();
 	void UpdateCurrentClut();
-	void AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualFramebuffer *framebuffer, bool exactMatch);
+	bool AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualFramebuffer *framebuffer, u32 texaddrOffset = 0);
 	void DetachFramebuffer(TexCacheEntry *entry, u32 address, VirtualFramebuffer *framebuffer);
 	void SetTextureFramebuffer(TexCacheEntry *entry, VirtualFramebuffer *framebuffer);
 
@@ -227,6 +229,9 @@ private:
 	float maxAnisotropyLevel;
 
 	int decimationCounter_;
+	int texelsScaledThisFrame_;
+	int timesInvalidatedAllThisFrame_;
+
 	FramebufferManager *framebufferManager_;
 	DepalShaderCache *depalShaderCache_;
 	ShaderManager *shaderManager_;

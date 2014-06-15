@@ -313,6 +313,7 @@ struct GPUgstate
 	bool isClutIndexSimple() const { return (clutformat & ~3) == 0xC500FF00; } // Meaning, no special mask, shift, or start pos.
 	bool isTextureSwizzled() const { return texmode & 1; }
 	bool isClutSharedForMipmaps() const { return (texmode & 0x100) == 0; }
+	int getTextureMaxLevel() const { return (texmode >> 16) & 0x7; }
 
 	// Lighting
 	bool isLightingEnabled() const { return lightingEnable & 1; }
@@ -474,6 +475,9 @@ struct GPUStateCache
 
 	u32 curRTWidth;
 	u32 curRTHeight;
+	u32 curRTRenderWidth;
+	u32 curRTRenderHeight;
+	u32 cutRTOffsetX;
 
 	u32 getRelativeAddress(u32 data) const;
 	void DoState(PointerWrap &p);

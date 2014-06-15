@@ -162,8 +162,8 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_STENCILTESTENABLE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_ALPHABLENDENABLE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_BLENDMODE, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_BLENDFIXEDA, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTEONCHANGE, &GLES_GPU::Execute_BlendFixA},
-	{GE_CMD_BLENDFIXEDB, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTEONCHANGE, &GLES_GPU::Execute_BlendFixB},
+	{GE_CMD_BLENDFIXEDA, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_BLENDFIXEDB, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_MASKRGB, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_MASKALPHA, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_ZTEST, FLAG_FLUSHBEFOREONCHANGE},
@@ -391,22 +391,13 @@ GLES_GPU::CommandInfo GLES_GPU::cmdInfo_[256];
 
 GLES_GPU::GLES_GPU()
 : resized_(false) {
-#ifdef _WIN32
-	lastVsync_ = g_Config.bVSync ? 1 : 0;
-	// Disabled EXT_swap_control_tear for now, it never seems to settle at the correct timing
-	// so it just keeps tearing. Not what I hoped for...
-	//if (false && gl_extensions.EXT_swap_control_tear) {
-		// See http://developer.download.nvidia.com/opengl/specs/WGL_EXT_swap_control_tear.txt
-	//	glstate.SetVSyncInterval(g_Config.bVSync ? -1 :0);
-	//} else {
-		glstate.SetVSyncInterval(g_Config.bVSync ? 1 : 0);
-	//}
-#endif
+	UpdateVsyncInterval(true);
 
 	shaderManager_ = new ShaderManager();
 	transformDraw_.SetShaderManager(shaderManager_);
 	transformDraw_.SetTextureCache(&textureCache_);
 	transformDraw_.SetFramebufferManager(&framebufferManager_);
+	framebufferManager_.Init();
 	framebufferManager_.SetTextureCache(&textureCache_);
 	framebufferManager_.SetShaderManager(shaderManager_);
 	framebufferManager_.SetTransformDrawEngine(&transformDraw_);
@@ -457,6 +448,8 @@ GLES_GPU::GLES_GPU()
 	}
 
 	BuildReportingInfo();
+	// Update again after init to be sure of any silly driver problems.
+	UpdateVsyncInterval(true);
 }
 
 GLES_GPU::~GLES_GPU() {
@@ -501,6 +494,8 @@ void GLES_GPU::DeviceLost() {
 	textureCache_.Clear(false);
 	depalShaderCache_.Clear();
 	framebufferManager_.DeviceLost();
+
+	UpdateVsyncInterval(true);
 }
 
 void GLES_GPU::InitClear() {
@@ -526,17 +521,24 @@ void GLES_GPU::BeginFrame() {
 	ScheduleEvent(GPU_EVENT_BEGIN_FRAME);
 }
 
-void GLES_GPU::BeginFrameInternal() {
+inline void GLES_GPU::UpdateVsyncInterval(bool force) {
 #ifdef _WIN32
-	// Turn off vsync when unthrottled
 	int desiredVSyncInterval = g_Config.bVSync ? 1 : 0;
-	if ((PSP_CoreParameter().unthrottle) || (PSP_CoreParameter().fpsLimit == 1))
+	if (PSP_CoreParameter().unthrottle) {
 		desiredVSyncInterval = 0;
-	if (desiredVSyncInterval != lastVsync_) {
+	}
+	if (PSP_CoreParameter().fpsLimit == 1) {
+		// For an alternative speed that is a clean factor of 60, the user probably still wants vsync.
+		if (g_Config.iFpsLimit == 0 || (g_Config.iFpsLimit != 15 && g_Config.iFpsLimit != 30 && g_Config.iFpsLimit != 60)) {
+			desiredVSyncInterval = 0;
+		}
+	}
+
+	if (desiredVSyncInterval != lastVsync_ || force) {
 		// Disabled EXT_swap_control_tear for now, it never seems to settle at the correct timing
 		// so it just keeps tearing. Not what I hoped for...
-		//if (false && gl_extensions.EXT_swap_control_tear) {
-			// See http://developer.download.nvidia.com/opengl/specs/WGL_EXT_swap_control_tear.txt
+		//if (gl_extensions.EXT_swap_control_tear) {
+		//	// See http://developer.download.nvidia.com/opengl/specs/WGL_EXT_swap_control_tear.txt
 		//	glstate.SetVSyncInterval(-desiredVSyncInterval);
 		//} else {
 			glstate.SetVSyncInterval(desiredVSyncInterval);
@@ -544,6 +546,11 @@ void GLES_GPU::BeginFrameInternal() {
 		lastVsync_ = desiredVSyncInterval;
 	}
 #endif
+}
+
+void GLES_GPU::BeginFrameInternal() {
+	UpdateVsyncInterval(resized_);
+	resized_ = false;
 
 	textureCache_.StartFrame();
 	transformDraw_.DecimateTrackedVertexArrays();
@@ -1096,14 +1103,6 @@ void GLES_GPU::Execute_ColorRef(u32 op, u32 diff) {
 	shaderManager_->DirtyUniform(DIRTY_ALPHACOLORREF);
 }
 
-void GLES_GPU::Execute_BlendFixA(u32 op, u32 diff) {
-	shaderManager_->DirtyUniform(DIRTY_BLENDFIX);
-}
-
-void GLES_GPU::Execute_BlendFixB(u32 op, u32 diff) {
-	shaderManager_->DirtyUniform(DIRTY_BLENDFIX);
-}
-
 void GLES_GPU::Execute_WorldMtxNum(u32 op, u32 diff) {
 	// This is almost always followed by GE_CMD_WORLDMATRIXDATA.
 	const u32_le *src = (const u32_le *)Memory::GetPointer(currentList->pc + 4);
@@ -1634,11 +1633,7 @@ void GLES_GPU::ExecuteOpInternal(u32 op, u32 diff) {
 		break;
 
 	case GE_CMD_BLENDFIXEDA:
-		Execute_BlendFixA(op, diff);
-		break;
-
 	case GE_CMD_BLENDFIXEDB:
-		Execute_BlendFixB(op, diff);
 		break;
 
 	case GE_CMD_ALPHATESTENABLE:
@@ -2097,6 +2092,7 @@ void GLES_GPU::ClearCacheNextFrame() {
 }
 
 void GLES_GPU::Resized() {
+	resized_ = true;
 	framebufferManager_.Resized();
 }
 
@@ -2136,17 +2132,31 @@ bool GLES_GPU::GetCurrentStencilbuffer(GPUDebugBuffer &buffer) {
 	return framebufferManager_.GetCurrentStencilbuffer(buffer);
 }
 
-bool GLES_GPU::GetCurrentTexture(GPUDebugBuffer &buffer) {
+bool GLES_GPU::GetCurrentTexture(GPUDebugBuffer &buffer, int level) {
 	if (!gstate.isTextureMapEnabled()) {
 		return false;
 	}
 
 #ifndef USING_GLES2
+	GPUgstate saved;
+	if (level != 0) {
+		saved = gstate;
+
+		// The way we set textures is a bit complex.  Let's just override level 0.
+		gstate.texsize[0] = gstate.texsize[level];
+		gstate.texaddr[0] = gstate.texaddr[level];
+		gstate.texbufwidth[0] = gstate.texbufwidth[level];
+	}
+
 	textureCache_.SetTexture(true);
-	int w = gstate.getTextureWidth(0);
-	int h = gstate.getTextureHeight(0);
+	int w = gstate.getTextureWidth(level);
+	int h = gstate.getTextureHeight(level);
 	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
 	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
+
+	if (level != 0) {
+		gstate = saved;
+	}
 
 	buffer.Allocate(w, h, GE_FORMAT_8888, gstate_c.flipTexture);
 	glPixelStorei(GL_PACK_ALIGNMENT, 4);

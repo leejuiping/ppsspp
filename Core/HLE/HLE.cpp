@@ -481,7 +481,7 @@ const HLEFunction *GetSyscallInfo(MIPSOpcode op)
 		ERROR_LOG(HLE, "Unknown syscall: Module: %s", modulenum > (int) moduleDB.size() ? "(unknown)" : moduleDB[modulenum].name); 
 		return NULL;
 	}
-	if (modulenum >= moduleDB.size()) {
+	if (modulenum >= (int)moduleDB.size()) {
 		ERROR_LOG(HLE, "Syscall had bad module number %i - probably executing garbage", modulenum);
 		return NULL;
 	}
@@ -508,6 +508,12 @@ void *GetQuickSyscallFunc(MIPSOpcode op)
 	if (info->flags != 0)
 		return (void *)&CallSyscallWithFlags;
 	return (void *)&CallSyscallWithoutFlags;
+}
+
+static double hleSteppingTime = 0.0;
+void hleSetSteppingTime(double t)
+{
+	hleSteppingTime += t;
 }
 
 void CallSyscall(MIPSOpcode op)
@@ -540,6 +546,8 @@ void CallSyscall(MIPSOpcode op)
 		u32 callno = (op >> 6) & 0xFFFFF; //20 bits
 		int funcnum = callno & 0xFFF;
 		int modulenum = (callno & 0xFF000) >> 12;
-		updateSyscallStats(modulenum, funcnum, time_now_d() - start);
+		double total = time_now_d() - start - hleSteppingTime;
+		hleSteppingTime = 0.0;
+		updateSyscallStats(modulenum, funcnum, total);
 	}
 }

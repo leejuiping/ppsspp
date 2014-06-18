@@ -4,8 +4,6 @@ TARGET = PPSSPPQt
 QT += core gui opengl
 include(Settings.pri)
 
-!release:symbian:MMP_RULES += "DEBUGGABLE"
-
 lessThan(QT_MAJOR_VERSION, 5) {
 	lessThan(QT_MAJOR_VERSION, 4) | lessThan(QT_MINOR_VERSION, 7) {
 		error(PPSSPP requires Qt 4.7 or newer but Qt $$[QT_VERSION] was detected.)
@@ -110,11 +108,15 @@ INCLUDEPATH += $$P $$P/Common $$P/native $$P/native/ext
 
 # Use forms UI for desktop platforms
 !mobile_platform {
-	SOURCES += $$P/Qt/*.cpp
-	HEADERS += $$P/Qt/*.h
-	FORMS += $$P/Qt/*.ui
+	# TODO: Rewrite Debugger with same backend as Windows version
+	# Don't use .ui forms. Use Qt5 + C++11 features to minimise code
+	SOURCES += $$P/Qt/*.cpp $$P/Qt/Debugger/*.cpp
+	HEADERS += $$P/Qt/*.h $$P/Qt/Debugger/*.h
+	FORMS += $$P/Qt/Debugger/*.ui
 	RESOURCES += $$P/Qt/desktop_assets.qrc
-	INCLUDEPATH += $$P/Qt
+	INCLUDEPATH += $$P/Qt $$P/Qt/Debugger
+	
+	# Creating translations should be done by Qt, really
 	LREL_TOOL = $$[QT_INSTALL_BINS]/lrelease
 	greaterThan(QT_MAJOR_VERSION, 4) {
 		exists($${LREL_TOOL}-qt5): LREL_TOOL=$${LREL_TOOL}-qt5
@@ -147,6 +149,7 @@ symbian {
 	ICON = $$P/assets/icon.svg
 
 	DEPLOYMENT += vendor_deploy
+	MMP_RULES += "DEBUGGABLE"
 
 	# 268 MB maximum
 	TARGET.EPOCHEAPSIZE = 0x40000 0x10000000

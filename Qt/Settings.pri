@@ -30,7 +30,10 @@ win32-msvc* {
 	QMAKE_CXXFLAGS += -ffast-math -fno-strict-aliasing
 	greaterThan(QT_MAJOR_VERSION,4): CONFIG+=c++11
 	else: QMAKE_CXXFLAGS += -std=c++11
-	QMAKE_CXXFLAGS += -O3
+	QMAKE_CFLAGS_RELEASE ~= s/-O.*/
+	QMAKE_CXXFLAGS_RELEASE ~= s/-O.*/
+	QMAKE_CFLAGS_RELEASE += -O3
+	QMAKE_CXXFLAGS_RELEASE += -O3
 }
 # Arch specific
 xarch = $$find(QT_ARCH, "86")
@@ -42,21 +45,26 @@ macx|contains(QT_ARCH, windows)|count(xarch, 1) {
 }
 arm:!symbian {
 	CONFIG += armv7
-	QMAKE_CFLAGS += -march=armv7-a -mtune=cortex-a8 -mfpu=neon -ftree-vectorize -ffast-math -mfloat-abi=softfp
-	QMAKE_CXXFLAGS += -march=armv7-a -mtune=cortex-a8 -mfpu=neon -ftree-vectorize -ffast-math -mfloat-abi=softfp
+	QMAKE_CFLAGS_RELEASE ~= s/-mfpu.*/
+	QMAKE_CFLAGS_DEBUG ~= s/-mfpu.*/
+	QMAKE_CFLAGS_RELEASE += -march=armv7-a -mtune=cortex-a8 -mfpu=neon -ftree-vectorize -ffast-math
+	QMAKE_CFLAGS_DEBUG += -march=armv7-a -mtune=cortex-a8 -mfpu=neon -ftree-vectorize -ffast-math
+	QMAKE_CXXFLAGS_RELEASE += -march=armv7-a -mtune=cortex-a8 -mfpu=neon -ftree-vectorize -ffast-math
+	QMAKE_CXXFLAGS_DEBUG += -march=armv7-a -mtune=cortex-a8 -mfpu=neon -ftree-vectorize -ffast-math
 }
 
-gleslib = $$find(QT_CONFIG, "opengles")
-count(gleslib,0) { # OpenGL
-	INCLUDEPATH += $$P/native/ext/glew
-} else {
-	DEFINES += USING_GLES2 MOBILE_DEVICE
-	CONFIG += mobile_platform
+contains(QT_CONFIG, opengles.) {
+	DEFINES += USING_GLES2
+	# How else do we know if the environment prefers windows?
+	!linux|android|maemo {
+		DEFINES += MOBILE_DEVICE
+		CONFIG += mobile_platform
+	}
 }
 
 # Platform specific
-contains(MEEGO_EDITION,harmattan): DEFINES += MEEGO_EDITION_HARMATTAN "_SYS_UCONTEXT_H=1"
-maemo5: DEFINES += MAEMO
+contains(MEEGO_EDITION,harmattan): DEFINES += "_SYS_UCONTEXT_H=1"
+maemo: DEFINES += MAEMO
 
 macx: INCLUDEPATH += $$P/ffmpeg/macosx/x86_64/include
 ios: INCLUDEPATH += $$P/ffmpeg/ios/universal/include
@@ -68,11 +76,17 @@ android {
 linux:!android {
 	arm: INCLUDEPATH += $$P/ffmpeg/linux/armv7/include
 	else {
-		contains(QT_ARCH, x86_64): QMAKE_TARGET.arch = x86_64
+		contains(QT_ARCH, x86_64) QMAKE_TARGET.arch = x86_64
 		else: QMAKE_TARGET.arch = x86
 		INCLUDEPATH += $$P/ffmpeg/linux/$${QMAKE_TARGET.arch}/include
 	}
 }
+# Fix 32-bit/64-bit defines
+!arm {
+	contains(QMAKE_TARGET.arch, x86_64): DEFINES += _M_X64
+	else: DEFINES += _M_IX86
+}
+
 qnx {
 	# Use mkspec: unsupported/qws/qnx-armv7-g++
 	DEFINES += BLACKBERRY "_QNX_SOURCE=1" "_C99=1"

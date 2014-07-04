@@ -54,7 +54,7 @@ extern bool iosCanUseJit;
 #endif
 
 void GameSettingsScreen::CreateViews() {
-	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, true);
+	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, GAMEINFO_WANTBG | GAMEINFO_WANTSIZE);
 
 	cap60FPS_ = g_Config.iForceMaxEmulatedFPS == 60;
 
@@ -156,7 +156,7 @@ void GameSettingsScreen::CreateViews() {
 	hwTransform->SetEnabledPtr(&hwTransformEnable);
 
 	CheckBox *swSkin = graphicsSettings->Add(new CheckBox(&g_Config.bSoftwareSkinning, gs->T("Software Skinning")));
-	swSkinningEnable = !PSP_IsInited() && !g_Config.bSoftwareRendering;
+	swSkinningEnable = !g_Config.bSoftwareRendering;
 	swSkin->SetEnabledPtr(&swSkinningEnable);
 
 	CheckBox *vtxCache = graphicsSettings->Add(new CheckBox(&g_Config.bVertexCache, gs->T("Vertex Cache")));
@@ -243,7 +243,7 @@ void GameSettingsScreen::CreateViews() {
 	depthWrite->SetEnabledPtr(&depthWriteEnable);
 
 	CheckBox *prescale = graphicsSettings->Add(new CheckBox(&g_Config.bPrescaleUV, gs->T("Texture Coord Speedhack")));
-	prescaleEnable = !PSP_IsInited() && !g_Config.bSoftwareRendering;
+	prescaleEnable = !g_Config.bSoftwareRendering;
 	prescale->SetEnabledPtr(&prescaleEnable);
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Overlay Information")));
@@ -379,7 +379,8 @@ void GameSettingsScreen::CreateViews() {
 #endif
 
 	systemSettings->Add(new CheckBox(&g_Config.bCheckForNewVersion, s->T("VersionCheck", "Check for new versions of PPSSPP")));
-	systemSettings->Add(new Choice(s->T("Clear Recent Games List")))->OnClick.Handle(this, &GameSettingsScreen::OnClearRecents);
+	if (g_Config.iMaxRecent > 0)
+		systemSettings->Add(new Choice(s->T("Clear Recent Games List")))->OnClick.Handle(this, &GameSettingsScreen::OnClearRecents);
 	systemSettings->Add(new Choice(s->T("Restore Default Settings")))->OnClick.Handle(this, &GameSettingsScreen::OnRestoreDefaultSettings);
 	systemSettings->Add(new CheckBox(&g_Config.bEnableAutoLoad, s->T("Auto Load Newest Savestate")));
 
@@ -422,12 +423,12 @@ void GameSettingsScreen::CreateViews() {
 }
 
 UI::EventReturn GameSettingsScreen::OnSoftwareRendering(UI::EventParams &e) {
-	prescaleEnable = !PSP_IsInited() && !g_Config.bSoftwareRendering;
+	prescaleEnable = !g_Config.bSoftwareRendering;
 	depthWriteEnable = !g_Config.bSoftwareRendering;
 	stencilTestEnable = !g_Config.bSoftwareRendering;
 	beziersEnable = !g_Config.bSoftwareRendering;
 	texSecondaryEnable = !g_Config.bSoftwareRendering;
-	swSkinningEnable = !PSP_IsInited() && !g_Config.bSoftwareRendering;
+	swSkinningEnable = !g_Config.bSoftwareRendering;
 	hwTransformEnable = !g_Config.bSoftwareRendering;
 	vtxCacheEnable = hwTransformEnable && g_Config.bHardwareTransform;
 	texBackoffEnable = !g_Config.bSoftwareRendering;

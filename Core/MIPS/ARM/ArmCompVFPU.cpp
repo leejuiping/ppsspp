@@ -742,25 +742,55 @@ namespace MIPSComp
 			case 27: //VFPU3
 				switch ((op >> 23) & 7)	{
 				case 2:  // vmin
+				{
 					VCMP(fpr.V(sregs[i]), fpr.V(tregs[i]));
 					VMRS_APSR();
-					// TODO: Technically should use NaN sign bit.
+					FixupBranch skipNAN = B_CC(CC_VC);
+					VMOV(SCRATCHREG1, fpr.V(sregs[i]));
+					VMOV(SCRATCHREG2, fpr.V(tregs[i]));
+					// If both are negative, we reverse the comparison.  We want the highest mantissa then.
+					// Also, between -NAN and -5.0, we want -NAN to be less.
+					TST(SCRATCHREG1, SCRATCHREG2);
+					FixupBranch cmpPositive = B_CC(CC_PL);
+					CMP(SCRATCHREG2, SCRATCHREG1);
+					FixupBranch skipPositive = B();
+					SetJumpTarget(cmpPositive);
+					CMP(SCRATCHREG1, SCRATCHREG2);
+					SetJumpTarget(skipPositive);
+					SetCC(CC_AL);
+					SetJumpTarget(skipNAN);
 					SetCC(CC_LT);
 					VMOV(fpr.V(tempregs[i]), fpr.V(sregs[i]));
 					SetCC(CC_GE);
 					VMOV(fpr.V(tempregs[i]), fpr.V(tregs[i]));
 					SetCC(CC_AL);
 					break;
+				}
 				case 3:  // vmax
+				{
 					VCMP(fpr.V(tregs[i]), fpr.V(sregs[i]));
 					VMRS_APSR();
-					// TODO: Technically should use NaN sign bit.
+					FixupBranch skipNAN = B_CC(CC_VC);
+					VMOV(SCRATCHREG1, fpr.V(sregs[i]));
+					VMOV(SCRATCHREG2, fpr.V(tregs[i]));
+					// If both are negative, we reverse the comparison.  We want the lowest mantissa then.
+					// Also, between -NAN and -5.0, we want -5.0 to be greater.
+					TST(SCRATCHREG2, SCRATCHREG1);
+					FixupBranch cmpPositive = B_CC(CC_PL);
+					CMP(SCRATCHREG1, SCRATCHREG2);
+					FixupBranch skipPositive = B();
+					SetJumpTarget(cmpPositive);
+					CMP(SCRATCHREG2, SCRATCHREG1);
+					SetJumpTarget(skipPositive);
+					SetCC(CC_AL);
+					SetJumpTarget(skipNAN);
 					SetCC(CC_LT);
 					VMOV(fpr.V(tempregs[i]), fpr.V(sregs[i]));
 					SetCC(CC_GE);
 					VMOV(fpr.V(tempregs[i]), fpr.V(tregs[i]));
 					SetCC(CC_AL);
 					break;
+				}
 				case 6:  // vsge
 					DISABLE;  // pending testing
 					VCMP(fpr.V(tregs[i]), fpr.V(sregs[i]));
@@ -1150,7 +1180,7 @@ namespace MIPSComp
 		for (int i = 0; i < n; i++) {
 			fpr.MapDirtyInV(tempregs[i], sregs[i]);
 			switch ((op >> 21) & 0x1f) {
-			case 16: /* TODO */ break; //n  (round_vfpu_n causes issue #3011 but seems right according to tests...)
+			case 16: /* TODO */ break; //n
 			case 17:
 				if (mult != 1.0f) {
 					VMUL(S0, fpr.V(sregs[i]), S1);
@@ -1190,12 +1220,16 @@ namespace MIPSComp
 					gpr.MapReg(rt, MAP_NOINIT | MAP_DIRTY);
 					VMOV(gpr.R(rt), fpr.V(imm));
 				} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc
-					// In case we have a saved prefix.
-					FlushPrefixV();
 					if (imm - 128 == VFPU_CTRL_CC) {
-						gpr.MapDirtyIn(rt, MIPS_REG_VFPUCC);
-						MOV(gpr.R(rt), gpr.R(MIPS_REG_VFPUCC));
+						if (gpr.IsImm(MIPS_REG_VFPUCC)) {
+							gpr.SetImm(rt, gpr.GetImm(MIPS_REG_VFPUCC));
+						} else {
+							gpr.MapDirtyIn(rt, MIPS_REG_VFPUCC);
+							MOV(gpr.R(rt), gpr.R(MIPS_REG_VFPUCC));
+						}
 					} else {
+						// In case we have a saved prefix.
+						FlushPrefixV();
 						gpr.MapReg(rt, MAP_NOINIT | MAP_DIRTY);
 						LDR(gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
 					}
@@ -1213,8 +1247,12 @@ namespace MIPSComp
 				VMOV(fpr.V(imm), gpr.R(rt));
 			} else if (imm < 128 + VFPU_CTRL_MAX) { //mtvc //currentMIPS->vfpuCtrl[imm - 128] = R(rt);
 				if (imm - 128 == VFPU_CTRL_CC) {
-					gpr.MapDirtyIn(MIPS_REG_VFPUCC, rt);
-					MOV(gpr.R(MIPS_REG_VFPUCC), gpr.R(rt));
+					if (gpr.IsImm(rt)) {
+						gpr.SetImm(MIPS_REG_VFPUCC, gpr.GetImm(rt));
+					} else {
+						gpr.MapDirtyIn(MIPS_REG_VFPUCC, rt);
+						MOV(gpr.R(MIPS_REG_VFPUCC), gpr.R(rt));
+					}
 				} else {
 					gpr.MapReg(rt);
 					STR(gpr.R(rt), CTXREG, offsetof(MIPSState, vfpuCtrl) + 4 * (imm - 128));
@@ -1252,8 +1290,13 @@ namespace MIPSComp
 		int imm = op & 0xFF;
 		if (imm >= 128 && imm < 128 + VFPU_CTRL_MAX) {
 			fpr.MapRegV(vs);
-			ADDI2R(SCRATCHREG1, CTXREG, offsetof(MIPSState, vfpuCtrl[0]) + (imm - 128) * 4, SCRATCHREG2);
-			VSTR(fpr.V(vs), SCRATCHREG1, 0);
+			if (imm - 128 == VFPU_CTRL_CC) {
+				gpr.MapReg(MIPS_REG_VFPUCC, MAP_DIRTY | MAP_NOINIT);
+				VMOV(gpr.R(MIPS_REG_VFPUCC), fpr.V(vs));
+			} else {
+				ADDI2R(SCRATCHREG1, CTXREG, offsetof(MIPSState, vfpuCtrl[0]) + (imm - 128) * 4, SCRATCHREG2);
+				VSTR(fpr.V(vs), SCRATCHREG1, 0);
+			}
 			fpr.ReleaseSpillLocksAndDiscardTemps();
 
 			if (imm - 128 == VFPU_CTRL_SPREFIX) {

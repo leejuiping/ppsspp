@@ -58,6 +58,7 @@ enum {
 
 struct VirtualFramebuffer {
 	int last_frame_used;
+	int last_frame_attached;
 	int last_frame_render;
 	bool memoryUpdated;
 	bool depthUpdated;
@@ -225,7 +226,7 @@ public:
 	inline bool ShouldDownloadFramebuffer(const VirtualFramebuffer *vfb) const;
 
 	bool NotifyFramebufferCopy(u32 src, u32 dest, int size, bool isMemset = false);
-	bool NotifyStencilUpload(u32 addr, int size);
+	bool NotifyStencilUpload(u32 addr, int size, bool skipZero = false);
 
 	void DestroyFramebuf(VirtualFramebuffer *vfb);
 	void ResizeFramebufFBO(VirtualFramebuffer *vfb, u16 w, u16 h, bool force = false);

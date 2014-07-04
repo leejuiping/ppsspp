@@ -36,6 +36,7 @@ public:
 	GLES_GPU();
 	~GLES_GPU();
 	virtual void InitClear();
+	virtual void Reinitialize();
 	virtual void PreExecuteOp(u32 op, u32 diff);
 	void ExecuteOpInternal(u32 op, u32 diff);
 	virtual void ExecuteOp(u32 op, u32 diff);
@@ -59,6 +60,7 @@ public:
 	// Called by the window system if the window size changed. This will be reflected in PSPCoreParam.pixel*.
 	virtual void Resized();
 	virtual void ClearShaderCache();
+	virtual void CleanupBeforeUI();
 	virtual bool DecodeTexture(u8* dest, GPUgstate state) {
 		return textureCache_.DecodeTexture(dest, state);
 	}
@@ -92,6 +94,7 @@ public:
 	void Execute_Spline(u32 op, u32 diff);
 	void Execute_BoundingBox(u32 op, u32 diff);
 	void Execute_VertexType(u32 op, u32 diff);
+	void Execute_VertexTypeSkinning(u32 op, u32 diff);
 	void Execute_Region(u32 op, u32 diff);
 	void Execute_Scissor(u32 op, u32 diff);
 	void Execute_FramebufType(u32 op, u32 diff);
@@ -160,7 +163,9 @@ private:
 	void PerformMemorySetInternal(u32 dest, u8 v, int size);
 	void PerformStencilUploadInternal(u32 dest, int size);
 	void InvalidateCacheInternal(u32 addr, int size, GPUInvalidationType type);
+	void ReinitializeInternal();
 	inline void UpdateVsyncInterval(bool force);
+	void UpdateCmdInfo();
 
 	static CommandInfo cmdInfo_[256];
 

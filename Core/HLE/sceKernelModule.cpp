@@ -26,6 +26,7 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/HLETables.h"
+#include "Core/HLE/ReplaceTables.h"
 #include "Core/Reporting.h"
 #include "Core/Host.h"
 #include "Core/MIPS/MIPS.h"
@@ -473,7 +474,7 @@ void WriteVarSymbol(u32 exportAddress, u32 relocAddress, u8 type, bool reverse =
 	static std::vector<HI16RelocInfo> lastHI16Relocs;
 	static bool lastHI16Processed = true;
 
-	u32 relocData = Memory::Read_Instruction(relocAddress).encoding;
+	u32 relocData = Memory::Read_Instruction(relocAddress, true).encoding;
 
 	switch (type)
 	{
@@ -518,7 +519,7 @@ void WriteVarSymbol(u32 exportAddress, u32 relocAddress, u8 type, bool reverse =
 		// The R_MIPS_LO16 and R_MIPS_HI16 will often be *different* relocAddress values.
 		HI16RelocInfo reloc;
 		reloc.addr = relocAddress;
-		reloc.data = Memory::Read_Instruction(relocAddress).encoding;
+		reloc.data = Memory::Read_Instruction(relocAddress, true).encoding;
 		lastHI16Relocs.push_back(reloc);
 		lastHI16Processed = false;
 		break;
@@ -531,10 +532,10 @@ void WriteVarSymbol(u32 exportAddress, u32 relocAddress, u8 type, bool reverse =
 
 			// The ABI requires that these come in pairs, at least.
 			if (lastHI16Relocs.empty()) {
-				ERROR_LOG_REPORT(LOADER, "LO16 without any HI16 variable import at %08x for %08x", relocAddress, exportAddress)
+				ERROR_LOG_REPORT(LOADER, "LO16 without any HI16 variable import at %08x for %08x", relocAddress, exportAddress);
 			// Try to process at least the low relocation...
 			} else if (lastHI16ExportAddress != exportAddress) {
-				ERROR_LOG_REPORT(LOADER, "HI16 and LO16 imports do not match at %08x for %08x (should be %08x)", relocAddress, lastHI16ExportAddress, exportAddress)
+				ERROR_LOG_REPORT(LOADER, "HI16 and LO16 imports do not match at %08x for %08x (should be %08x)", relocAddress, lastHI16ExportAddress, exportAddress);
 			} else {
 				// Process each of the HI16.  Usually there's only one.
 				for (auto it = lastHI16Relocs.begin(), end = lastHI16Relocs.end(); it != end; ++it)
@@ -1365,7 +1366,7 @@ Module *__KernelLoadModule(u8 *fileptr, SceKernelLMOption *options, std::string 
 			size_t size = offsets[6] - offsets[5];
 			temp = new u8[size];
 			memcpy(temp, fileptr + offsets[5], size);
-			INFO_LOG(LOADER, "Elf unaligned, aligning!")
+			INFO_LOG(LOADER, "Elf unaligned, aligning!");
 		}
 
 		module = __KernelLoadELFFromPtr(temp ? temp : fileptr + offsets[5], PSP_GetDefaultLoadAddress(), error_string, &magic);
@@ -1439,9 +1440,11 @@ bool __KernelLoadExec(const char *filename, u32 paramPtr, std::string *error_str
 	// Wipe kernel here, loadexec should reset the entire system
 	if (__KernelIsRunning())
 	{
+		Replacement_Shutdown();
 		__KernelShutdown();
 		//HLE needs to be reset here
 		HLEShutdown();
+		Replacement_Init();
 		HLEInit();
 		GPU_Reinitialize();
 	}
@@ -1621,14 +1624,14 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr)
 
 		if (info.name == "BOOT.BIN")
 		{
-			NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we try __KernelLoadExec", name)
+			NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we try __KernelLoadExec", name);
 			return __KernelLoadExec(name, 0, &error_string);
 		}
 		else
 		{
 			// Module was blacklisted or couldn't be decrypted, which means it's a kernel module we don't want to run..
 			// Let's just act as if it worked.
-			NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we lie about success", name)
+			NOTICE_LOG(LOADER, "Module %s is blacklisted or undecryptable - we lie about success", name);
 			return 1;
 		}
 	}
@@ -1842,21 +1845,26 @@ u32 sceKernelUnloadModule(u32 moduleId)
 	return moduleId;
 }
 
-u32 sceKernelStopUnloadSelfModuleWithStatus(u32 exitCode, u32 argSize, u32 argp, u32 statusAddr, u32 optionAddr) {
+u32 hleKernelStopUnloadSelfModuleWithOrWithoutStatus(u32 exitCode, u32 argSize, u32 argp, u32 statusAddr, u32 optionAddr, bool WithStatus) {
 	if (loadedModules.size() > 1) {
-		ERROR_LOG_REPORT(SCEMODULE, "UNIMPL sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): game may have crashed", exitCode, argSize, argp, statusAddr, optionAddr);
-
+		if (WithStatus)
+			ERROR_LOG_REPORT(SCEMODULE, "UNIMPL sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): game may have crashed", exitCode, argSize, argp, statusAddr, optionAddr);
+		else
+			ERROR_LOG_REPORT(SCEMODULE, "UNIMPL sceKernelStopUnloadSelfModule(%08x, %08x, %08x, %08x): game may have crashed", argSize, argp, statusAddr, optionAddr);
 		SceUID moduleID = __KernelGetCurThreadModuleId();
 		u32 priority = 0x20;
 		u32 stacksize = 0x40000;
 		u32 attr = 0;
-
 		// TODO: In a lot of cases (even for errors), this should resched.  Needs testing.
 
 		u32 error;
 		Module *module = kernelObjects.Get<Module>(moduleID, error);
 		if (!module) {
-			ERROR_LOG(SCEMODULE, "sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): invalid module id", exitCode, argSize, argp, statusAddr, optionAddr);
+			if (WithStatus)
+				ERROR_LOG(SCEMODULE, "sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): invalid module id", exitCode, argSize, argp, statusAddr, optionAddr);
+			else
+				ERROR_LOG(SCEMODULE, "sceKernelStopUnloadSelfModule(%08x, %08x, %08x, %08x): invalid module id", argSize, argp, statusAddr, optionAddr);
+			
 			return error;
 		}
 
@@ -1893,22 +1901,39 @@ u32 sceKernelStopUnloadSelfModuleWithStatus(u32 exitCode, u32 argSize, u32 argp,
 			module->nm.status = MODULE_STATUS_UNLOADING;
 			module->waitingThreads.push_back(mwt);
 		} else if (stopFunc == 0) {
-			INFO_LOG(SCEMODULE, "sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): no stop func", exitCode, argSize, argp, statusAddr, optionAddr);
+			if (WithStatus)
+				INFO_LOG(SCEMODULE, "sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): no stop func", exitCode, argSize, argp, statusAddr, optionAddr);
+			else
+				INFO_LOG(SCEMODULE, "sceKernelStopUnloadSelfModule(%08x, %08x, %08x, %08x): no stop func", argSize, argp, statusAddr, optionAddr);
 			sceKernelExitDeleteThread(exitCode);
 			module->Cleanup();
 			kernelObjects.Destroy<Module>(moduleID);
 		} else {
-			ERROR_LOG_REPORT(SCEMODULE, "sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): bad stop func address", exitCode, argSize, argp, statusAddr, optionAddr);
+			if (WithStatus)
+				ERROR_LOG_REPORT(SCEMODULE, "sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): bad stop func address", exitCode, argSize, argp, statusAddr, optionAddr);
+			else
+				ERROR_LOG_REPORT(SCEMODULE, "sceKernelStopUnloadSelfModule(%08x, %08x, %08x, %08x): bad stop func address", argSize, argp, statusAddr, optionAddr);
 			sceKernelExitDeleteThread(exitCode);
 			module->Cleanup();
 			kernelObjects.Destroy<Module>(moduleID);
 		}
 	} else {
-		ERROR_LOG_REPORT(SCEMODULE, "UNIMPL sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): game has likely crashed", exitCode, argSize, argp, statusAddr, optionAddr);
+		if (WithStatus)
+			ERROR_LOG_REPORT(SCEMODULE, "UNIMPL sceKernelStopUnloadSelfModuleWithStatus(%08x, %08x, %08x, %08x, %08x): game has likely crashed", exitCode, argSize, argp, statusAddr, optionAddr);
+		else
+			ERROR_LOG_REPORT(SCEMODULE, "UNIMPL sceKernelStopUnloadSelfModule(%08x, %08x, %08x, %08x): game has likely crashed", argSize, argp, statusAddr, optionAddr);
 	}
 
-	// Probably similar to sceKernelStopModule, but games generally call this when they die.
 	return 0;
+}
+
+u32 sceKernelStopUnloadSelfModule(u32 argSize, u32 argp, u32 statusAddr, u32 optionAddr) {
+	// Used in Tom Clancy's Splinter Cell Essentials,Ghost in the Shell Stand Alone Complex
+	return hleKernelStopUnloadSelfModuleWithOrWithoutStatus(0, argSize, argp, statusAddr, optionAddr, false);
+}
+
+u32 sceKernelStopUnloadSelfModuleWithStatus(u32 exitCode, u32 argSize, u32 argp, u32 statusAddr, u32 optionAddr) {
+	return hleKernelStopUnloadSelfModuleWithOrWithoutStatus(exitCode, argSize, argp, statusAddr, optionAddr, true);
 }
 
 void __KernelReturnFromModuleFunc()
@@ -1984,7 +2009,7 @@ u32 sceKernelGetModuleIdByAddress(u32 moduleAddr)
 
 	kernelObjects.Iterate(&__GetModuleIdByAddressIterator, &state);
 	if (state.result == (SceUID)SCE_KERNEL_ERROR_UNKNOWN_MODULE)
-		ERROR_LOG(SCEMODULE, "sceKernelGetModuleIdByAddress(%08x): module not found", moduleAddr)
+		ERROR_LOG(SCEMODULE, "sceKernelGetModuleIdByAddress(%08x): module not found", moduleAddr);
 	else
 		DEBUG_LOG(SCEMODULE, "%x=sceKernelGetModuleIdByAddress(%08x)", state.result, moduleAddr);
 	return state.result;
@@ -2192,7 +2217,7 @@ const HLEFunction ModuleMgrForUser[] =
 	{0x977DE386,&WrapU_CUU<sceKernelLoadModule>,"sceKernelLoadModule"},
 	{0xb7f46618,&WrapU_UUU<sceKernelLoadModuleByID>,"sceKernelLoadModuleByID"},
 	{0x50F0C1EC,&WrapV_UUUUU<sceKernelStartModule>,"sceKernelStartModule", HLE_NOT_IN_INTERRUPT | HLE_NOT_DISPATCH_SUSPENDED},
-	{0xD675EBB8,&sceKernelExitGame,"sceKernelSelfStopUnloadModule"}, //HACK
+	{0xD675EBB8,WrapU_UUUU<sceKernelStopUnloadSelfModule>, "sceKernelStopUnloadSelfModule"},
 	{0xd1ff982a,&WrapU_UUUUU<sceKernelStopModule>,"sceKernelStopModule", HLE_NOT_IN_INTERRUPT | HLE_NOT_DISPATCH_SUSPENDED},
 	{0x2e0911aa,WrapU_U<sceKernelUnloadModule>,"sceKernelUnloadModule"},
 	{0x710F61B5,0,"sceKernelLoadModuleMs"},

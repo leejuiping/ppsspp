@@ -336,7 +336,8 @@ public:
 	void ResetControlLayout();
 
 	void GetReportingInfo(UrlEncoder &data);
-
+	
+	
 private:
 	std::string iniFilename_;
 	std::string controllerIniFilename_;

@@ -263,7 +263,6 @@ inline void TransformDrawEngine::SetupVertexDecoderInternal(u32 vertType) {
 	const u32 vertTypeID = (vertType & 0xFFFFFF) | (gstate.getUVGenMode() << 24);
 
 	// If vtype has changed, setup the vertex decoder.
-	// TODO: Simply cache the setup decoders instead.
 	if (vertTypeID != lastVType_) {
 		dec_ = GetVertexDecoder(vertTypeID);
 		lastVType_ = vertTypeID;
@@ -331,16 +330,25 @@ void TransformDrawEngine::SubmitPrim(void *verts, void *inds, GEPrimitiveType pr
 		DecodeVertsStep();
 		decodeCounter_++;
 	}
+
+	if (prim == GE_PRIM_RECTANGLES && (gstate.getTextureAddress(0) & 0x3FFFFFFF) == (gstate.getFrameBufAddress() & 0x3FFFFFFF)) {
+		gstate_c.textureChanged |= TEXCHANGE_PARAMSONLY;
+		Flush();
+	}
 }
 
 void TransformDrawEngine::DecodeVerts() {
-	UVScale origUV;
-	if (uvScale)
-		origUV = gstate_c.uv;
-	for (; decodeCounter_ < numDrawCalls; decodeCounter_++) {
-		if (uvScale)
+	if (uvScale) {
+		const UVScale origUV = gstate_c.uv;
+		for (; decodeCounter_ < numDrawCalls; decodeCounter_++) {
 			gstate_c.uv = uvScale[decodeCounter_];
-		DecodeVertsStep();
+			DecodeVertsStep();
+		}
+		gstate_c.uv = origUV;
+	} else {
+		for (; decodeCounter_ < numDrawCalls; decodeCounter_++) {
+			DecodeVertsStep();
+		}
 	}
 	// Sanity check
 	if (indexGen.Prim() < 0) {
@@ -348,8 +356,6 @@ void TransformDrawEngine::DecodeVerts() {
 		// Force to points (0)
 		indexGen.AddPrim(GE_PRIM_POINTS, 0);
 	}
-	if (uvScale)
-		gstate_c.uv = origUV;
 }
 
 void TransformDrawEngine::DecodeVertsStep() {
@@ -765,6 +771,23 @@ rotateVBO:
 #ifndef MOBILE_DEVICE
 	host->GPUNotifyDraw();
 #endif
+}
+
+void TransformDrawEngine::Resized() {
+	decJitCache_->Clear();
+	lastVType_ = -1;
+	dec_ = NULL;
+	for (auto iter = decoderMap_.begin(); iter != decoderMap_.end(); iter++) {
+		delete iter->second;
+	}
+	decoderMap_.clear();
+
+	if (g_Config.bPrescaleUV && !uvScale) {
+		uvScale = new UVScale[MAX_DEFERRED_DRAW_CALLS];
+	} else if (!g_Config.bPrescaleUV && uvScale) {
+		delete uvScale;
+		uvScale = 0;
+	}
 }
 
 struct Plane {

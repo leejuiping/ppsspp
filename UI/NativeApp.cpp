@@ -36,6 +36,8 @@
 #if defined(_WIN32)
 #include <libpng17/png.h>
 #include "ext/jpge/jpge.h"
+#include "Windows/DSoundStream.h"
+#include "Windows/WndMainWindow.h"
 #endif
 
 #include "base/display.h"
@@ -66,6 +68,7 @@
 #include "Common/FileUtil.h"
 #include "Common/LogManager.h"
 #include "Core/Config.h"
+#include "Core/Core.h"
 #include "Core/Host.h"
 #include "Core/PSPMixer.h"
 #include "Core/SaveState.h"
@@ -83,6 +86,7 @@
 #include "UI/OnScreenDisplay.h"
 #include "UI/MiscScreens.h"
 #include "UI/TiltEventProcessor.h"
+#include "UI/BackgroundAudio.h"
 
 #if !defined(MOBILE_DEVICE)
 #include "Common/KeyMap.h"
@@ -155,8 +159,14 @@ public:
 	}
 };
 
+#ifdef _WIN32
+int Win32Mix(short *buffer, int numSamples, int bits, int rate, int channels) {
+	return NativeMix(buffer, numSamples);
+}
+#endif
+
 // globals
-static PMixer *g_mixer = 0;
+PMixer *g_mixer = 0;
 #ifndef _WIN32
 static AndroidLogger *logger = 0;
 #endif
@@ -195,11 +205,17 @@ std::string NativeQueryConfig(std::string query) {
 }
 
 int NativeMix(short *audio, int num_samples) {
-	if (g_mixer) {
+	if (g_mixer && GetUIState() == UISTATE_INGAME) {
 		num_samples = g_mixer->Mix(audio, num_samples);
 	}	else {
-		memset(audio, 0, num_samples * 2 * sizeof(short));
+		MixBackgroundAudio(audio, num_samples);
+		// memset(audio, 0, num_samples * 2 * sizeof(short));
 	}
+
+#ifdef _WIN32
+	DSound::DSound_UpdateSound();
+#endif
+
 	return num_samples;
 }
 
@@ -268,12 +284,15 @@ void NativeInit(int argc, const char *argv[],
 	g_Config.memCardDirectory = user_data_path;
 	g_Config.flash0Directory = std::string(external_directory) + "/flash0/";
 #elif !defined(_WIN32)
-	char* config = getenv("XDG_CONFIG_HOME");
-	if (!config) {
-		config = getenv("HOME");
-		strcat(config, "/.config");
-	}
-	g_Config.memCardDirectory = std::string(config) + "/ppsspp/";
+	std::string config;
+	if (getenv("XDG_CONFIG_HOME") != NULL)
+		config = getenv("XDG_CONFIG_HOME");
+	else if (getenv("HOME") != NULL)
+		config = getenv("HOME") + std::string("/.config");
+	else // Just in case
+		config = "./config";
+
+	g_Config.memCardDirectory = config + "/ppsspp/";
 	g_Config.flash0Directory = File::GetExeDirectory() + "/flash0/";
 #endif
 
@@ -362,7 +381,10 @@ void NativeInit(int argc, const char *argv[],
 #elif defined(BLACKBERRY) || defined(__SYMBIAN32__) || defined(MAEMO) || defined(IOS) || defined(_WIN32)
 		g_Config.currentDirectory = savegame_directory;
 #else
-		g_Config.currentDirectory = getenv("HOME");
+		if (getenv("HOME") != NULL)
+			g_Config.currentDirectory = getenv("HOME");
+		else
+			g_Config.currentDirectory = "./";
 #endif
 	}
 
@@ -420,13 +442,16 @@ void NativeInit(int argc, const char *argv[],
 	mainWindow->show();
 	host = new QtHost(mainWindow);
 #endif
+
+	// We do this here, instead of in NativeInitGraphics, because the display may be reset.
+	// When it's reset we don't want to forget all our managed things.
+	gl_lost_manager_init();
 }
 
 void NativeInitGraphics() {
 	FPU_SetFastMode();
 
 	CheckGLExtensions();
-	gl_lost_manager_init();
 	ui_draw2d.SetAtlas(&ui_atlas);
 	ui_draw2d_front.SetAtlas(&ui_atlas);
 
@@ -517,9 +542,17 @@ void NativeInitGraphics() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	glstate.viewport.set(0, 0, pixel_xres, pixel_yres);
+
+#ifdef _WIN32
+	DSound::DSound_StartSound(MainWindow::GetHWND(), &Win32Mix);
+#endif
 }
 
 void NativeShutdownGraphics() {
+#ifdef _WIN32
+	DSound::DSound_StopSound();
+#endif
+
 	screenManager->deviceLost();
 
 	g_gameInfoCache.Clear();
@@ -534,8 +567,6 @@ void NativeShutdownGraphics() {
 	ui_draw2d_front.Shutdown();
 
 	UIShader_Shutdown();
-
-	gl_lost_manager_shutdown();
 }
 
 void TakeScreenshot() {
@@ -836,6 +867,8 @@ void NativeResized() {
 }
 
 void NativeShutdown() {
+	gl_lost_manager_shutdown();
+
 	screenManager->shutdown();
 	delete screenManager;
 	screenManager = 0;

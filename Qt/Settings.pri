@@ -13,8 +13,14 @@ UI_DIR = $$CONFIG_DIR/.ui/$$TARGET
 P = $$_PRO_FILE_PWD_/..
 INCLUDEPATH += $$P/ext/zlib $$P/Common
 
-exists($$P/.git): GIT_VERSION = '\\"$$system(git describe --always)\\"'
-isEmpty(GIT_VERSION): GIT_VERSION = '\\"$$VERSION\\"'
+symbian {
+  exists($$P/.git): GIT_VERSION = $$system(git describe --always)
+  isEmpty(GIT_VERSION): GIT_VERSION = $$VERSION
+} else {
+  # QMake seems to change how it handles quotes with every version. This works for most systems:
+  exists($$P/.git): GIT_VERSION = '\\"$$system(git describe --always)\\"'
+  isEmpty(GIT_VERSION): GIT_VERSION = '\\"$$VERSION\\"'
+}
 DEFINES += PPSSPP_GIT_VERSION=\"$$GIT_VERSION\"
 
 win32-msvc* {
@@ -66,7 +72,10 @@ contains(QT_CONFIG, opengles.) {
 contains(MEEGO_EDITION,harmattan): DEFINES += "_SYS_UCONTEXT_H=1"
 maemo: DEFINES += MAEMO
 
-macx: INCLUDEPATH += $$P/ffmpeg/macosx/x86_64/include
+macx {
+	QMAKE_MAC_SDK=macosx10.9
+	INCLUDEPATH += $$P/ffmpeg/macosx/x86_64/include
+}
 ios: INCLUDEPATH += $$P/ffmpeg/ios/universal/include
 android {
 	DEFINES += ANDROID

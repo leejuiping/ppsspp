@@ -181,9 +181,6 @@ void MIPSState::Reset() {
 }
 
 void MIPSState::Init() {
-	if (PSP_CoreParameter().cpuCore == CPU_JIT)
-		MIPSComp::jit = new MIPSComp::Jit(this);
-
 	memset(r, 0, sizeof(r));
 	memset(f, 0, sizeof(f));
 	memset(v, 0, sizeof(v));
@@ -216,6 +213,13 @@ void MIPSState::Init() {
 	downcount = 0;
 	// Initialize the VFPU random number generator with .. something?
 	rng.Init(0x1337);
+
+	if (PSP_CoreParameter().cpuCore == CPU_JIT)
+		MIPSComp::jit = new MIPSComp::Jit(this);
+}
+
+bool MIPSState::HasDefaultPrefix() const {
+	return vfpuCtrl[VFPU_CTRL_SPREFIX] == 0xe4 && vfpuCtrl[VFPU_CTRL_TPREFIX] == 0xe4 && vfpuCtrl[VFPU_CTRL_DPREFIX] == 0;
 }
 
 void MIPSState::UpdateCore(CPUCore desired) {
@@ -328,5 +332,5 @@ u32 MIPSState::ReadFCR(int reg) {
 void MIPSState::InvalidateICache(u32 address, int length) {
 	// Only really applies to jit.
 	if (MIPSComp::jit)
-		MIPSComp::jit->ClearCacheAt(address, length);
+		MIPSComp::jit->InvalidateCacheAt(address, length);
 }

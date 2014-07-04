@@ -133,7 +133,7 @@ namespace MIPSInt
 		case 8:
 			// Invalidate the instruction cache at this address
 			if (MIPSComp::jit) {
-				MIPSComp::jit->ClearCacheAt(addr, 0x40);
+				MIPSComp::jit->InvalidateCacheAt(addr, 0x40);
 			}
 			break;
 
@@ -893,7 +893,18 @@ namespace MIPSInt
 			switch (op & 0x3f)
 			{
 			case 12: FsI(fd) = (int)floorf(F(fs)+0.5f); break; //round.w.s
-			case 13: FsI(fd) = F(fs)>=0 ? (int)floorf(F(fs)) : (int)ceilf(F(fs)); break;//trunc.w.s
+			case 13: //trunc.w.s
+				if (F(fs) >= 0.0f) {
+					FsI(fd) = (int)floorf(F(fs));
+					// Overflow, but it was positive.
+					if (FsI(fd) == -2147483648LL) {
+						FsI(fd) = 2147483647LL;
+					}
+				} else {
+					// Overflow happens to be the right value anyway.
+					FsI(fd) = (int)ceilf(F(fs));
+				}
+				break;
 			case 14: FsI(fd) = (int)ceilf (F(fs)); break; //ceil.w.s
 			case 15: FsI(fd) = (int)floorf(F(fs)); break; //floor.w.s
 			}

@@ -374,6 +374,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xddfa5a85937aa581, 32, "vdot_q", },
 	{ 0xe0214719d8a0aa4e, 104, "strstr", },
 	{ 0xe029f0699ca3a886, 76, "matrix300_transform_by", },
+	{ 0xe093c2b0194d52b3, 820, "ff1_battle_effect", }, // Final Fantasy 1
 	{ 0xe1107cf3892724a0, 460, "_memalign_r", },
 	{ 0xe1724e6e29209d97, 24, "vector_length_t_2", },
 	{ 0xe1a5d939cc308195, 68, "wcscmp", },
@@ -495,29 +496,68 @@ namespace MIPSAnalyst {
 		return (op & MIPSTABLE_IMM_MASK) == 0xB8000000;
 	}
 
-	bool OpWouldChangeMemory(u32 pc, u32 addr) {
-		auto op = Memory::Read_Instruction(pc);
+	static bool IsSWC1Instr(MIPSOpcode op) {
+		return (op & MIPSTABLE_IMM_MASK) == 0xE4000000;
+	}
+	static bool IsSVSInstr(MIPSOpcode op) {
+		return (op & MIPSTABLE_IMM_MASK) == 0xE8000000;
+	}
+	static bool IsSVQInstr(MIPSOpcode op) {
+		return (op & MIPSTABLE_IMM_MASK) == 0xF8000000;
+	}
+
+	bool OpWouldChangeMemory(u32 pc, u32 addr, u32 size) {
+		const auto op = Memory::Read_Instruction(pc, true);
+
+		// TODO: Trap sc/ll, svl.q, svr.q?
+
 		int gprMask = 0;
-		// TODO: swl/swr are annoying, not handled yet.
 		if (IsSWInstr(op))
 			gprMask = 0xFFFFFFFF;
 		if (IsSHInstr(op))
 			gprMask = 0x0000FFFF;
 		if (IsSBInstr(op))
 			gprMask = 0x000000FF;
+		if (IsSWLInstr(op)) {
+			const u32 shift = (addr & 3) * 8;
+			gprMask = 0xFFFFFFFF >> (24 - shift);
+		}
+		if (IsSWRInstr(op)) {
+			const u32 shift = (addr & 3) * 8;
+			gprMask = 0xFFFFFFFF << shift;
+		}
+
+		u32 writeVal = 0xFFFFFFFF;
+		u32 prevVal = 0x00000000;
 
 		if (gprMask != 0)
 		{
-			MIPSGPReg reg = MIPS_GET_RT(op);
-			u32 writeVal = currentMIPS->r[reg] & gprMask;
-			u32 prevVal = Memory::Read_U32(addr) & gprMask;
-
-			// TODO: Technically, the break might be for 1 byte in the middle of a sw.
-			return writeVal != prevVal;
+			MIPSGPReg rt = MIPS_GET_RT(op);
+			writeVal = currentMIPS->r[rt] & gprMask;
+			prevVal = Memory::Read_U32(addr) & gprMask;
 		}
 
-		// TODO: Not handled yet.
-		return true;
+		if (IsSWC1Instr(op)) {
+			int ft = MIPS_GET_FT(op);
+			writeVal = currentMIPS->fi[ft];
+			prevVal = Memory::Read_U32(addr);
+		}
+
+		if (IsSVSInstr(op)) {
+			int vt = ((op >> 16) & 0x1f) | ((op & 3) << 5);
+			writeVal = currentMIPS->vi[voffset[vt]];
+			prevVal = Memory::Read_U32(addr);
+		}
+
+		if (IsSVQInstr(op)) {
+			int vt = (((op >> 16) & 0x1f)) | ((op & 1) << 5);
+			float rd[4];
+			ReadVector(rd, V_Quad, vt);
+			return memcmp(rd, Memory::GetPointer(addr), sizeof(float) * 4) != 0;
+		}
+
+		// TODO: Technically, the break might be for 1 byte in the middle of a sw.
+		return writeVal != prevVal;
 	}
 
 	AnalysisResults Analyze(u32 address) {
@@ -535,7 +575,7 @@ namespace MIPSAnalyst {
 		}
 
 		for (u32 addr = address, endAddr = address + MAX_ANALYZE; addr <= endAddr; addr += 4) {
-			MIPSOpcode op = Memory::Read_Instruction(addr);
+			MIPSOpcode op = Memory::Read_Instruction(addr, true);
 			MIPSInfo info = MIPSGetInfo(op);
 
 			MIPSGPReg rs = MIPS_GET_RS(op);
@@ -600,7 +640,7 @@ namespace MIPSAnalyst {
 	// Don't think we use this yet.
 	bool IsRegisterUsed(MIPSGPReg reg, u32 addr) {
 		while (true) {
-			MIPSOpcode op = Memory::Read_Instruction(addr);
+			MIPSOpcode op = Memory::Read_Instruction(addr, true);
 			MIPSInfo info = MIPSGetInfo(op);
 			if ((info & IN_RS) && (MIPS_GET_RS(op) == reg))
 				return true;
@@ -697,7 +737,7 @@ skip:
 		u32 furthestJumpbackAddr = INVALIDTARGET;
 
 		for (u32 ahead = fromAddr; ahead < fromAddr + MAX_AHEAD_SCAN; ahead += 4) {
-			MIPSOpcode aheadOp = Memory::Read_Instruction(ahead);
+			MIPSOpcode aheadOp = Memory::Read_Instruction(ahead, true);
 			u32 target = GetBranchTargetNoRA(ahead, aheadOp);
 			if (target == INVALIDTARGET && ((aheadOp & 0xFC000000) == 0x08000000)) {
 				target = GetJumpTarget(ahead);
@@ -718,7 +758,7 @@ skip:
 
 		if (closestJumpbackAddr != INVALIDTARGET && furthestJumpbackAddr == INVALIDTARGET) {
 			for (u32 behind = closestJumpbackTarget; behind < fromAddr; behind += 4) {
-				MIPSOpcode behindOp = Memory::Read_Instruction(behind);
+				MIPSOpcode behindOp = Memory::Read_Instruction(behind, true);
 				u32 target = GetBranchTargetNoRA(behind, behindOp);
 				if (target == INVALIDTARGET && ((behindOp & 0xFC000000) == 0x08000000)) {
 					target = GetJumpTarget(behind);
@@ -773,7 +813,7 @@ skip:
 				continue;
 			}
 
-			MIPSOpcode op = Memory::Read_Instruction(addr);
+			MIPSOpcode op = Memory::Read_Instruction(addr, true);
 			u32 target = GetBranchTargetNoRA(addr, op);
 			if (target != INVALIDTARGET) {
 				isStraightLeaf = false;
@@ -796,7 +836,7 @@ skip:
 					// If it's a nearby forward jump, and not a stackless leaf, assume not a tail call.
 					if (sureTarget <= addr + MAX_JUMP_FORWARD && decreasedSp) {
 						// But let's check the delay slot.
-						MIPSOpcode op = Memory::Read_Instruction(addr + 4);
+						MIPSOpcode op = Memory::Read_Instruction(addr + 4, true);
 						// addiu sp, sp, +X
 						if ((op & 0xFFFF8000) != 0x27BD0000) {
 							furthestBranch = sureTarget;

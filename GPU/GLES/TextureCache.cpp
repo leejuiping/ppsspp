@@ -221,12 +221,23 @@ void TextureCache::ClearNextFrame() {
 void TextureCache::AttachFramebufferValid(TexCacheEntry *entry, VirtualFramebuffer *framebuffer, const AttachedFramebufferInfo &fbInfo) {
 	const bool hasInvalidFramebuffer = entry->framebuffer == 0 || entry->invalidHint == -1;
 	const bool hasOlderFramebuffer = entry->framebuffer != 0 && entry->framebuffer->last_frame_render < framebuffer->last_frame_render;
-	if (hasInvalidFramebuffer || hasOlderFramebuffer) {
+	bool hasFartherFramebuffer = false;
+	if (!hasInvalidFramebuffer && !hasOlderFramebuffer) {
+		// If it's valid, but the offset is greater, then we still win.
+		if (fbTexInfo_[entry->addr].yOffset == fbInfo.yOffset)
+			hasFartherFramebuffer = fbTexInfo_[entry->addr].xOffset > fbInfo.xOffset;
+		else
+			hasFartherFramebuffer = fbTexInfo_[entry->addr].yOffset > fbInfo.yOffset;
+	}
+	if (hasInvalidFramebuffer || hasOlderFramebuffer || hasFartherFramebuffer) {
 		entry->framebuffer = framebuffer;
 		entry->invalidHint = 0;
 		entry->status &= ~TextureCache::TexCacheEntry::STATUS_DEPALETTIZE;
 		fbTexInfo_[entry->addr] = fbInfo;
+		framebuffer->last_frame_attached = gpuStats.numFlips;
 		host->GPUNotifyTextureAttachment(entry->addr);
+	} else if (entry->framebuffer == framebuffer) {
+		framebuffer->last_frame_attached = gpuStats.numFlips;
 	}
 }
 
@@ -241,7 +252,6 @@ void TextureCache::AttachFramebufferInvalid(TexCacheEntry *entry, VirtualFramebu
 }
 
 bool TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualFramebuffer *framebuffer, u32 texaddrOffset) {
-	static const u32 MIN_SUBAREA_HEIGHT = 8;
 	static const u32 MAX_SUBAREA_Y_OFFSET_SAFE = 32;
 
 	AttachedFramebufferInfo fbInfo = {0};
@@ -252,6 +262,9 @@ bool TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualF
 	const u32 texaddr = ((entry->addr + texaddrOffset) & ~mirrorMask);
 	const bool noOffset = texaddr == addr;
 	const bool exactMatch = noOffset && entry->format < 4;
+	const u32 h = 1 << ((entry->dim >> 8) & 0xf);
+	// 512 on a 272 framebuffer is sane, so let's be lenient.
+	const u32 minSubareaHeight = h / 4;
 
 	// If they match exactly, it's non-CLUT and from the top left.
 	if (exactMatch) {
@@ -260,18 +273,19 @@ bool TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualF
 			return false;
 
 		DEBUG_LOG(G3D, "Render to texture detected at %08x!", address);
-		if (!entry->framebuffer || entry->invalidHint == -1) {
-			if (framebuffer->fb_stride != entry->bufw) {
-				WARN_LOG_REPORT_ONCE(diffStrides1, G3D, "Render to texture with different strides %d != %d", entry->bufw, framebuffer->fb_stride);
-			}
-			if (entry->format != framebuffer->format) {
-				WARN_LOG_REPORT_ONCE(diffFormat1, G3D, "Render to texture with different formats %d != %d", entry->format, framebuffer->format);
-				// Let's avoid rendering when we know the format is wrong.  May be a video/etc. updating memory.
+		if (framebuffer->fb_stride != entry->bufw) {
+			WARN_LOG_REPORT_ONCE(diffStrides1, G3D, "Render to texture with different strides %d != %d", entry->bufw, framebuffer->fb_stride);
+		}
+		if (entry->format != framebuffer->format) {
+			WARN_LOG_REPORT_ONCE(diffFormat1, G3D, "Render to texture with different formats %d != %d", entry->format, framebuffer->format);
+			// Let's avoid using it when we know the format is wrong.  May be a video/etc. updating memory.
+			// However, some games use a different format to clear the buffer.
+			if (framebuffer->last_frame_attached + 1 < gpuStats.numFlips) {
 				DetachFramebuffer(entry, address, framebuffer);
-			} else {
-				AttachFramebufferValid(entry, framebuffer, fbInfo);
-				return true;
 			}
+		} else {
+			AttachFramebufferValid(entry, framebuffer, fbInfo);
+			return true;
 		}
 	} else {
 		// Apply to buffered mode only.
@@ -297,7 +311,7 @@ bool TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualF
 			}
 		}
 
-		if (fbInfo.yOffset + MIN_SUBAREA_HEIGHT >= framebuffer->height) {
+		if (fbInfo.yOffset + minSubareaHeight >= framebuffer->height) {
 			// Can't be inside the framebuffer then, ram.  Detach to be safe.
 			DetachFramebuffer(entry, address, framebuffer);
 			return false;
@@ -317,7 +331,6 @@ bool TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, VirtualF
 				WARN_LOG_REPORT_ONCE(subareaClut, G3D, "Render to texture using CLUT with offset at %08x +%dx%d", address, fbInfo.xOffset, fbInfo.yOffset);
 			}
 			AttachFramebufferValid(entry, framebuffer, fbInfo);
-			fbTexInfo_[entry->addr] = fbInfo;
 			entry->status |= TexCacheEntry::STATUS_DEPALETTIZE;
 			// We'll validate it compiles later.
 			return true;
@@ -1083,7 +1096,7 @@ void TextureCache::SetTextureFramebuffer(TexCacheEntry *entry, VirtualFramebuffe
 		gstate_c.flipTexture = true;
 		gstate_c.curTextureXOffset = fbTexInfo_[entry->addr].xOffset;
 		gstate_c.curTextureYOffset = fbTexInfo_[entry->addr].yOffset;
-		gstate_c.needShaderTexClamp = gstate_c.curTextureWidth != gstate.getTextureWidth(0) || gstate_c.curTextureHeight != gstate.getTextureHeight(0);
+		gstate_c.needShaderTexClamp = gstate_c.curTextureWidth != (u32)gstate.getTextureWidth(0) || gstate_c.curTextureHeight != (u32)gstate.getTextureHeight(0);
 		if (gstate_c.curTextureXOffset != 0 || gstate_c.curTextureYOffset != 0) {
 			gstate_c.needShaderTexClamp = true;
 		}
@@ -1118,6 +1131,12 @@ bool TextureCache::SetOffsetTexture(u32 offset) {
 		if (AttachFramebuffer(entry, framebuffer->fb_address, framebuffer, offset)) {
 			success = true;
 		}
+	}
+
+	if (success) {
+		SetTextureFramebuffer(entry, entry->framebuffer);
+		lastBoundTexture = -1;
+		entry->lastFrame = gpuStats.numFlips;
 	}
 
 	return success;

@@ -76,12 +76,13 @@ void __AudioCodecShutdown() {
 }
 
 int sceAudiocodecInit(u32 ctxPtr, int codec) {
-	if (isValidCodec(codec)) {
+	if (IsValidCodec(codec)) {
 		// Create audio decoder for given audio codec and push it into AudioList
 		if (removeDecoder(ctxPtr)) {
 			WARN_LOG_REPORT(HLE, "sceAudiocodecInit(%08x, %d): replacing existing context", ctxPtr, codec);
 		}
-		auto decoder = new SimpleAudio(ctxPtr, codec);
+		auto decoder = new SimpleAudio(codec);
+		decoder->SetCtxPtr(ctxPtr);
 		audioList[ctxPtr] = decoder;
 		INFO_LOG(ME, "sceAudiocodecInit(%08x, %i (%s))", ctxPtr, codec, GetCodecName(codec));
 		DEBUG_LOG(ME, "Number of playing sceAudioCodec audios : %d", (int)audioList.size());
@@ -97,7 +98,7 @@ int sceAudiocodecDecode(u32 ctxPtr, int codec) {
 		return -1;
 	}
 
-	if (isValidCodec(codec)){
+	if (IsValidCodec(codec)){
 		// Use SimpleAudioDec to decode audio
 		auto ctx = PSPPointer<AudioCodecContext>::Create(ctxPtr);  // On stack, no need to allocate.
 		int outbytes = 0;
@@ -107,7 +108,8 @@ int sceAudiocodecDecode(u32 ctxPtr, int codec) {
 		if (!decoder && oldStateLoaded) {
 			// We must have loaded an old state that did not have sceAudiocodec information.
 			// Fake it by creating the desired context.
-			decoder = new SimpleAudio(ctxPtr, codec);
+			decoder = new SimpleAudio(codec);
+			decoder->SetCtxPtr(ctxPtr);
 			audioList[ctxPtr] = decoder;
 		}
 
@@ -181,7 +183,8 @@ void __sceAudiocodecDoState(PointerWrap &p){
 			p.DoArray(codec_, s >= 2 ? count : (int)ARRAY_SIZE(codec_));
 			p.DoArray(ctxPtr_, s >= 2 ? count : (int)ARRAY_SIZE(ctxPtr_));
 			for (int i = 0; i < count; i++) {
-				auto decoder = new SimpleAudio(ctxPtr_[i], codec_[i]);
+				auto decoder = new SimpleAudio(codec_[i]);
+				decoder->SetCtxPtr(ctxPtr_[i]);
 				audioList[ctxPtr_[i]] = decoder;
 			}
 			delete[] codec_;
@@ -196,8 +199,8 @@ void __sceAudiocodecDoState(PointerWrap &p){
 			int i = 0;
 			for (auto it = audioList.begin(), end = audioList.end(); it != end; it++) {
 				const SimpleAudio *decoder = it->second;
-				codec_[i] = decoder->audioType;
-				ctxPtr_[i] = decoder->ctxPtr;
+				codec_[i] = decoder->GetAudioType();
+				ctxPtr_[i] = decoder->GetCtxPtr();
 				i++;
 			}
 			p.DoArray(codec_, count);

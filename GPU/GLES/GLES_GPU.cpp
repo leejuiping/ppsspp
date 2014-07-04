@@ -436,16 +436,7 @@ GLES_GPU::GLES_GPU()
 	// No need to flush before the tex scale/offset commands if we are baking
 	// the tex scale/offset into the vertices anyway.
 
-	if (g_Config.bPrescaleUV) {
-		cmdInfo_[GE_CMD_TEXSCALEU].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
-		cmdInfo_[GE_CMD_TEXSCALEV].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
-		cmdInfo_[GE_CMD_TEXOFFSETU].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
-		cmdInfo_[GE_CMD_TEXOFFSETV].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
-	}
-
-	if (g_Config.bSoftwareSkinning) {
-		cmdInfo_[GE_CMD_VERTEXTYPE].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
-	}
+	UpdateCmdInfo();
 
 	BuildReportingInfo();
 	// Update again after init to be sure of any silly driver problems.
@@ -503,6 +494,18 @@ void GLES_GPU::InitClear() {
 	ScheduleEvent(GPU_EVENT_INIT_CLEAR);
 }
 
+void GLES_GPU::Reinitialize() {
+	GPUCommon::Reinitialize();
+	ScheduleEvent(GPU_EVENT_REINITIALIZE);
+}
+
+void GLES_GPU::ReinitializeInternal() {
+	textureCache_.Clear(true);
+	depalShaderCache_.Clear();
+	framebufferManager_.DestroyAllFBOs();
+	framebufferManager_.Resized();
+}
+
 void GLES_GPU::InitClearInternal() {
 	bool useNonBufferedRendering = g_Config.iRenderingMode == FB_NON_BUFFERED_MODE;
 	if (useNonBufferedRendering) {
@@ -549,7 +552,33 @@ inline void GLES_GPU::UpdateVsyncInterval(bool force) {
 #endif
 }
 
+void GLES_GPU::UpdateCmdInfo() {
+	if (g_Config.bPrescaleUV) {
+		cmdInfo_[GE_CMD_TEXSCALEU].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_TEXSCALEV].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_TEXOFFSETU].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_TEXOFFSETV].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
+	} else {
+		cmdInfo_[GE_CMD_TEXSCALEU].flags |= FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_TEXSCALEV].flags |= FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_TEXOFFSETU].flags |= FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_TEXOFFSETV].flags |= FLAG_FLUSHBEFOREONCHANGE;
+	}
+
+	if (g_Config.bSoftwareSkinning) {
+		cmdInfo_[GE_CMD_VERTEXTYPE].flags &= ~FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_VERTEXTYPE].func = &GLES_GPU::Execute_VertexTypeSkinning;
+	} else {
+		cmdInfo_[GE_CMD_VERTEXTYPE].flags |= FLAG_FLUSHBEFOREONCHANGE;
+		cmdInfo_[GE_CMD_VERTEXTYPE].func = &GLES_GPU::Execute_VertexType;
+	}
+}
+
 void GLES_GPU::BeginFrameInternal() {
+	if (resized_) {
+		UpdateCmdInfo();
+		transformDraw_.Resized();
+	}
 	UpdateVsyncInterval(resized_);
 	resized_ = false;
 
@@ -616,13 +645,13 @@ void GLES_GPU::CopyDisplayToOutputInternal() {
 	framebufferManager_.RebindFramebuffer();
 	transformDraw_.Flush();
 
+	shaderManager_->DirtyLastShader();
+
 	glstate.depthWrite.set(GL_TRUE);
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
 	framebufferManager_.CopyDisplayToOutput();
 	framebufferManager_.EndFrame();
-
-	shaderManager_->DirtyLastShader();
 
 	// If buffered, discard the depth buffer of the backbuffer. Don't even know if we need one.
 #if 0
@@ -687,6 +716,10 @@ void GLES_GPU::ProcessEvent(GPUEvent ev) {
 
 	case GPU_EVENT_FB_STENCIL_UPLOAD:
 		PerformStencilUploadInternal(ev.fb_stencil_upload.dst, ev.fb_stencil_upload.size);
+		break;
+
+	case GPU_EVENT_REINITIALIZE:
+		ReinitializeInternal();
 		break;
 
 	default:
@@ -801,19 +834,20 @@ void GLES_GPU::Execute_Prim(u32 op, u32 diff) {
 }
 
 void GLES_GPU::Execute_VertexType(u32 op, u32 diff) {
-	if (!g_Config.bSoftwareSkinning) {
+	if (diff & (GE_VTYPE_TC_MASK | GE_VTYPE_THROUGH_MASK)) {
+		shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+	}
+}
+
+void GLES_GPU::Execute_VertexTypeSkinning(u32 op, u32 diff) {
+	// Don't flush when weight count changes, unless morph is enabled.
+	if ((diff & ~GE_VTYPE_WEIGHTCOUNT_MASK) || (op & GE_VTYPE_MORPHCOUNT_MASK) != 0) {
+		// Restore and flush
+		gstate.vertType ^= diff;
+		Flush();
+		gstate.vertType ^= diff;
 		if (diff & (GE_VTYPE_TC_MASK | GE_VTYPE_THROUGH_MASK))
 			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
-	} else {
-		// Don't flush when weight count changes, unless morph is enabled.
-		if ((diff & ~GE_VTYPE_WEIGHTCOUNT_MASK) || (op & GE_VTYPE_MORPHCOUNT_MASK) != 0) {
-			// Restore and flush
-			gstate.vertType ^= diff;
-			Flush();
-			gstate.vertType ^= diff;
-			if (diff & (GE_VTYPE_TC_MASK | GE_VTYPE_THROUGH_MASK))
-				shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
-		}
 	}
 }
 
@@ -2061,13 +2095,19 @@ bool GLES_GPU::PerformMemorySet(u32 dest, u8 v, int size) {
 bool GLES_GPU::PerformMemoryDownload(u32 dest, int size) {
 	// Cheat a bit to force a download of the framebuffer.
 	// VRAM + 0x00400000 is simply a VRAM mirror.
-	return gpu->PerformMemoryCopy(dest ^ 0x00400000, dest, size);
+	if (Memory::IsVRAMAddress(dest)) {
+		return gpu->PerformMemoryCopy(dest ^ 0x00400000, dest, size);
+	}
+	return false;
 }
 
 bool GLES_GPU::PerformMemoryUpload(u32 dest, int size) {
 	// Cheat a bit to force an upload of the framebuffer.
 	// VRAM + 0x00400000 is simply a VRAM mirror.
-	return gpu->PerformMemoryCopy(dest, dest ^ 0x00400000, size);
+	if (Memory::IsVRAMAddress(dest)) {
+		return gpu->PerformMemoryCopy(dest, dest ^ 0x00400000, size);
+	}
+	return false;
 }
 
 bool GLES_GPU::PerformStencilUpload(u32 dest, int size) {
@@ -2096,6 +2136,11 @@ void GLES_GPU::Resized() {
 
 void GLES_GPU::ClearShaderCache() {
 	shaderManager_->ClearCache(true);
+}
+
+void GLES_GPU::CleanupBeforeUI() {
+	// Clear any enabled vertex arrays.
+	shaderManager_->DirtyLastShader();
 }
 
 std::vector<FramebufferInfo> GLES_GPU::GetFramebufferList() {

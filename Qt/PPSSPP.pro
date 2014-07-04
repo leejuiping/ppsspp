@@ -5,19 +5,11 @@ QT += core gui opengl
 include(Settings.pri)
 
 lessThan(QT_MAJOR_VERSION, 5) {
-	lessThan(QT_MAJOR_VERSION, 4) | lessThan(QT_MINOR_VERSION, 7) {
-		error(PPSSPP requires Qt 4.7 or newer but Qt $$[QT_VERSION] was detected.)
-	}
+	macx: error(PPSSPP requires Qt5 for OS X but $$[QT_VERSION] was detected.)
+	else:lessThan(QT_MINOR_VERSION, 7): error(PPSSPP requires Qt 4.7 or newer but Qt $$[QT_VERSION] was detected.)
 }
 
 # Extra Qt modules
-linux:lessThan(QT_MAJOR_VERSION,5):!exists($$[QT_INSTALL_HEADERS]/QtMultimedia) {
-	# Ubuntu et al workaround. They forgot QtMultimedia
-	CONFIG += mobility
-	MOBILITY += multimedia
-}
-else: QT += multimedia
-
 greaterThan(QT_MAJOR_VERSION,4) {
 	QT += widgets
 	mobile_platform: QT += sensors
@@ -50,8 +42,7 @@ contains(DEFINES, USE_FFMPEG): LIBS += -lavformat -lavcodec -lavutil -lswresampl
 
 win32 {
 	#Use a fixed base-address under windows
-	QMAKE_LFLAGS += /FIXED /BASE:"0x00400000"
-	QMAKE_LFLAGS += /DYNAMICBASE:NO
+	QMAKE_LFLAGS += /FIXED /BASE:"0x00400000" /DYNAMICBASE:NO
 	LIBS += -lwinmm -lws2_32 -lShell32 -lAdvapi32
 	contains(QMAKE_TARGET.arch, x86_64): LIBS += $$files($$P/dx9sdk/Lib/x64/*.lib)
 	else: LIBS += $$files($$P/dx9sdk/Lib/x86/*.lib)
@@ -66,18 +57,29 @@ macx|linux {
 		HEADERS += $$P/SDL/SDLJoystick.h
 		PKGCONFIG += sdl
 		macx {
-			LIBS += -liconv -F/Library/Frameworks -framework SDL
+			LIBS += -F/Library/Frameworks -framework SDL
 			INCLUDEPATH += /Library/Frameworks/SDL.framework/Versions/A/Headers
 		}
 	}
 }
-linux:!android: LIBS += -ldl -lrt -lz
+
+linux:!android: LIBS += -ldl -lrt
 macx: LIBS += -liconv
 qnx: LIBS += -lscreen
 symbian: LIBS += -lremconcoreapi -lremconinterfacebase
 linux:arm|android: LIBS += -lEGL
 unix:contains(QT_CONFIG, system-zlib) {
 	LIBS += -lz
+}
+
+# Qt Multimedia (if SDL is not found)
+!contains(DEFINES, QT_HAS_SDL) {
+	linux:lessThan(QT_MAJOR_VERSION,5):!exists($$[QT_INSTALL_HEADERS]/QtMultimedia) {
+		# Fallback to mobility audio
+		CONFIG += mobility
+		MOBILITY += multimedia
+	}
+	else: QT += multimedia
 }
 
 # Main
@@ -91,6 +93,7 @@ symbian {
 # UI
 SOURCES += $$P/UI/*Screen.cpp \
 	$$P/UI/*Screens.cpp \
+	$$P/UI/BackgroundAudio.cpp \
 	$$P/UI/Store.cpp \
 	$$P/UI/GamepadEmu.cpp \
 	$$P/UI/GameInfoCache.cpp \
@@ -106,8 +109,8 @@ arm:android: SOURCES += $$P/android/jni/ArmEmitterTest.cpp
 HEADERS += $$P/UI/*.h
 INCLUDEPATH += $$P $$P/Common $$P/native $$P/native/ext
 
-# Use forms UI for desktop platforms
-!mobile_platform {
+mobile_platform: RESOURCES += $$P/Qt/assets.qrc
+else {
 	# TODO: Rewrite Debugger with same backend as Windows version
 	# Don't use .ui forms. Use Qt5 + C++11 features to minimise code
 	SOURCES += $$P/Qt/*.cpp $$P/Qt/Debugger/*.cpp
@@ -117,11 +120,14 @@ INCLUDEPATH += $$P $$P/Common $$P/native $$P/native/ext
 	INCLUDEPATH += $$P/Qt $$P/Qt/Debugger
 	
 	# Creating translations should be done by Qt, really
-	LREL_TOOL = $$[QT_INSTALL_BINS]/lrelease
+	LREL_TOOL = lrelease
+	# Grab all possible directories (win32/unix)
+	win32: PATHS = $$split($$(PATH), ;)
+	else: PATHS = $$split($$(PATH), :)
 	greaterThan(QT_MAJOR_VERSION, 4) {
-		exists($${LREL_TOOL}-qt5): LREL_TOOL=$${LREL_TOOL}-qt5
+		for(bin, PATHS): exists($${bin}/$${LREL_TOOL}-qt5): LREL_TOOL=$${bin}/$${LREL_TOOL}-qt5
 	} else {
-		exists($${LREL_TOOL}-qt4): LREL_TOOL=$${LREL_TOOL}-qt4
+		for(bin, PATHS): exists($${bin}/$${LREL_TOOL}-qt4): LREL_TOOL=$${bin}/$${LREL_TOOL}-qt4
 	}
 
 	# Translations
@@ -134,9 +140,6 @@ INCLUDEPATH += $$P $$P/Common $$P/native $$P/native/ext
 	lang.CONFIG = no_link
 	QMAKE_EXTRA_COMPILERS += lang
 	PRE_TARGETDEPS += compiler_lang_make_all
-} else {
-	# Desktop handles the Init separately
-	RESOURCES += $$P/Qt/assets.qrc
 }
 
 # Packaging
@@ -173,5 +176,5 @@ maemo {
 	CONFIG += qt-boostable
 }
 
-ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
+ANDROID_PACKAGE_SOURCE_DIR = $$P/android
 

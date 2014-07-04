@@ -135,10 +135,9 @@ Jit::Jit(MIPSState *mips) : blocks(mips, this), mips_(mips)
 	fpr.SetEmitter(this);
 	AllocCodeSpace(1024 * 1024 * 16);
 	asm_.Init(mips, this);
-	// TODO: If it becomes possible to switch from the interpreter, this should be set right.
-	js.startDefaultPrefix = true;
-
 	safeMemFuncs.Init(&thunks);
+
+	js.startDefaultPrefix = mips_->HasDefaultPrefix();
 }
 
 Jit::~Jit() {
@@ -218,7 +217,12 @@ void Jit::ClearCache()
 	ClearCodeSpace();
 }
 
-void Jit::ClearCacheAt(u32 em_address, int length)
+void Jit::InvalidateCache()
+{
+	blocks.Clear();
+}
+
+void Jit::InvalidateCacheAt(u32 em_address, int length)
 {
 	blocks.InvalidateICache(em_address, length);
 }
@@ -256,7 +260,7 @@ void Jit::EatInstruction(MIPSOpcode op)
 		ERROR_LOG_REPORT_ONCE(ateDelaySlot, JIT, "Ate a branch op.");
 	}
 	if (js.inDelaySlot) {
-		ERROR_LOG_REPORT_ONCE(ateInDelaySlot, JIT, "Ate an instruction inside a delay slot.")
+		ERROR_LOG_REPORT_ONCE(ateInDelaySlot, JIT, "Ate an instruction inside a delay slot.");
 	}
 
 	CheckJitBreakpoint(js.compilerPC + 4, 0);

@@ -787,7 +787,12 @@ void FramebufferManager::ResizeFramebufFBO(VirtualFramebuffer *vfb, u16 w, u16 h
 	vfb->renderWidth = vfb->bufferWidth * renderWidthFactor;
 	vfb->renderHeight = vfb->bufferHeight * renderHeightFactor;
 
-	if (g_Config.bTrueColor) {
+	bool trueColor = g_Config.bTrueColor;
+	if (hackForce04154000Download_ && vfb->fb_address == 0x00154000) {
+		trueColor = false;
+	}
+
+	if (trueColor) {
 		vfb->colorDepth = FBO_8888;
 	} else {
 		switch (vfb->format) {
@@ -1723,6 +1728,13 @@ void FramebufferManager::PackFramebufferAsync_(VirtualFramebuffer *vfb) {
 	bool unbind = false;
 	u8 nextPBO = (currentPBO_ + 1) % MAX_PBO;
 	bool useCPU = g_Config.iRenderingMode == FB_READFBOMEMORY_CPU;
+	// We might get here if hackForce04154000Download_ is hit.
+	// Some cards or drivers seem to always dither when downloading a framebuffer to 16-bit.
+	// This causes glitches in games that expect the exact values.
+	// It has not been experienced on NVIDIA cards, so those are left using the GPU (which is faster.)
+	if (g_Config.iRenderingMode == FB_BUFFERED_MODE && gl_extensions.gpuVendor != GPU_VENDOR_NVIDIA) {
+		useCPU = true;
+	}
 
 	// We'll prepare two PBOs to switch between readying and reading
 	if (!pixelBufObj_) {
@@ -2055,6 +2067,17 @@ void FramebufferManager::DestroyAllFBOs() {
 		DestroyFramebuf(vfb);
 	}
 	vfbs_.clear();
+
+	for (size_t i = 0; i < bvfbs_.size(); ++i) {
+		VirtualFramebuffer *vfb = bvfbs_[i];
+		DestroyFramebuf(vfb);
+	}
+	bvfbs_.clear();
+
+	for (auto it = tempFBOs_.begin(), end = tempFBOs_.end(); it != end; ++it) {
+		fbo_destroy(it->second.fbo);
+	}
+	tempFBOs_.clear();
 }
 
 void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {

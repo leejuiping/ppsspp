@@ -1005,11 +1005,13 @@ bool SetDebugTexture() {
 #endif
 
 void TextureCache::SetTextureFramebuffer(TexCacheEntry *entry, VirtualFramebuffer *framebuffer) {
+	_dbg_assert_msg_(G3D, framebuffer != nullptr, "Framebuffer must not be null.");
+
 	framebuffer->usageFlags |= FB_USAGE_TEXTURE;
 	bool useBufferedRendering = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE;
 	if (useBufferedRendering) {
 		GLuint program = 0;
-		if (entry->status & TexCacheEntry::STATUS_DEPALETTIZE) {
+		if ((entry->status & TexCacheEntry::STATUS_DEPALETTIZE) && !g_Config.bDisableSlowFramebufEffects) {
 			program = depalShaderCache_->GetDepalettizeShader(framebuffer->format);
 		}
 		if (program) {
@@ -1133,13 +1135,14 @@ bool TextureCache::SetOffsetTexture(u32 offset) {
 		}
 	}
 
-	if (success) {
+	if (success && entry->framebuffer) {
 		SetTextureFramebuffer(entry, entry->framebuffer);
 		lastBoundTexture = -1;
 		entry->lastFrame = gpuStats.numFlips;
+		return true;
 	}
 
-	return success;
+	return false;
 }
 
 void TextureCache::SetTexture(bool force) {

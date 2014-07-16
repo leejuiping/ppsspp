@@ -1478,8 +1478,15 @@ bool __KernelLoadExec(const char *filename, u32 paramPtr, std::string *error_str
 	{
 		u32 error;
 		while (!loadedModules.empty()) {
-			Module *module = kernelObjects.Get<Module>(*loadedModules.begin(), error);
-			module->Cleanup();
+			SceUID moduleID = *loadedModules.begin();
+			Module *module = kernelObjects.Get<Module>(moduleID, error);
+			if (module) {
+				module->Cleanup();
+			} else {
+				// An invalid module.  We need to remove it or we'll loop forever.
+				WARN_LOG(LOADER, "Invalid module still marked as loaded on loadexec");
+				loadedModules.erase(moduleID);
+			}
 		}
 
 		Replacement_Shutdown();

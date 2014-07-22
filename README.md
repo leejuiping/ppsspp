@@ -18,6 +18,20 @@ For the latest source code, see [our github page](https://github.com/hrydgard/pp
 
 For build instructions and other development tutorials, see the [wiki](https://github.com/hrydgard/ppsspp/wiki).
 
+What's new in 0.9.9
+-------------------
+* CLUT (paletted) texturing from framebuffers supported, fixing many graphical issues
+  like the shadows in Final Fantasy: Type-0
+* More types of framebuffer copies are now handled correctly, fixing a variety of graphical
+  issues, like the sun in Burnout and many more
+* Better savedata compatibility with the real PSP
+* Emulation of the vrot CPU instruction improved - it caused cracks in FF3 graphics before
+* Many bugfixes around the UI, touch D-pad now works better when scaled large
+* Workaround implemented to support Star Ocean's stencil trickery as efficiently as possible on all platforms
+* Major corrections to module loading and memory management, fixing further games
+* Bulgarian and Thai language translations were contributed
+* Many, many more game fixes and bug fixes
+
 What's new in 0.9.8
 -------------------
 * OpenGL ES 3 detection bug on Xperia devices fixed, graphics work again.

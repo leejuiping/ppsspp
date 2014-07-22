@@ -164,19 +164,48 @@ std::string System_GetProperty(SystemProperty prop) {
 		return osName;
 	case SYSPROP_LANGREGION:
 		return langRegion;
+	case SYSPROP_CLIPBOARD_TEXT:
+		{
+			std::string retval;
+			if (OpenClipboard(MainWindow::GetDisplayHWND())) {
+				HANDLE handle = GetClipboardData(CF_UNICODETEXT);
+				const wchar_t *wstr = (const wchar_t*)GlobalLock(handle);
+				if (wstr)
+					retval = ConvertWStringToUTF8(wstr);
+				else
+					retval = "";
+				GlobalUnlock(handle);
+				CloseClipboard();
+			}
+			return retval;
+		}
 	default:
 		return "";
 	}
 }
 
+int System_GetPropertyInt(SystemProperty prop) {
+  return -1;
+}
+
 void System_SendMessage(const char *command, const char *parameter) {
 	if (!strcmp(command, "finish")) {
 		PostMessage(MainWindow::GetHWND(), WM_CLOSE, 0, 0);
+	} else if (!strcmp(command, "setclipboardtext")) {
+		if (OpenClipboard(MainWindow::GetDisplayHWND())) {
+			std::wstring data = ConvertUTF8ToWString(parameter);
+			HANDLE handle = GlobalAlloc(GMEM_MOVEABLE, (data.size() + 1) * sizeof(wchar_t));
+			wchar_t *wstr = (wchar_t *)GlobalLock(handle);
+			memcpy(wstr, data.c_str(), (data.size() + 1) * sizeof(wchar_t));
+			GlobalUnlock(wstr);
+			SetClipboardData(CF_UNICODETEXT, handle);
+			GlobalFree(handle);
+			CloseClipboard();
+		}
 	}
 }
 
-void EnableCrashingOnCrashes() 
-{ 
+void EnableCrashingOnCrashes() { 
   typedef BOOL (WINAPI *tGetPolicy)(LPDWORD lpFlags); 
   typedef BOOL (WINAPI *tSetPolicy)(DWORD dwFlags); 
   const DWORD EXCEPTION_SWALLOWING = 0x1;

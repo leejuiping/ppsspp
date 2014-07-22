@@ -310,6 +310,7 @@ static ConfigSetting generalSettings[] = {
 	ConfigSetting("WindowHeight", &g_Config.iWindowHeight, 0),
 	ConfigSetting("PauseOnLostFocus", &g_Config.bPauseOnLostFocus, false),
 #endif
+	ConfigSetting("PauseWhenMinimized", &g_Config.bPauseWhenMinimized, false),
 	ConfigSetting("DumpDecryptedEboots", &g_Config.bDumpDecryptedEboot, false),
 	ConfigSetting(false),
 };
@@ -360,6 +361,28 @@ static bool DefaultTimerHack() {
 #endif
 }
 
+static int DefaultAndroidHwScale() {
+#ifdef ANDROID
+	// Get the real resolution as passed in during startup, not dp_xres and stuff
+	int xres = System_GetPropertyInt(SYSPROP_DISPLAY_XRES);
+	int yres = System_GetPropertyInt(SYSPROP_DISPLAY_YRES);
+
+	if (xres < 960) {
+		// Smaller than the PSP*2, let's go native.
+		return 0;
+	} else if (xres <= 480 * 3) {  // 720p xres
+		// Small-ish screen, we should default to 2x
+		return 2 + 1;
+	} else {
+		// Large or very large screen. Default to 3x psp resolution.
+		return 3 + 1;
+	}
+	return 0;
+#else
+	return 1;
+#endif
+}
+
 static ConfigSetting graphicsSettings[] = {
 	ConfigSetting("ShowFPSCounter", &g_Config.iShowFPSCounter, 0),
 	ReportedConfigSetting("RenderingMode", &g_Config.iRenderingMode, &DefaultRenderingMode),
@@ -368,6 +391,7 @@ static ConfigSetting graphicsSettings[] = {
 	ReportedConfigSetting("SoftwareSkinning", &g_Config.bSoftwareSkinning, true),
 	ReportedConfigSetting("TextureFiltering", &g_Config.iTexFiltering, 1),
 	ReportedConfigSetting("InternalResolution", &g_Config.iInternalResolution, &DefaultInternalResolution),
+	ReportedConfigSetting("AndroidHwScale", &g_Config.iAndroidHwScale, &DefaultAndroidHwScale),
 	ReportedConfigSetting("FrameSkip", &g_Config.iFrameSkip, 0),
 	ReportedConfigSetting("AutoFrameSkip", &g_Config.bAutoFrameSkip, false),
 	ReportedConfigSetting("FrameRate", &g_Config.iFpsLimit, 0),

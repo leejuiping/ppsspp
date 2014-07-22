@@ -113,7 +113,8 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new PopupSliderChoice(&iAlternateSpeedPercent_, 0, 600, gs->T("Alternative Speed", "Alternative Speed (in %, 0 = unlimited)"), 5, screenManager()));
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Features")));
-	postProcChoice_ = graphicsSettings->Add(new Choice(gs->T("Postprocessing Shader")));
+	I18NCategory *ps = GetI18NCategory("PostShaders");
+	postProcChoice_ = graphicsSettings->Add(new ChoiceWithValueDisplay(&g_Config.sPostShaderName, gs->T("Postprocessing Shader"), ps));
 	postProcChoice_->OnClick.Handle(this, &GameSettingsScreen::OnPostProcShader);
 	postProcEnable_ = !g_Config.bSoftwareRendering && (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE);
 	postProcChoice_->SetEnabledPtr(&postProcEnable_);
@@ -126,8 +127,12 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new CheckBox(&g_Config.bSmallDisplay, gs->T("Small Display")));
 	if (pixel_xres < pixel_yres * 1.3) // Smaller than 4:3
 		graphicsSettings->Add(new CheckBox(&g_Config.bPartialStretch, gs->T("Partial Vertical Stretch")));
+
 #ifdef ANDROID
-	graphicsSettings->Add(new CheckBox(&g_Config.bImmersiveMode, gs->T("Immersive Mode")))->OnClick.Handle(this, &GameSettingsScreen::OnImmersiveModeChange);
+	// Hide Immersive Mode on pre-kitkat Android
+	if (System_GetPropertyInt(SYSPROP_SYSTEMVERSION) >= 19) {
+		graphicsSettings->Add(new CheckBox(&g_Config.bImmersiveMode, gs->T("Immersive Mode")))->OnClick.Handle(this, &GameSettingsScreen::OnImmersiveModeChange);
+	}
 #endif
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Performance")));
@@ -137,9 +142,15 @@ void GameSettingsScreen::CreateViews() {
 	static const char *internalResolutions[] = {"Auto (1:1)", "1x PSP", "2x PSP", "3x PSP", "4x PSP", "5x PSP" };
 #endif
 	resolutionChoice_ = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iInternalResolution, gs->T("Rendering Resolution"), internalResolutions, 0, ARRAY_SIZE(internalResolutions), gs, screenManager()));
-	resolutionChoice_->OnClick.Handle(this, &GameSettingsScreen::OnResolutionChange);
+	resolutionChoice_->OnChoice.Handle(this, &GameSettingsScreen::OnResolutionChange);
 	resolutionEnable_ = !g_Config.bSoftwareRendering && (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE);
 	resolutionChoice_->SetEnabledPtr(&resolutionEnable_);
+
+#ifdef ANDROID
+	static const char *deviceResolutions[] = { "Native device resolution", "Auto (same as Rendering)", "1x PSP", "2x PSP", "3x PSP", "4x PSP", "5x PSP" };
+	UI::PopupMultiChoice *hwscale = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iAndroidHwScale, gs->T("Display Resolution (HW scaler)"), deviceResolutions, 0, ARRAY_SIZE(deviceResolutions), gs, screenManager()));
+	hwscale->OnChoice.Handle(this, &GameSettingsScreen::OnHwScaleChange);  // To refresh the display mode
+#endif
 
 #ifdef _WIN32
 	graphicsSettings->Add(new CheckBox(&g_Config.bVSync, gs->T("VSync")));
@@ -379,12 +390,12 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new CheckBox(&g_Config.bEnableWlan, s->T("Enable networking", "Enable networking/wlan (beta)")));
 
 #ifdef _WIN32
-	systemSettings->Add(new PopupTextInputChoice(&g_Config.proAdhocServer, s->T("Change proAdhocServer Address"), "", screenManager()));
+	systemSettings->Add(new PopupTextInputChoice(&g_Config.proAdhocServer, s->T("Change proAdhocServer Address"), "", 255, screenManager()));
 #else
-	systemSettings->Add(new Choice(s->T("Change proAdhocServer Address")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeproAdhocServerAddress);
+	systemSettings->Add(new ChoiceWithValueDisplay(&g_Config.proAdhocServer, s->T("Change proAdhocServer Address"), nullptr))->OnClick.Handle(this, &GameSettingsScreen::OnChangeproAdhocServerAddress);
 #endif
 
-	systemSettings->Add(new Choice(s->T("Change Mac Address")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeMacAddress);
+	systemSettings->Add(new ChoiceWithValueDisplay(&g_Config.sMACAddress, s->T("Change Mac Address"), nullptr))->OnClick.Handle(this, &GameSettingsScreen::OnChangeMacAddress);
 
 //#ifndef ANDROID
 	systemSettings->Add(new ItemHeader(s->T("Cheats", "Cheats (experimental, see forums)")));
@@ -399,7 +410,7 @@ void GameSettingsScreen::CreateViews() {
 	// TODO: Come up with a way to display a keyboard for mobile users,
 	// so until then, this is Windows/Desktop only.
 #if defined(_WIN32)  // TODO: Add all platforms where KEY_CHAR support is added
-	systemSettings->Add(new PopupTextInputChoice(&g_Config.sNickName, s->T("Change Nickname"), "", screenManager()));
+	systemSettings->Add(new PopupTextInputChoice(&g_Config.sNickName, s->T("Change Nickname"), "", 32, screenManager()));
 #elif defined(USING_QT_UI)
 	systemSettings->Add(new Choice(s->T("Change Nickname")))->OnClick.Handle(this, &GameSettingsScreen::OnChangeNickname);
 #endif
@@ -433,8 +444,23 @@ UI::EventReturn GameSettingsScreen::OnScreenRotation(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+static void RecreateActivity() {
+	const int SYSTEM_JELLYBEAN = 16;
+	if (System_GetPropertyInt(SYSPROP_SYSTEMVERSION) >= SYSTEM_JELLYBEAN) {
+		System_SendMessage("recreate", "");
+	} else {
+		I18NCategory *gs = GetI18NCategory("Graphics");
+		System_SendMessage("toast", gs->T("Must Restart", "You must restart PPSSPP for this change to take effect"));
+	}
+}
+
 UI::EventReturn GameSettingsScreen::OnImmersiveModeChange(UI::EventParams &e) {
 	System_SendMessage("immersive", "");
+	const int SYSTEM_JELLYBEAN = 16;
+	// recreate doesn't seem reliable on earlier versions.
+	if (g_Config.iAndroidHwScale != 0) {
+		RecreateActivity();
+	}
 	return UI::EVENT_DONE;
 }
 
@@ -487,7 +513,15 @@ UI::EventReturn GameSettingsScreen::OnResolutionChange(UI::EventParams &e) {
 	if (gpu) {
 		gpu->Resized();
 	}
+	if (g_Config.iAndroidHwScale == 1) {
+		RecreateActivity();
+	}
 	Reporting::UpdateConfig();
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameSettingsScreen::OnHwScaleChange(UI::EventParams &e) {
+	RecreateActivity();
 	return UI::EVENT_DONE;
 }
 

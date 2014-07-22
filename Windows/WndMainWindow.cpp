@@ -320,6 +320,9 @@ namespace MainWindow
 		if (!goingFullscreen) {
 			// Put caption and border styles back.
 			dwOldStyle = ::GetWindowLong(hWnd, GWL_STYLE);
+
+			dwOldStyle &= ~WS_POPUP;
+
 			dwNewStyle = dwOldStyle | WS_CAPTION | WS_THICKFRAME | WS_SYSMENU;
 			
 			// Put back the menu bar.
@@ -331,6 +334,9 @@ namespace MainWindow
 			// Remove caption and border styles.
 			dwOldStyle = ::GetWindowLong(hWnd, GWL_STYLE);
 			dwNewStyle = dwOldStyle & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
+
+			// Add WS_POPUP
+			dwNewStyle |= WS_POPUP;
 		}
 
 		::SetWindowLong(hWnd, GWL_STYLE, dwNewStyle);
@@ -1087,11 +1093,17 @@ namespace MainWindow
 				case SIZE_MAXIMIZED:
 				case SIZE_RESTORED:
 					Core_NotifyWindowHidden(false);
+					if (!g_Config.bPauseWhenMinimized) {
+						NativeMessageReceived("window minimized", "false");
+					}
 					SavePosition();
 					ResizeDisplay();
 					break;
 				case SIZE_MINIMIZED:
 					Core_NotifyWindowHidden(true);
+					if (!g_Config.bPauseWhenMinimized) {
+						NativeMessageReceived("window minimized", "true");
+					}
 					break;
 				default:
 					break;

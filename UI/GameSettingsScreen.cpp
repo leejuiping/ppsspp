@@ -53,12 +53,23 @@
 extern bool iosCanUseJit;
 #endif
 
+GameSettingsScreen::GameSettingsScreen(std::string gamePath, std::string gameID)
+	: UIDialogScreenWithGameBackground(gamePath), gameID_(gameID), enableReports_(false) {
+	lastVertical_ = UseVerticalLayout();
+}
+
+bool GameSettingsScreen::UseVerticalLayout() const {
+	return dp_yres > dp_xres * 1.1f;
+}
+
 void GameSettingsScreen::CreateViews() {
 	GameInfo *info = g_gameInfoCache.GetInfo(gamePath_, GAMEINFO_WANTBG | GAMEINFO_WANTSIZE);
 
 	cap60FPS_ = g_Config.iForceMaxEmulatedFPS == 60;
 
 	iAlternateSpeedPercent_ = (g_Config.iFpsLimit * 100) / 60;
+
+	bool vertical = UseVerticalLayout();
 
 	// Information in the top left.
 	// Back button to the bottom left.
@@ -73,16 +84,22 @@ void GameSettingsScreen::CreateViews() {
 	I18NCategory *ms = GetI18NCategory("MainSettings");
 	I18NCategory *dev = GetI18NCategory("Developer");
 
-	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
+	if (vertical) {
+		root_ = new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, FILL_PARENT));
+	} else {
+		root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
+	}
 
-	ViewGroup *leftColumn = new AnchorLayout(new LinearLayoutParams(1.0f));
-	root_->Add(leftColumn);
-
-	root_->Add(new Choice(d->T("Back"), "", false, new AnchorLayoutParams(150, 64, 10, NONE, NONE, 10)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-
-	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new AnchorLayoutParams(10, 0, 10, 0, false));
-
-	root_->Add(tabHolder);
+	TabHolder *tabHolder;
+	if (vertical) {
+		tabHolder = new TabHolder(ORIENT_HORIZONTAL, 200, new LinearLayoutParams(1.0f));
+		root_->Add(tabHolder);
+		root_->Add(new Choice(d->T("Back"), "", false, new LinearLayoutParams(0.0f)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	} else {
+		tabHolder = new TabHolder(ORIENT_VERTICAL, 200, new AnchorLayoutParams(10, 0, 10, 0, false));
+		root_->Add(tabHolder);
+		root_->Add(new Choice(d->T("Back"), "", false, new AnchorLayoutParams(150, 64, 10, NONE, NONE, 10)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	}
 	root_->SetDefaultFocusView(tabHolder);
 
 	// TODO: These currently point to global settings, not game specific ones.
@@ -105,9 +122,9 @@ void GameSettingsScreen::CreateViews() {
 
 	graphicsSettings->Add(new ItemHeader(gs->T("Frame Rate Control")));
 	static const char *frameSkip[] = {"Off", "1", "2", "3", "4", "5", "6", "7", "8"};
-	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gs->T("Frame Skipping"), frameSkip, 0, ARRAY_SIZE(frameSkip), gs, screenManager()))->OnChoice.Handle(this, &GameSettingsScreen::OnFrameSkipChange);
+	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gs->T("Frame Skipping"), frameSkip, 0, ARRAY_SIZE(frameSkip), gs, screenManager()));
 	frameSkipAuto_ = graphicsSettings->Add(new CheckBox(&g_Config.bAutoFrameSkip, gs->T("Auto FrameSkip")));
-	frameSkipAuto_->SetEnabled(g_Config.iFrameSkip != 0);
+	frameSkipAuto_->OnClick.Handle(this, &GameSettingsScreen::OnAutoFrameskip);
 	graphicsSettings->Add(new CheckBox(&cap60FPS_, gs->T("Force max 60 FPS (helps GoW)")));
 
 	graphicsSettings->Add(new PopupSliderChoice(&iAlternateSpeedPercent_, 0, 600, gs->T("Alternative Speed", "Alternative Speed (in %, 0 = unlimited)"), 5, screenManager()));
@@ -401,7 +418,6 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new ItemHeader(s->T("Cheats", "Cheats (experimental, see forums)")));
 	systemSettings->Add(new CheckBox(&g_Config.bEnableCheats, s->T("Enable Cheats")));
 //#endif
-	LinearLayout *list = root_->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
 	systemSettings->SetSpacing(0);
 
 	systemSettings->Add(new ItemHeader(s->T("PSP Settings")));
@@ -425,6 +441,13 @@ void GameSettingsScreen::CreateViews() {
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iTimeFormat, s->T("Time Format"), timeFormat, 1, 2, s, screenManager()));
 	static const char *buttonPref[] = { "Use O to confirm", "Use X to confirm" };
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iButtonPreference, s->T("Confirmation Button"), buttonPref, 0, 2, s, screenManager()));
+}
+
+UI::EventReturn GameSettingsScreen::OnAutoFrameskip(UI::EventParams &e) {
+	if (g_Config.bAutoFrameSkip && g_Config.iFrameSkip == 0) {
+		g_Config.iFrameSkip = 1;
+	}
+	return UI::EVENT_DONE;
 }
 
 UI::EventReturn GameSettingsScreen::OnSoftwareRendering(UI::EventParams &e) {
@@ -478,12 +501,6 @@ UI::EventReturn GameSettingsScreen::OnRenderingMode(UI::EventParams &e) {
 
 UI::EventReturn GameSettingsScreen::OnJitAffectingSetting(UI::EventParams &e) {
 	NativeMessageReceived("clear jit", "");
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GameSettingsScreen::OnFrameSkipChange(UI::EventParams &e) {
-	frameSkipAuto_->SetEnabled(g_Config.iFrameSkip != 0);
-
 	return UI::EVENT_DONE;
 }
 
@@ -544,6 +561,12 @@ void GameSettingsScreen::update(InputState &input) {
 	g_Config.iForceMaxEmulatedFPS = cap60FPS_ ? 60 : 0;
 
 	g_Config.iFpsLimit = (iAlternateSpeedPercent_ * 60) / 100;
+
+	bool vertical = UseVerticalLayout();
+	if (vertical != lastVertical_) {
+		RecreateViews();
+		lastVertical_ = vertical;
+	}
 }
 
 void GameSettingsScreen::sendMessage(const char *message, const char *value) {

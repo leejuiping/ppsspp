@@ -24,8 +24,7 @@
 // per game.
 class GameSettingsScreen : public UIDialogScreenWithGameBackground {
 public:
-	GameSettingsScreen(std::string gamePath, std::string gameID = "")
-		: UIDialogScreenWithGameBackground(gamePath), gameID_(gameID), enableReports_(false) {}
+	GameSettingsScreen(std::string gamePath, std::string gameID = "");
 
 	virtual void update(InputState &input);
 	virtual void onFinish(DialogResult result);
@@ -37,9 +36,11 @@ protected:
 	virtual void sendMessage(const char *message, const char *value);
 	void CallbackRestoreDefaults(bool yes);
 
+	bool UseVerticalLayout() const;
+
 private:
 	std::string gameID_;
-
+	bool lastVertical_;
 	// As we load metadata in the background, we need to be able to update these after the fact.
 	UI::TextView *tvTitle_;
 	UI::TextView *tvGameSize_;
@@ -60,6 +61,7 @@ private:
 	// Global settings handlers
 	UI::EventReturn OnLanguage(UI::EventParams &e);
 	UI::EventReturn OnLanguageChange(UI::EventParams &e);
+	UI::EventReturn OnAutoFrameskip(UI::EventParams &e);
 	UI::EventReturn OnPostProcShader(UI::EventParams &e);
 	UI::EventReturn OnPostProcShaderChange(UI::EventParams &e);
 	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
@@ -70,7 +72,6 @@ private:
 	UI::EventReturn OnFullscreenChange(UI::EventParams &e);
 	UI::EventReturn OnResolutionChange(UI::EventParams &e);
 	UI::EventReturn OnHwScaleChange(UI::EventParams &e);
-	UI::EventReturn OnFrameSkipChange(UI::EventParams &e);
 	UI::EventReturn OnShaderChange(UI::EventParams &e);
 	UI::EventReturn OnRestoreDefaultSettings(UI::EventParams &e);
 	UI::EventReturn OnRenderingMode(UI::EventParams &e);

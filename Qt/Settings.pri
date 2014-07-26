@@ -8,7 +8,9 @@ else:CONFIG_DIR=$$OUT_PWD
 OBJECTS_DIR = $$CONFIG_DIR/.obj/$$TARGET
 MOC_DIR = $$CONFIG_DIR/.moc/$$TARGET
 UI_DIR = $$CONFIG_DIR/.ui/$$TARGET
-QMAKE_CLEAN += -r $$MOC_DIR $$UI_DIR $$OBJECTS_DIR $$TARGET
+RCC_DIR = $$CONFIG_DIR/.rcc/$$TARGET
+QMAKE_CLEAN += -r $$OBJECTS_DIR $$MOC_DIR $$UI_DIR $$RCC_DIR
+
 P = $$_PRO_FILE_PWD_/..
 INCLUDEPATH += $$P/ext/zlib $$P/Common
 
@@ -21,7 +23,9 @@ INCLUDEPATH += $$P/ffmpeg/$${PLATFORM_NAME}/$${PLATFORM_ARCH}/include
 
 !contains(CONFIG, staticlib) {
 	QMAKE_LIBDIR += $$CONFIG_DIR $$P/ffmpeg/$${PLATFORM_NAME}/$${PLATFORM_ARCH}/lib/
-	contains(DEFINES, USE_FFMPEG): LIBS += -Wl,-Bstatic -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bdynamic
+	g++: LIBS += -Wl,-Bstatic
+	contains(DEFINES, USE_FFMPEG): LIBS+=  -lavformat -lavcodec -lavutil -lswresample -lswscale
+	g++: LIBS += -Wl,-Bdynamic
 	equals(PLATFORM_NAME, "linux"):arm|android: LIBS += -lEGL
 }
 
@@ -43,12 +47,12 @@ win32-msvc* {
 	QMAKE_ALLFLAGS_RELEASE += /O2 /fp:fast
 } else {
 	DEFINES += __STDC_CONSTANT_MACROS
-	QMAKE_CXXFLAGS += -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-multichar -Wno-uninitialized -Wno-ignored-qualifiers -Wno-missing-field-initializers
+	QMAKE_CXXFLAGS += -Wno-unused-function -Wno-unused-variable -Wno-strict-aliasing -fno-strict-aliasing -Wno-unused-parameter -Wno-multichar -Wno-uninitialized -Wno-ignored-qualifiers -Wno-missing-field-initializers
 	greaterThan(QT_MAJOR_VERSION,4): CONFIG+=c++11
 	else: QMAKE_CXXFLAGS += -std=c++11
 	QMAKE_CFLAGS_RELEASE ~= s/-O.*/
 	QMAKE_CXXFLAGS_RELEASE ~= s/-O.*/
-	QMAKE_ALLFLAGS_RELEASE += -O3 -ffast-math -fno-strict-aliasing
+	QMAKE_ALLFLAGS_RELEASE += -O3 -ffast-math
 }
 
 contains(QT_CONFIG, opengles.) {

@@ -176,6 +176,7 @@ void FramebufferManager::ClearBuffer() {
 	glstate.depthWrite.set(GL_TRUE);
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glstate.stencilFunc.set(GL_ALWAYS, 0, 0);
+	glstate.stencilMask.set(0xFF);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClearStencil(0);
 #ifdef USING_GLES2
@@ -207,6 +208,7 @@ void FramebufferManager::DisableState() {
 	glstate.colorLogicOp.disable();
 #endif
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glstate.stencilMask.set(0xFF);
 }
 
 void FramebufferManager::SetNumExtraFBOs(int num) {
@@ -2083,6 +2085,9 @@ void FramebufferManager::DestroyAllFBOs() {
 		fbo_destroy(it->second.fbo);
 	}
 	tempFBOs_.clear();
+
+	fbo_unbind();
+	DisableState();
 }
 
 void FramebufferManager::UpdateFromMemory(u32 addr, int size, bool safe) {

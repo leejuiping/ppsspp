@@ -239,7 +239,7 @@ void TransformDrawEngine::ApplyBlendState() {
 			}
 
 			// Min/max/absdiff are not possible here.
-			glstate.blendEquation.set(eqLookup[blendFuncEq]);
+			glstate.blendEquationSeparate.set(eqLookup[blendFuncEq], GL_FUNC_ADD);
 
 			shaderManager_->DirtyUniform(DIRTY_SHADERBLEND);
 			ResetShaderBlending();
@@ -388,9 +388,9 @@ void TransformDrawEngine::ApplyBlendState() {
 	}
 
 	if (gl_extensions.EXT_blend_minmax || gl_extensions.GLES3) {
-		glstate.blendEquation.set(eqLookup[blendFuncEq]);
+		glstate.blendEquationSeparate.set(eqLookup[blendFuncEq], GL_FUNC_ADD);
 	} else {
-		glstate.blendEquation.set(eqLookupNoMinMax[blendFuncEq]);
+		glstate.blendEquationSeparate.set(eqLookupNoMinMax[blendFuncEq], GL_FUNC_ADD);
 	}
 }
 
@@ -455,6 +455,7 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 			// We should set "ref" to that value instead of 0.
 			// In case of clear rectangles, we set it again once we know what the color is.
 			glstate.stencilFunc.set(GL_ALWAYS, 255, 0xFF);
+			glstate.stencilMask.set(0xFF);
 		} else {
 			glstate.stencilTest.disable();
 		}
@@ -496,15 +497,16 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		bool bmask = ((gstate.pmskc >> 16) & 0xFF) < 128;
 		bool amask = (gstate.pmska & 0xFF) < 128;
 
+		u8 abits = (gstate.pmska >> 0) & 0xFF;
 #ifndef MOBILE_DEVICE
 		u8 rbits = (gstate.pmskc >> 0) & 0xFF;
 		u8 gbits = (gstate.pmskc >> 8) & 0xFF;
 		u8 bbits = (gstate.pmskc >> 16) & 0xFF;
-		u8 abits = (gstate.pmska >> 0) & 0xFF;
 		if ((rbits != 0 && rbits != 0xFF) || (gbits != 0 && gbits != 0xFF) || (bbits != 0 && bbits != 0xFF)) {
 			WARN_LOG_REPORT_ONCE(rgbmask, G3D, "Unsupported RGB mask: r=%02x g=%02x b=%02x", rbits, gbits, bbits);
 		}
 		if (abits != 0 && abits != 0xFF) {
+			// The stencil part of the mask is supported.
 			WARN_LOG_REPORT_ONCE(amask, G3D, "Unsupported alpha/stencil mask: %02x", abits);
 		}
 #endif
@@ -530,6 +532,7 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 			glstate.stencilOp.set(stencilOps[gstate.getStencilOpSFail()],  // stencil fail
 				stencilOps[gstate.getStencilOpZFail()],  // depth fail
 				stencilOps[gstate.getStencilOpZPass()]); // depth pass
+			glstate.stencilMask.set(~abits);
 		} else {
 			glstate.stencilTest.disable();
 		}

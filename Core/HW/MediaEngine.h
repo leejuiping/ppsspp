@@ -50,8 +50,6 @@ inline s64 getMpegTimeStamp(const u8 *buf) {
 bool InitFFmpeg();
 #endif
 
-void __AdjustBGMVolume(s16 *samples, u32 count);
-
 class MediaEngine
 {
 public:
@@ -60,6 +58,7 @@ public:
 
 	void closeMedia();
 	bool loadStream(const u8 *buffer, int readSize, int RingbufferSize);
+	bool reloadStream();
 	// open the mpeg context
 	bool openContext();
 	void closeContext();

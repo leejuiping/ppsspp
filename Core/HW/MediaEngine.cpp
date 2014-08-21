@@ -115,17 +115,6 @@ static int getPixelFormatBytes(int pspFormat)
 	}
 }
 
-void __AdjustBGMVolume(s16 *samples, u32 count) {
-	if (g_Config.iBGMVolume < 0 || g_Config.iBGMVolume >= MAX_CONFIG_VOLUME) {
-		return;
-	}
-
-	int volumeShift = MAX_CONFIG_VOLUME - g_Config.iBGMVolume;
-	for (u32 i = 0; i < count; ++i) {
-		samples[i] >>= volumeShift;
-	}
-}
-
 MediaEngine::MediaEngine(): m_pdata(0) {
 #ifdef USE_FFMPEG
 	m_pFormatCtx = 0;
@@ -193,7 +182,7 @@ void MediaEngine::DoState(PointerWrap &p){
 	u32 hasloadStream = m_pdata != NULL;
 	p.Do(hasloadStream);
 	if (hasloadStream && p.mode == p.MODE_READ)
-		loadStream(m_mpegheader, 2048, m_ringbuffersize);
+		reloadStream();
 #ifdef USE_FFMPEG
 	u32 hasopencontext = m_pFormatCtx != NULL;
 #else
@@ -338,6 +327,11 @@ bool MediaEngine::loadStream(const u8 *buffer, int readSize, int RingbufferSize)
 	m_demux = new MpegDemux(RingbufferSize + 2048, mpegoffset);
 	m_demux->addStreamData(buffer, readSize);
 	return true;
+}
+
+bool MediaEngine::reloadStream()
+{
+	return loadStream(m_mpegheader, 2048, m_ringbuffersize);
 }
 
 int MediaEngine::addStreamData(const u8 *buffer, int addSize) {

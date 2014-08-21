@@ -390,6 +390,7 @@ static ConfigSetting graphicsSettings[] = {
 	ReportedConfigSetting("HardwareTransform", &g_Config.bHardwareTransform, true),
 	ReportedConfigSetting("SoftwareSkinning", &g_Config.bSoftwareSkinning, true),
 	ReportedConfigSetting("TextureFiltering", &g_Config.iTexFiltering, 1),
+	ReportedConfigSetting("BufferFiltering", &g_Config.iBufFilter, 1),
 	ReportedConfigSetting("InternalResolution", &g_Config.iInternalResolution, &DefaultInternalResolution),
 	ReportedConfigSetting("AndroidHwScale", &g_Config.iAndroidHwScale, &DefaultAndroidHwScale),
 	ReportedConfigSetting("FrameSkip", &g_Config.iFrameSkip, 0),
@@ -446,9 +447,7 @@ static ConfigSetting graphicsSettings[] = {
 
 static ConfigSetting soundSettings[] = {
 	ConfigSetting("Enable", &g_Config.bEnableSound, true),
-	ConfigSetting("VolumeBGM", &g_Config.iBGMVolume, 7),
-	ConfigSetting("VolumeSFX", &g_Config.iSFXVolume, 7),
-	ConfigSetting("AudioLatency", &g_Config.IaudioLatency, 1),
+	ConfigSetting("AudioLatency", &g_Config.iAudioLatency, 1),
 	ConfigSetting("SoundSpeedHack", &g_Config.bSoundSpeedHack, false),
 
 	ConfigSetting(false),
@@ -541,6 +540,7 @@ static ConfigSetting controlSettings[] = {
 	ConfigSetting("AnalogStickX", &g_Config.fAnalogStickX, -1.0f),
 	ConfigSetting("AnalogStickY", &g_Config.fAnalogStickY, -1.0f),
 	ConfigSetting("AnalogStickScale", &g_Config.fAnalogStickScale, defaultControlScale),
+	ConfigSetting("AnalogLimiterDeadzone", &g_Config.fAnalogLimiterDeadzone, 0.6f),
 
 	ConfigSetting(false),
 };

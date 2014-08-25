@@ -619,6 +619,7 @@ void TextureCache::GetSamplingParams(int &minFilt, int &magFilt, bool &sClamp, b
 		minFilt |= 1;
 	}
 	if (g_Config.iTexFiltering == LINEAR && (!gstate.isColorTestEnabled() || IsColorTestTriviallyTrue())) {
+		// TODO: IsAlphaTestTriviallyTrue() is unsafe here.  vertexFullAlpha is not calculated yet.
 		if (!gstate.isAlphaTestEnabled() || IsAlphaTestTriviallyTrue()) {
 			magFilt |= 1;
 			minFilt |= 1;
@@ -1212,9 +1213,6 @@ void TextureCache::SetTexture(bool force) {
 		// Validate the texture still matches the cache entry.
 		u16 dim = gstate.getTextureDimension(0);
 		bool match = entry->Matches(dim, format, maxLevel);
-#ifndef MOBILE_DEVICE
-		match = match && host->GPUAllowTextureCache(texaddr);
-#endif
 
 		// Check for FBO - slow!
 		if (entry->framebuffer) {

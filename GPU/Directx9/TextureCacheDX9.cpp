@@ -73,13 +73,11 @@ void TextureCacheDX9::Clear(bool delete_them) {
 	if (delete_them) {
 		for (TexCache::iterator iter = cache.begin(); iter != cache.end(); ++iter) {
 			DEBUG_LOG(G3D, "Deleting texture %p", iter->second.texture);
-			if (iter->second.texture)
-				iter->second.texture->Release();
+			iter->second.ReleaseTexture();
 		}
 		for (TexCache::iterator iter = secondCache.begin(); iter != secondCache.end(); ++iter) {
 			DEBUG_LOG(G3D, "Deleting texture %p", iter->second.texture);
-			if (iter->second.texture)
-				iter->second.texture->Release();
+			iter->second.ReleaseTexture();
 		}
 	}
 	if (cache.size() + secondCache.size()) {
@@ -102,8 +100,7 @@ void TextureCacheDX9::Decimate() {
 	int killAge = lowMemoryMode_ ? TEXTURE_KILL_AGE_LOWMEM : TEXTURE_KILL_AGE;
 	for (TexCache::iterator iter = cache.begin(); iter != cache.end(); ) {
 		if (iter->second.lastFrame + killAge < gpuStats.numFlips) {
-			if (iter->second.texture)
-				iter->second.texture->Release();
+			iter->second.ReleaseTexture();
 			cache.erase(iter++);
 		} else {
 			++iter;
@@ -114,8 +111,7 @@ void TextureCacheDX9::Decimate() {
 		for (TexCache::iterator iter = secondCache.begin(); iter != secondCache.end(); ) {
 			// In low memory mode, we kill them all.
 			if (lowMemoryMode_ || iter->second.lastFrame + TEXTURE_KILL_AGE < gpuStats.numFlips) {
-				if (iter->second.texture)
-					iter->second.texture->Release();
+				iter->second.ReleaseTexture();
 				secondCache.erase(iter++);
 			} else {
 				++iter;
@@ -495,15 +491,13 @@ void TextureCacheDX9::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 
 	bool noMip = (gstate.texlevel & 0xFFFFFF) == 0x000001 || (gstate.texlevel & 0xFFFFFF) == 0x100001 ;  // Fix texlevel at 0
 
+	float lodBias = 0.0;
 	if (entry.maxLevel == 0) {
 		// Enforce no mip filtering, for safety.
 		minFilt &= 1; // no mipmaps yet
 	} else {
-		// TODO: Is this a signed value? Which direction?
-		float lodBias = 0.0; // -(float)((gstate.texlevel >> 16) & 0xFF) / 16.0f;
-		if (force || entry.lodBias != lodBias) {
-			entry.lodBias = lodBias;
-		}
+		// Texture lod bias should be signed.
+		lodBias = (float)(int)(s8)((gstate.texlevel >> 16) & 0xFF) / 16.0f;
 	}
 
 	if ((g_Config.iTexFiltering == LINEAR || (g_Config.iTexFiltering == LINEARFMV && g_iNumVideos)) && !gstate.isColorTestEnabled()) {
@@ -523,6 +517,7 @@ void TextureCacheDX9::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 
 	dxstate.texMinFilter.set(MinFilt[minFilt]);
 	dxstate.texMipFilter.set(MipFilt[minFilt]);
+	dxstate.texMipLodBias.set(lodBias);
 	dxstate.texMagFilter.set(MagFilt[magFilt]);
 	dxstate.texAddressU.set(sClamp ? D3DTADDRESS_CLAMP : D3DTADDRESS_WRAP);
 	dxstate.texAddressV.set(tClamp ? D3DTADDRESS_CLAMP : D3DTADDRESS_WRAP);
@@ -724,7 +719,7 @@ void TextureCacheDX9::SetTextureFramebuffer(TexCacheEntry *entry)
 		UpdateSamplingParams(*entry, true);
 		gstate_c.curTextureWidth = entry->framebuffer->width;
 		gstate_c.curTextureHeight = entry->framebuffer->height;
-		gstate_c.flipTexture = true;
+		gstate_c.flipTexture = false;
 		gstate_c.textureFullAlpha = entry->framebuffer->format == GE_FORMAT_565;
 	} else {
 		if (entry->framebuffer->fbo)
@@ -912,7 +907,7 @@ void TextureCacheDX9::SetTexture(bool force) {
 					if (entry->texture == lastBoundTexture) {
 						lastBoundTexture = INVALID_TEX;
 					}
-					entry->texture->Release();
+					entry->ReleaseTexture();
 				}
 			}
 			if (entry->status == TexCacheEntry::STATUS_RELIABLE) {
@@ -943,7 +938,6 @@ void TextureCacheDX9::SetTexture(bool force) {
 	entry->lastFrame = gpuStats.numFlips;
 	entry->framebuffer = 0;
 	entry->maxLevel = maxLevel;
-	entry->lodBias = 0.0f;
 	
 	entry->dim = gstate.getTextureDimension(0);
 	entry->bufw = bufw;
@@ -1166,6 +1160,7 @@ void *TextureCacheDX9::DecodeTextureLevel(GETextureFormat format, GEPaletteForma
 				}
 			}
 			finalBuf = tmpTexBuf32.data();
+			ClutConvertColors(finalBuf, finalBuf, dstFmt, bufw * h);
 			w = (w + 3) & ~3;
 		}
 		break;
@@ -1188,6 +1183,7 @@ void *TextureCacheDX9::DecodeTextureLevel(GETextureFormat format, GEPaletteForma
 			}
 			w = (w + 3) & ~3;
 			finalBuf = tmpTexBuf32.data();
+			ClutConvertColors(finalBuf, finalBuf, dstFmt, bufw * h);
 		}
 		break;
 
@@ -1209,6 +1205,7 @@ void *TextureCacheDX9::DecodeTextureLevel(GETextureFormat format, GEPaletteForma
 			}
 			w = (w + 3) & ~3;
 			finalBuf = tmpTexBuf32.data();
+			ClutConvertColors(finalBuf, finalBuf, dstFmt, bufw * h);
 		}
 		break;
 
